@@ -70,6 +70,7 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: '#1c1d20',
     title: 'Cortex Studio',
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
