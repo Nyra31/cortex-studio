@@ -4,7 +4,7 @@ Editor de video de escritorio con línea de tiempo multipista, hecho con Electro
 
 ## Requisitos
 
-- Node.js 20 o superior (probado con Node 21.7)
+- Node.js 22 o superior (probado con Node 26.12 y Electron 44)
 - Windows, macOS o Linux. FFmpeg se instala automáticamente con `npm install`.
 
 ## Uso
