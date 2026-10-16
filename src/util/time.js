@@ -1,12 +1,14 @@
 const pad = (n, len = 2) => String(n).padStart(len, '0');
 
-// hh:mm:ss.ff (fotogramas a 30 fps)
+// hh:mm:ss:ff (tiempo real + fotograma dentro del segundo)
 export function formatTimecode(t, fps = 30) {
-  const frames = Math.floor(Math.max(0, t) * fps + 1e-6);
-  const f = frames % fps;
-  const s = Math.floor(frames / fps);
-  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}.${pad(f)}`;
+  const time = Math.max(0, t);
+  const s = Math.floor(time + 1e-6);
+  const f = Math.min(Math.round(fps) - 1, Math.floor((time - s) * fps + 1e-6));
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}:${pad(Math.max(0, f))}`;
 }
+
+export const frameNumber = (t, fps) => Math.floor(Math.max(0, t) * fps + 1e-6);
 
 // m:ss o h:mm:ss, para duraciones cortas en la lista de medios.
 export function formatDuration(t) {

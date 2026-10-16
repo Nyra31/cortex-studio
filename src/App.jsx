@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import MenuBar from './components/MenuBar.jsx';
 import Toolbar from './components/Toolbar.jsx';
+import Dock from './components/Dock.jsx';
 import MediaPool from './components/MediaPool.jsx';
 import Preview from './components/Preview.jsx';
 import Transport from './components/Transport.jsx';
 import Timeline, { MAX_PPS, MIN_PPS } from './components/Timeline.jsx';
 import RenderDialog from './components/RenderDialog.jsx';
+import ProjectDialog from './components/ProjectDialog.jsx';
+import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import { useHistory } from './state/useHistory.js';
 import {
-  deleteEvents, emptyProject, mediaLength, placeMedia, projectDuration,
+  addTrack, deleteEvents, emptyProject, loadProject, mediaLength, placeMedia, projectDuration,
   removeMedia, renderPayload, serializeProject, splitEvents, uid,
 } from './state/project.js';
 
 const api = window.api;
-const FRAME = 1 / 30;
 const baseName = (p) => (p ? p.split(/[\\/]/).pop().replace(/\.cortex$/i, '') : 'Sin título');
 
 export default function App() {
@@ -27,9 +30,12 @@ export default function App() {
   const [playToken, setPlayToken] = useState(0);
   const [pps, setPps] = useState(40);
   const [snap, setSnap] = useState(true);
-  const [upperHeight, setUpperHeight] = useState(Math.round(window.innerHeight * 0.46));
+  const [upperHeight, setUpperHeight] = useState(Math.round(window.innerHeight * 0.44));
   const [renderOpen, setRenderOpen] = useState(false);
+  const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
+  const timelineRef = useRef(null);
 
   const duration = projectDuration(project);
   const dirty = project !== savedProject;
@@ -70,19 +76,18 @@ export default function App() {
     }
   }, []);
 
-  const togglePlay = useCallback(() => {
+  const play = useCallback(() => {
     const { playing: isPlaying, time: t, duration: d } = live.current;
-    if (isPlaying) {
-      setPlaying(false);
-      return;
-    }
-    if (d <= 0) return;
+    if (isPlaying || d <= 0) return;
     const from = t >= d - 0.01 ? 0 : t;
     playStart.current = from;
     setTime(from);
     setPlaying(true);
   }, []);
 
+  const pause = useCallback(() => setPlaying(false), []);
+
+  // Detener: vuelve a donde empezó la reproducción (o al inicio si ya estaba detenido).
   const stop = useCallback(() => {
     if (live.current.playing) {
       setPlaying(false);
@@ -90,6 +95,12 @@ export default function App() {
     } else {
       setTime(0);
     }
+  }, []);
+
+  const stepFrame = useCallback((direction) => {
+    setPlaying(false);
+    const step = 1 / live.current.project.settings.fps;
+    setTime((t) => Math.max(0, Math.round(t / step + direction) * step));
   }, []);
 
   // ---- Medios ----
@@ -161,20 +172,34 @@ export default function App() {
     setSelection([]);
   }, [selection, setProject]);
 
+  const selectAll = useCallback(() => setSelection(live.current.project.events.map((e) => e.id)), []);
+
+  const insertTrack = useCallback((type) => setProject((p) => addTrack(p, type).project), [setProject]);
+
+  const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
+
   // ---- Proyecto ----
 
   const confirmDiscard = () => !live.current.dirty || window.confirm('Hay cambios sin guardar. ¿Descartarlos?');
 
   const newProject = useCallback(() => {
-    if (!confirmDiscard()) return;
-    const fresh = emptyProject();
-    history.reset(fresh);
-    setSavedProject(fresh);
-    setProjectPath(null);
-    setSelection([]);
-    setPlaying(false);
-    setTime(0);
-  }, [history]);
+    if (confirmDiscard()) setProjectDialog('new');
+  }, []);
+
+  const acceptProjectDialog = (settings) => {
+    if (projectDialog === 'edit') {
+      setProject((p) => ({ ...p, settings }));
+    } else {
+      const fresh = emptyProject(settings);
+      history.reset(fresh);
+      setSavedProject(fresh);
+      setProjectPath(null);
+      setSelection([]);
+      setPlaying(false);
+      setTime(0);
+    }
+    setProjectDialog(null);
+  };
 
   const save = useCallback(async (saveAs = false) => {
     const current = live.current.project;
@@ -214,7 +239,7 @@ export default function App() {
         media.push({ ...m, missing: true, hasVideo: true, hasAudio: true });
       }
     }
-    const loaded = { media, tracks: data.tracks, events: data.events };
+    const loaded = loadProject(data, media);
     history.reset(loaded);
     setSavedProject(loaded);
     setProjectPath(result.path);
@@ -230,35 +255,114 @@ export default function App() {
     setRenderOpen(true);
   }, []);
 
-  // ---- Atajos de teclado ----
+  const openProperties = useCallback(() => setProjectDialog('edit'), []);
 
+  // ---- Menús ----
+
+  const menus = [
+    {
+      label: 'Archivo',
+      items: [
+        { label: 'Nuevo…', shortcut: 'Ctrl+N', action: newProject },
+        { label: 'Abrir…', shortcut: 'Ctrl+O', action: open },
+        { label: 'Guardar', shortcut: 'Ctrl+S', action: () => save(false) },
+        { label: 'Guardar como…', shortcut: 'Ctrl+Mayús+S', action: () => save(true) },
+        'separator',
+        { label: 'Importar medios…', shortcut: 'Ctrl+I', action: importDialog },
+        { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
+        'separator',
+        { label: 'Propiedades del proyecto…', shortcut: 'Alt+Intro', action: openProperties },
+        'separator',
+        { label: 'Salir', action: () => window.close() },
+      ],
+    },
+    {
+      label: 'Edición',
+      items: [
+        { label: 'Deshacer', shortcut: 'Ctrl+Z', action: history.undo, disabled: !history.canUndo },
+        { label: 'Rehacer', shortcut: 'Ctrl+Y', action: history.redo, disabled: !history.canRedo },
+        'separator',
+        { label: 'Dividir', shortcut: 'S', action: split },
+        { label: 'Eliminar', shortcut: 'Supr', action: deleteSelected, disabled: !selection.length },
+        { label: 'Seleccionar todo', shortcut: 'Ctrl+A', action: selectAll },
+        'separator',
+        { label: 'Ajuste activado', shortcut: 'F8', action: () => setSnap((v) => !v), checked: snap },
+      ],
+    },
+    {
+      label: 'Ver',
+      items: [
+        { label: 'Acercar', shortcut: '↑', action: () => zoom(1.25) },
+        { label: 'Alejar', shortcut: '↓', action: () => zoom(0.8) },
+        { label: 'Ajustar el proyecto a la ventana', action: () => timelineRef.current?.zoomToFit() },
+        'separator',
+        { label: 'Ir al inicio', shortcut: 'Inicio', action: () => seek(0) },
+        { label: 'Ir al final', shortcut: 'Fin', action: () => seek(duration) },
+      ],
+    },
+    {
+      label: 'Insertar',
+      items: [
+        { label: 'Pista de video', shortcut: 'Ctrl+Mayús+Q', action: () => insertTrack('video') },
+        { label: 'Pista de audio', shortcut: 'Ctrl+Q', action: () => insertTrack('audio') },
+      ],
+    },
+    {
+      label: 'Herramientas',
+      items: [
+        { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
+        { label: 'Herramientas de desarrollo', shortcut: 'F12', action: api.toggleDevTools },
+      ],
+    },
+    {
+      label: 'Ayuda',
+      items: [{ label: 'Atajos de teclado', shortcut: 'F1', action: () => setShortcutsOpen(true) }],
+    },
+  ];
+
+  // ---- Atajos de teclado (los de Vegas cuando existen) ----
+
+  const modalOpen = renderOpen || projectDialog !== null || shortcutsOpen;
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
-    if (renderOpen || e.target.closest?.('input, select, textarea')) return;
+    if (modalOpen || e.target.closest?.('input, select, textarea')) return;
     const key = e.key.toLowerCase();
     const ctrl = e.ctrlKey || e.metaKey;
-    const actions = {
-      ' ': !ctrl && togglePlay,
-      z: ctrl && history.undo,
-      y: ctrl && history.redo,
-      s: ctrl ? () => save(e.shiftKey) : split,
-      o: ctrl && open,
-      n: ctrl && newProject,
-      i: ctrl && importDialog,
-      m: ctrl && openRender,
-      delete: deleteSelected,
-      home: () => seek(0),
-      end: () => seek(live.current.duration),
-      arrowleft: () => seek(live.current.time - FRAME),
-      arrowright: () => seek(live.current.time + FRAME),
-      arrowup: () => setPps((v) => Math.min(MAX_PPS, v * 1.25)),
-      arrowdown: () => setPps((v) => Math.max(MIN_PPS, v * 0.8)),
-      f12: api.toggleDevTools,
-    };
-    if (ctrl && e.shiftKey && key === 'z') actions.z = history.redo;
-    const action = actions[key];
+    let action;
+    if (ctrl) {
+      action = {
+        z: e.shiftKey ? history.redo : history.undo,
+        y: history.redo,
+        s: () => save(e.shiftKey),
+        o: open,
+        n: newProject,
+        i: importDialog,
+        m: openRender,
+        a: selectAll,
+        q: () => insertTrack(e.shiftKey ? 'video' : 'audio'),
+      }[key];
+    } else if (e.altKey) {
+      if (key === 'enter') action = openProperties;
+    } else {
+      action = {
+        ' ': () => (live.current.playing ? stop() : play()),
+        enter: () => (live.current.playing ? pause() : play()),
+        s: split,
+        delete: deleteSelected,
+        home: () => seek(0),
+        end: () => seek(live.current.duration),
+        arrowleft: () => stepFrame(-1),
+        arrowright: () => stepFrame(1),
+        arrowup: () => zoom(1.25),
+        arrowdown: () => zoom(0.8),
+        f1: () => setShortcutsOpen(true),
+        f8: () => setSnap((v) => !v),
+        f12: api.toggleDevTools,
+      }[key];
+    }
     if (!action) return;
     e.preventDefault();
+    if (e.target.tagName === 'BUTTON') e.target.blur(); // que Espacio/Intro no pulsen también el botón con foco
     action();
   };
   useEffect(() => {
@@ -271,7 +375,7 @@ export default function App() {
   const startResize = (e) => {
     const startY = e.clientY;
     const startH = upperHeight;
-    const move = (me) => setUpperHeight(Math.min(window.innerHeight - 220, Math.max(180, startH + me.clientY - startY)));
+    const move = (me) => setUpperHeight(Math.min(window.innerHeight - 240, Math.max(180, startH + me.clientY - startY)));
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
@@ -282,14 +386,15 @@ export default function App() {
 
   return (
     <div className="app">
+      <MenuBar menus={menus} />
       <Toolbar
-        title={baseName(projectPath)}
-        dirty={dirty}
         onNew={newProject}
         onOpen={open}
         onSave={() => save(false)}
-        onSaveAs={() => save(true)}
         onImport={importDialog}
+        onProperties={openProperties}
+        onRender={openRender}
+        canRender={duration > 0}
         onUndo={history.undo}
         onRedo={history.redo}
         canUndo={history.canUndo}
@@ -297,35 +402,26 @@ export default function App() {
         onSplit={split}
         onDelete={deleteSelected}
         hasSelection={selection.length > 0}
-        onRender={openRender}
-        canRender={duration > 0}
+        snap={snap}
+        onToggleSnap={() => setSnap((v) => !v)}
       />
       <div className="upper" style={{ height: upperHeight }}>
-        <MediaPool
-          media={project.media}
-          onImport={importDialog}
-          onDropFiles={dropFilesOnPool}
-          onRemove={removeMediaItem}
-          onAdd={addAtCursor}
-        />
-        <div className="panel preview-panel">
-          <div className="panel-header">
-            <span>Vista previa</span>
-          </div>
-          <Preview project={project} time={time} playing={playing} />
-          <Transport
-            playing={playing}
-            time={time}
-            duration={duration}
-            onTogglePlay={togglePlay}
-            onStop={stop}
-            onStart={() => seek(0)}
-            onEnd={() => seek(duration)}
+        <Dock title="Medios del proyecto" className="media-dock">
+          <MediaPool
+            media={project.media}
+            onImport={importDialog}
+            onDropFiles={dropFilesOnPool}
+            onRemove={removeMediaItem}
+            onAdd={addAtCursor}
           />
-        </div>
+        </Dock>
+        <Dock title="Vista previa de video" className="preview-dock">
+          <Preview project={project} time={time} playing={playing} onOpenProperties={openProperties} />
+        </Dock>
       </div>
       <div className="splitter" onPointerDown={startResize} />
       <Timeline
+        ref={timelineRef}
         project={project}
         setProject={setProject}
         selection={selection}
@@ -336,22 +432,44 @@ export default function App() {
         pps={pps}
         setPps={setPps}
         snap={snap}
-        setSnap={setSnap}
         onDropFiles={dropFilesOnTimeline}
+        footer={
+          <Transport
+            playing={playing}
+            onPlay={play}
+            onPause={pause}
+            onStop={stop}
+            onStart={() => seek(0)}
+            onEnd={() => seek(duration)}
+            onPrevFrame={() => stepFrame(-1)}
+            onNextFrame={() => stepFrame(1)}
+          />
+        }
       />
       <div className="statusbar">
-        <span>{status}</span>
+        <span>{status || 'Listo'}</span>
         <span>
-          {project.events.length} eventos · {project.tracks.length} pistas
+          {baseName(projectPath)}
+          {dirty ? ' (modificado)' : ''} · {project.events.length} eventos · {project.tracks.length} pistas
         </span>
       </div>
       {renderOpen && (
         <RenderDialog
           payload={renderPayload(project)}
+          settings={project.settings}
           defaultName={`${baseName(projectPath)}.mp4`}
           onClose={() => setRenderOpen(false)}
         />
       )}
+      {projectDialog && (
+        <ProjectDialog
+          mode={projectDialog}
+          initial={project.settings}
+          onAccept={acceptProjectDialog}
+          onCancel={() => setProjectDialog(null)}
+        />
+      )}
+      {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
     </div>
   );
 }

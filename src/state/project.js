@@ -1,26 +1,52 @@
 // Modelo del proyecto y operaciones de edición (funciones puras).
 //
 // project = {
+//   settings: { width, height, fps },
 //   media:  [{ id, path, name, duration, width, height, fps, hasVideo, hasAudio, isImage, thumb, peaks, peaksPerSecond, missing }],
-//   tracks: [{ id, type: 'video' | 'audio', name, muted }],          // ordenadas como se ven, de arriba a abajo
+//   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume }],  // ordenadas de arriba a abajo; volume en dB
 //   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId }], // tiempos en segundos
 // }
 
 export const MIN_EVENT = 0.04;
 export const IMAGE_DURATION = 5;
+export const DEFAULT_SETTINGS = { width: 1920, height: 1080, fps: 30 };
+export const FRAME_RATES = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+export const MIN_VOLUME_DB = -48; // en el mínimo la pista queda en silencio (-∞)
+export const TRACK_COLORS = ['#5b80d6', '#9b66cf', '#cf5f80', '#d58a48', '#c4ad45', '#5aa86a', '#47a5b3'];
+export const trackColor = (index) => TRACK_COLORS[index % TRACK_COLORS.length];
 
 let counter = 0;
 export const uid = (prefix) => `${prefix}_${Date.now().toString(36)}${(counter++).toString(36)}`;
 
-export function emptyProject() {
+const newTrack = (type, number) => ({
+  id: uid('t'),
+  type,
+  name: `${type === 'video' ? 'Video' : 'Audio'} ${number}`,
+  muted: false,
+  solo: false,
+  volume: 0,
+});
+
+export function emptyProject(settings = DEFAULT_SETTINGS) {
   return {
+    settings: { ...settings },
     media: [],
-    tracks: [
-      { id: uid('t'), type: 'video', name: 'Video 1', muted: false },
-      { id: uid('t'), type: 'audio', name: 'Audio 1', muted: false },
-    ],
+    tracks: [newTrack('video', 1), newTrack('audio', 1)],
     events: [],
   };
+}
+
+// Una pista suena o se ve si no está silenciada y, cuando hay pistas en solo de su tipo, si ella es una.
+export function isTrackActive(track, tracks) {
+  if (track.muted) return false;
+  const anySolo = tracks.some((t) => t.type === track.type && t.solo);
+  return anySolo ? !!track.solo : true;
+}
+
+export const volumeToGain = (db) => (db <= MIN_VOLUME_DB ? 0 : 10 ** (db / 20));
+
+export function formatFps(fps) {
+  return Number.isInteger(fps) ? String(fps) : fps.toFixed(3).replace(/0+$/, '').replace('.', ',');
 }
 
 export function projectDuration(project) {
@@ -33,8 +59,7 @@ export function mediaLength(media) {
 
 // Las pistas de video van siempre arriba y las de audio abajo.
 export function addTrack(project, type) {
-  const count = project.tracks.filter((t) => t.type === type).length + 1;
-  const track = { id: uid('t'), type, name: `${type === 'video' ? 'Video' : 'Audio'} ${count}`, muted: false };
+  const track = newTrack(type, project.tracks.filter((t) => t.type === type).length + 1);
   const tracks = [...project.tracks];
   if (type === 'video') {
     const lastVideo = tracks.map((t) => t.type).lastIndexOf('video');
@@ -130,17 +155,33 @@ export function serializeProject(project) {
   return {
     format: 'cortex-studio',
     version: 1,
+    settings: project.settings,
     media: project.media.map(({ id, path, name }) => ({ id, path, name })),
     tracks: project.tracks,
     events: project.events,
   };
 }
 
-// Lo mínimo que necesita el proceso principal para renderizar.
+// Reconstruye un proyecto leído de disco, completando los campos que falten en versiones anteriores.
+export function loadProject(data, media) {
+  return {
+    settings: { ...DEFAULT_SETTINGS, ...data.settings },
+    media,
+    tracks: data.tracks.map((t) => ({ muted: false, solo: false, volume: 0, ...t })),
+    events: data.events,
+  };
+}
+
+// Lo mínimo que necesita el proceso principal para renderizar (con el silencio/solo ya resuelto).
 export function renderPayload(project) {
   return {
     media: project.media.map(({ id, path, isImage, hasVideo, hasAudio, missing }) => ({ id, path, isImage, hasVideo, hasAudio, missing })),
-    tracks: project.tracks,
+    tracks: project.tracks.map((t) => ({
+      id: t.id,
+      type: t.type,
+      muted: !isTrackActive(t, project.tracks),
+      gain: volumeToGain(t.volume ?? 0),
+    })),
     events: project.events,
   };
 }

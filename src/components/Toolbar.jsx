@@ -1,35 +1,34 @@
+import Icon from './Icon.jsx';
+
+function ToolButton({ icon, title, onClick, disabled, active }) {
+  return (
+    <button className={`tool${active ? ' active' : ''}`} title={title} onClick={onClick} disabled={disabled}>
+      <Icon name={icon} />
+    </button>
+  );
+}
+
 export default function Toolbar({
-  title, dirty, onNew, onOpen, onSave, onSaveAs, onImport,
-  onUndo, onRedo, canUndo, canRedo, onSplit, onDelete, hasSelection, onRender, canRender,
+  onNew, onOpen, onSave, onImport, onProperties, onRender, canRender,
+  onUndo, onRedo, canUndo, canRedo, onSplit, onDelete, hasSelection, snap, onToggleSnap,
 }) {
   return (
     <div className="toolbar">
-      <div className="brand">Cortex Studio</div>
-      <div className="group">
-        <button onClick={onNew} title="Nuevo proyecto (Ctrl+N)">Nuevo</button>
-        <button onClick={onOpen} title="Abrir proyecto (Ctrl+O)">Abrir…</button>
-        <button onClick={onSave} title="Guardar (Ctrl+S)">Guardar</button>
-        <button onClick={onSaveAs} title="Guardar como (Ctrl+Mayús+S)">Guardar como…</button>
-      </div>
-      <div className="group">
-        <button onClick={onImport} title="Importar medios (Ctrl+I)">Importar medios…</button>
-      </div>
-      <div className="group">
-        <button onClick={onUndo} disabled={!canUndo} title="Deshacer (Ctrl+Z)">Deshacer</button>
-        <button onClick={onRedo} disabled={!canRedo} title="Rehacer (Ctrl+Y)">Rehacer</button>
-      </div>
-      <div className="group">
-        <button onClick={onSplit} title="Dividir en el cursor (S)">Dividir</button>
-        <button onClick={onDelete} disabled={!hasSelection} title="Eliminar eventos seleccionados (Supr)">Eliminar</button>
-      </div>
-      <div className="spacer" />
-      <div className="project-title">
-        {title}
-        {dirty && <span className="dirty"> •</span>}
-      </div>
-      <button className="primary" onClick={onRender} disabled={!canRender} title="Renderizar a MP4 (Ctrl+M)">
-        Renderizar como…
-      </button>
+      <ToolButton icon="newFile" title="Nuevo proyecto (Ctrl+N)" onClick={onNew} />
+      <ToolButton icon="open" title="Abrir proyecto (Ctrl+O)" onClick={onOpen} />
+      <ToolButton icon="save" title="Guardar (Ctrl+S)" onClick={onSave} />
+      <span className="tool-sep" />
+      <ToolButton icon="importMedia" title="Importar medios (Ctrl+I)" onClick={onImport} />
+      <ToolButton icon="properties" title="Propiedades del proyecto (Alt+Intro)" onClick={onProperties} />
+      <ToolButton icon="render" title="Renderizar como… (Ctrl+M)" onClick={onRender} disabled={!canRender} />
+      <span className="tool-sep" />
+      <ToolButton icon="undo" title="Deshacer (Ctrl+Z)" onClick={onUndo} disabled={!canUndo} />
+      <ToolButton icon="redo" title="Rehacer (Ctrl+Y)" onClick={onRedo} disabled={!canRedo} />
+      <span className="tool-sep" />
+      <ToolButton icon="split" title="Dividir en el cursor (S)" onClick={onSplit} />
+      <ToolButton icon="trash" title="Eliminar eventos seleccionados (Supr)" onClick={onDelete} disabled={!hasSelection} />
+      <span className="tool-sep" />
+      <ToolButton icon="magnet" title="Ajuste a bordes y cursor (F8)" onClick={onToggleSnap} active={snap} />
     </div>
   );
 }

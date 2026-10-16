@@ -114,9 +114,17 @@ async function analyze(file) {
 
 const num = (x) => Number(x).toFixed(3);
 
+// 29,97 → 30000/1001, etc. (FFmpeg necesita la fracción exacta para las velocidades NTSC).
+function frameRate(fps) {
+  const n = Math.round(fps);
+  if (Math.abs(fps - n) > 0.001 && Math.abs(fps - (n * 1000) / 1001) < 0.01) return `${n * 1000}/1001`;
+  return String(fps);
+}
+
 // Construye los argumentos de FFmpeg y el grafo de filtros para renderizar la línea de tiempo.
 function buildRender(project, settings, outPath) {
-  const { width: W, height: H, fps, crf } = settings;
+  const { width: W, height: H, crf } = settings;
+  const fps = frameRate(settings.fps);
   const media = new Map(project.media.map((m) => [m.id, m]));
   const tracks = new Map(project.tracks.map((t, i) => [t.id, { ...t, index: i }]));
   const usable = project.events.filter((e) => {
@@ -137,7 +145,7 @@ function buildRender(project, settings, outPath) {
     .sort((a, b) => tracks.get(b.trackId).index - tracks.get(a.trackId).index || a.start - b.start);
   for (const e of videoEvents) {
     const m = media.get(e.mediaId);
-    if (m.isImage) inputs.push('-loop', '1', '-framerate', String(fps), '-t', num(e.duration), '-i', m.path);
+    if (m.isImage) inputs.push('-loop', '1', '-framerate', fps, '-t', num(e.duration), '-i', m.path);
     else inputs.push('-ss', num(e.inPoint), '-t', num(e.duration), '-i', m.path);
     const i = n++;
     filters.push(
@@ -154,13 +162,14 @@ function buildRender(project, settings, outPath) {
   const mix = ['[abase]'];
   for (const e of usable.filter((ev) => tracks.get(ev.trackId).type === 'audio')) {
     const m = media.get(e.mediaId);
-    if (!m.hasAudio) continue;
+    const gain = tracks.get(e.trackId).gain ?? 1;
+    if (!m.hasAudio || gain === 0) continue;
     inputs.push('-ss', num(e.inPoint), '-t', num(e.duration), '-i', m.path);
     const i = n++;
     const delay = Math.round(e.start * 1000);
     filters.push(
       `[${i}:a]asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,` +
-        `adelay=delays=${delay}:all=1[a${i}]`,
+        `adelay=delays=${delay}:all=1${gain === 1 ? '' : `,volume=${gain.toFixed(4)}`}[a${i}]`,
     );
     mix.push(`[a${i}]`);
   }
@@ -175,7 +184,7 @@ function buildRender(project, settings, outPath) {
     ...inputs,
     '-filter_complex_script', null, // se completa con la ruta del archivo temporal
     '-map', '[vout]', '-map', '[aout]',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-r', String(fps),
+    '-c:v', 'libx264', '-preset', 'medium', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-r', fps,
     '-c:a', 'aac', '-b:a', '192k',
     '-t', num(duration), '-movflags', '+faststart',
     outPath,

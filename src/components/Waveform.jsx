@@ -13,7 +13,7 @@ export default memo(function Waveform({ peaks, peaksPerSecond, inPoint, duration
     canvas.height = Math.round(height * dpr);
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'rgba(178, 238, 205, 0.85)';
+    ctx.fillStyle = 'rgba(235, 235, 235, 0.8)';
     const mid = canvas.height / 2;
     const first = inPoint * peaksPerSecond;
     const perPx = (duration * peaksPerSecond) / w;

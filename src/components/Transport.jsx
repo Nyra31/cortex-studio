@@ -1,23 +1,25 @@
 import Icon from './Icon.jsx';
-import { formatTimecode } from '../util/time.js';
 
-export default function Transport({ playing, time, duration, onTogglePlay, onStop, onStart, onEnd }) {
+function TransportButton({ icon, title, onClick, active }) {
+  return (
+    <button className={`transport-btn${active ? ' active' : ''}`} title={title} onClick={onClick}>
+      <Icon name={icon} size={14} />
+    </button>
+  );
+}
+
+export default function Transport({ playing, onPlay, onPause, onStop, onStart, onEnd, onPrevFrame, onNextFrame }) {
   return (
     <div className="transport">
-      <button title="Ir al inicio (Inicio)" onClick={onStart}>
-        <Icon name="start" />
-      </button>
-      <button className="play" title="Reproducir / Pausar (Espacio)" onClick={onTogglePlay}>
-        <Icon name={playing ? 'pause' : 'play'} size={18} />
-      </button>
-      <button title="Detener (vuelve a donde empezó la reproducción)" onClick={onStop}>
-        <Icon name="stop" />
-      </button>
-      <button title="Ir al final (Fin)" onClick={onEnd}>
-        <Icon name="end" />
-      </button>
-      <div className="timecode">{formatTimecode(time)}</div>
-      <div className="duration">/ {formatTimecode(duration)}</div>
+      <TransportButton icon="play" title="Reproducir (Espacio)" onClick={onPlay} active={playing} />
+      <TransportButton icon="pause" title="Pausa (Intro)" onClick={onPause} />
+      <TransportButton icon="stop" title="Detener y volver (Espacio)" onClick={onStop} />
+      <span className="transport-sep" />
+      <TransportButton icon="start" title="Ir al inicio (Inicio)" onClick={onStart} />
+      <TransportButton icon="end" title="Ir al final (Fin)" onClick={onEnd} />
+      <span className="transport-sep" />
+      <TransportButton icon="prevFrame" title="Fotograma anterior (←)" onClick={onPrevFrame} />
+      <TransportButton icon="nextFrame" title="Fotograma siguiente (→)" onClick={onNextFrame} />
     </div>
   );
 }

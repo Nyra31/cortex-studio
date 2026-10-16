@@ -1,13 +1,13 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Waveform from './Waveform.jsx';
 import Icon from './Icon.jsx';
-import { formatRuler } from '../util/time.js';
-import { MIN_EVENT, addTrack, deleteTrack, placeMedia } from '../state/project.js';
+import { formatRuler, formatTimecode } from '../util/time.js';
+import { MIN_EVENT, MIN_VOLUME_DB, deleteTrack, isTrackActive, placeMedia, trackColor } from '../state/project.js';
 
 export const MEDIA_MIME = 'application/x-cortex-media';
-const HEADER_W = 180;
-const TRACK_H = { video: 72, audio: 56 };
-const TITLE_H = 15;
+const HEADER_W = 230;
+const TRACK_H = { video: 64, audio: 72 };
+const TITLE_H = 16;
 const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
 export const MIN_PPS = 1;
 export const MAX_PPS = 800;
@@ -30,7 +30,7 @@ const allowDrop = (e) => {
   e.dataTransfer.dropEffect = 'copy';
 };
 
-const Ruler = memo(function Ruler({ pps, scrollLeft, viewWidth, laneWidth, onPointerDown }) {
+const Ruler = memo(function Ruler({ pps, time, scrollLeft, viewWidth, laneWidth, onPointerDown }) {
   const step = TICK_STEPS.find((s) => s * pps >= 90) ?? 3600;
   const minor = step / 5;
   const ticks = [];
@@ -47,17 +47,16 @@ const Ruler = memo(function Ruler({ pps, scrollLeft, viewWidth, laneWidth, onPoi
   }
   return (
     <div className="ruler" style={{ width: laneWidth }} onPointerDown={onPointerDown}>
+      <div className="marker-bar" />
       {ticks}
+      <div className="cursor-head" style={{ left: time * pps }} />
     </div>
   );
 });
 
 const EventView = memo(function EventView({ ev, media, type, selected, pps, onDown }) {
   const width = Math.max(3, ev.duration * pps);
-  const bodyStyle =
-    type === 'video' && media?.thumb
-      ? { backgroundImage: `url(${media.thumb})` }
-      : undefined;
+  const bodyStyle = type === 'video' && media?.thumb ? { backgroundImage: `url(${media.thumb})` } : undefined;
   return (
     <div
       className={`event ${type}${selected ? ' selected' : ''}${media?.missing ? ' missing' : ''}`}
@@ -84,29 +83,101 @@ const EventView = memo(function EventView({ ev, media, type, selected, pps, onDo
   );
 });
 
-const TrackRow = memo(function TrackRow({
-  track, number, events, mediaById, selectedSet, pps, laneWidth, rowRef,
-  onLaneDown, onEventDown, onDrop, onToggleMute, onDelete,
-}) {
+function TrackName({ name, onRename }) {
+  const [editing, setEditing] = useState(false);
+  if (editing) {
+    return (
+      <input
+        className="track-name-input"
+        autoFocus
+        defaultValue={name}
+        onFocus={(e) => e.target.select()}
+        onBlur={(e) => {
+          setEditing(false);
+          const value = e.target.value.trim();
+          if (value && value !== name) onRename(value);
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') e.currentTarget.blur();
+          if (e.key === 'Escape') {
+            e.currentTarget.value = name;
+            e.currentTarget.blur();
+          }
+        }}
+      />
+    );
+  }
   return (
-    <div className={`track-row ${track.type}`} ref={rowRef} style={{ height: TRACK_H[track.type] }}>
+    <span className="track-name" title="Doble clic para cambiar el nombre" onDoubleClick={() => setEditing(true)}>
+      {name}
+    </span>
+  );
+}
+
+function VolumeSlider({ value, onChange }) {
+  const first = useRef(true);
+  const label = value <= MIN_VOLUME_DB ? '-∞ dB' : `${value.toFixed(1).replace('.', ',')} dB`;
+  return (
+    <div className="track-slider" title="Volumen de la pista (doble clic: 0 dB)">
+      <span className="slider-label">Vol:</span>
+      <input
+        type="range"
+        min={MIN_VOLUME_DB}
+        max={0}
+        step={0.1}
+        value={value}
+        onPointerDown={() => (first.current = true)}
+        onKeyDown={() => (first.current = true)}
+        onChange={(e) => {
+          onChange(Number(e.target.value), first.current);
+          first.current = false;
+        }}
+        onDoubleClick={() => onChange(0, true)}
+      />
+      <span className="slider-value">{label}</span>
+    </div>
+  );
+}
+
+const TrackRow = memo(function TrackRow({
+  track, number, color, inactive, events, mediaById, selectedSet, pps, laneWidth, rowRef,
+  onLaneDown, onEventDown, onDrop, onUpdateTrack, onDelete,
+}) {
+  const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
+  return (
+    <div className={`track-row ${track.type}`} ref={rowRef} style={{ height: TRACK_H[track.type], '--track-color': color }}>
       <div className="track-header">
-        <span className="track-num">{number}</span>
-        <Icon name={track.type === 'video' ? 'film' : 'speaker'} />
-        <span className="track-name">{track.name}</span>
-        <button
-          className={`track-btn${track.muted ? ' active' : ''}`}
-          title={track.muted ? 'Activar pista' : 'Silenciar / ocultar pista'}
-          onClick={() => onToggleMute(track.id)}
-        >
-          M
-        </button>
-        <button className="track-btn" title="Eliminar pista" onClick={() => onDelete(track.id)}>
-          <Icon name="close" size={12} />
-        </button>
+        <div className="track-strip">{number}</div>
+        <div className="track-main">
+          <div className="track-top">
+            <Icon name={track.type === 'video' ? 'film' : 'speaker'} size={13} />
+            <TrackName name={track.name} onRename={(name) => update({ name })} />
+            <button
+              className={`track-btn mute${track.muted ? ' active' : ''}`}
+              title={track.type === 'video' ? 'Ocultar pista' : 'Silenciar pista'}
+              onClick={() => update({ muted: !track.muted })}
+            >
+              <Icon name="mute" size={12} />
+            </button>
+            <button
+              className={`track-btn solo${track.solo ? ' active' : ''}`}
+              title="Solo"
+              onClick={() => update({ solo: !track.solo })}
+            >
+              <Icon name="solo" size={12} />
+            </button>
+            <button className="track-btn" title="Eliminar pista" onClick={() => onDelete(track.id)}>
+              <Icon name="close" size={11} />
+            </button>
+          </div>
+          {track.type === 'audio' && (
+            <VolumeSlider value={track.volume ?? 0} onChange={(volume, record) => update({ volume }, record)} />
+          )}
+        </div>
       </div>
       <div
-        className={`track-lane${track.muted ? ' muted' : ''}`}
+        className={`track-lane${inactive ? ' muted' : ''}`}
         style={{ width: laneWidth }}
         onPointerDown={onLaneDown}
         onDragOver={allowDrop}
@@ -128,10 +199,10 @@ const TrackRow = memo(function TrackRow({
   );
 });
 
-export default function Timeline({
+const Timeline = forwardRef(function Timeline({
   project, setProject, selection, setSelection, time, seek, playing,
-  pps, setPps, snap, setSnap, onDropFiles,
-}) {
+  pps, setPps, snap, onDropFiles, footer,
+}, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
   const rowRefs = useRef(new Map());
@@ -139,6 +210,7 @@ export default function Timeline({
   const zoomAnchor = useRef(null);
   const prevPps = useRef(pps);
   const [view, setView] = useState({ left: 0, width: 1200 });
+  const fps = project.settings.fps;
 
   // Valores actuales para manejadores estables (evita re-renderizar todas las pistas a cada fotograma).
   const live = useRef(null);
@@ -155,6 +227,14 @@ export default function Timeline({
   }, [project.events, project.tracks]);
   const duration = useMemo(() => project.events.reduce((m, e) => Math.max(m, e.start + e.duration), 0), [project.events]);
   const laneWidth = Math.max(view.width - HEADER_W, (duration + 60) * pps);
+
+  const zoomToFit = useCallback(() => {
+    const d = live.current.project.events.reduce((m, e) => Math.max(m, e.start + e.duration), 0);
+    if (d <= 0) return;
+    zoomAnchor.current = { t: 0, offsetX: HEADER_W };
+    setPps(clampPps((scrollRef.current.clientWidth - HEADER_W - 30) / d));
+  }, [setPps]);
+  useImperativeHandle(ref, () => ({ zoomToFit }), [zoomToFit]);
 
   const rowRefFor = (id) => {
     if (!rowRefCallbacks.current.has(id)) {
@@ -310,8 +390,8 @@ export default function Timeline({
     }
   }, [onDropFiles, setProject, snapPoints, timeAt]);
 
-  const onToggleMute = useCallback((trackId) => {
-    setProject((p) => ({ ...p, tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, muted: !t.muted } : t)) }));
+  const onUpdateTrack = useCallback((trackId, changes, record) => {
+    setProject((p) => ({ ...p, tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, ...changes } : t)) }), record);
   }, [setProject]);
 
   const onDeleteTrack = useCallback((trackId) => {
@@ -376,40 +456,28 @@ export default function Timeline({
 
   return (
     <div className="timeline">
-      <div className="timeline-toolbar">
-        <button onClick={() => setProject((p) => addTrack(p, 'video').project)}>
-          <Icon name="plus" size={13} /> Pista de video
-        </button>
-        <button onClick={() => setProject((p) => addTrack(p, 'audio').project)}>
-          <Icon name="plus" size={13} /> Pista de audio
-        </button>
-        <span className="sep" />
-        <button title="Alejar (Flecha abajo)" onClick={() => setPps((v) => clampPps(v * 0.8))}>
-          <Icon name="zoomOut" size={14} />
-        </button>
-        <button title="Acercar (Flecha arriba)" onClick={() => setPps((v) => clampPps(v * 1.25))}>
-          <Icon name="zoomIn" size={14} />
-        </button>
-        <button
-          className={snap ? 'toggle on' : 'toggle'}
-          title="Ajustar a bordes de eventos y al cursor"
-          onClick={() => setSnap(!snap)}
-        >
-          <Icon name="magnet" size={14} /> Ajuste
-        </button>
-        <span className="hint">Ctrl + rueda: zoom · S: dividir · Supr: eliminar · Espacio: reproducir</span>
-      </div>
       <div className="timeline-scroll" ref={scrollRef}>
         <div className="timeline-content" ref={contentRef} style={{ width: HEADER_W + laneWidth }}>
           <div className="ruler-row">
-            <div className="ruler-corner" />
-            <Ruler pps={pps} scrollLeft={view.left} viewWidth={view.width} laneWidth={laneWidth} onPointerDown={startScrub} />
+            <div className="ruler-corner">
+              <div className="big-timecode">{formatTimecode(time, fps)}</div>
+            </div>
+            <Ruler
+              pps={pps}
+              time={time}
+              scrollLeft={view.left}
+              viewWidth={view.width}
+              laneWidth={laneWidth}
+              onPointerDown={startScrub}
+            />
           </div>
-          {project.tracks.map((track) => (
+          {project.tracks.map((track, index) => (
             <TrackRow
               key={track.id}
               track={track}
               number={track.type === 'video' ? ++videoCount : ++audioCount}
+              color={trackColor(index)}
+              inactive={!isTrackActive(track, project.tracks)}
               events={eventsByTrack.get(track.id)}
               mediaById={mediaById}
               selectedSet={selectedSet}
@@ -419,7 +487,7 @@ export default function Timeline({
               onLaneDown={onLaneDown}
               onEventDown={onEventDown}
               onDrop={onDrop}
-              onToggleMute={onToggleMute}
+              onUpdateTrack={onUpdateTrack}
               onDelete={onDeleteTrack}
             />
           ))}
@@ -430,6 +498,26 @@ export default function Timeline({
           <div className="cursor-line" style={{ left: HEADER_W + time * pps }} />
         </div>
       </div>
+      <div className="timeline-footer">
+        {footer}
+        <span className="footer-spacer" />
+        <span className="footer-info">
+          Duración: <strong>{formatTimecode(duration, fps)}</strong>
+        </span>
+        <div className="zoom-buttons">
+          <button className="transport-btn" title="Alejar (↓)" onClick={() => setPps((v) => clampPps(v * 0.8))}>
+            <Icon name="zoomOut" size={14} />
+          </button>
+          <button className="transport-btn" title="Acercar (↑)" onClick={() => setPps((v) => clampPps(v * 1.25))}>
+            <Icon name="zoomIn" size={14} />
+          </button>
+          <button className="transport-btn" title="Ajustar el proyecto a la ventana" onClick={zoomToFit}>
+            <Icon name="fit" size={14} />
+          </button>
+        </div>
+      </div>
     </div>
   );
-}
+});
+
+export default Timeline;
