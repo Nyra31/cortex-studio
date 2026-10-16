@@ -1,0 +1,184 @@
+const { app, BrowserWindow, ipcMain, dialog, protocol, shell, Menu } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const { Readable } = require('stream');
+const ff = require('./ffmpeg');
+
+// Protocolo media:// para que la vista previa lea archivos locales con soporte de rangos (búsqueda en video).
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } },
+]);
+
+const MIME_TYPES = {
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
+  '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac', '.flac': 'audio/flac', '.opus': 'audio/ogg',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.bmp': 'image/bmp', '.webp': 'image/webp',
+};
+
+const MEDIA_FILTERS = [
+  { name: 'Medios', extensions: ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'] },
+  { name: 'Todos los archivos', extensions: ['*'] },
+];
+const PROJECT_FILTERS = [{ name: 'Proyecto de Cortex Studio', extensions: ['cortex'] }];
+
+// Solo se sirven por media:// los archivos que el usuario importó.
+const allowedFiles = new Set();
+let mainWindow = null;
+let renderProcess = null;
+
+async function serveMedia(request) {
+  const filePath = new URL(request.url).searchParams.get('p');
+  if (!filePath || !allowedFiles.has(path.resolve(filePath))) return new Response('Prohibido', { status: 403 });
+  let stat;
+  try {
+    stat = await fs.promises.stat(filePath);
+  } catch {
+    return new Response('No encontrado', { status: 404 });
+  }
+  const size = stat.size;
+  const type = MIME_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+  const range = /bytes=(\d*)-(\d*)/.exec(request.headers.get('range') || '');
+  if (range) {
+    let start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+    let end = range[1] && range[2] ? Number(range[2]) : size - 1;
+    end = Math.min(end, size - 1);
+    if (start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+    return new Response(Readable.toWeb(fs.createReadStream(filePath, { start, end })), {
+      status: 206,
+      headers: {
+        'Content-Type': type,
+        'Content-Length': String(end - start + 1),
+        'Content-Range': `bytes ${start}-${end}/${size}`,
+        'Accept-Ranges': 'bytes',
+      },
+    });
+  }
+  return new Response(Readable.toWeb(fs.createReadStream(filePath)), {
+    status: 200,
+    headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes' },
+  });
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 1000,
+    minHeight: 640,
+    backgroundColor: '#1c1d20',
+    title: 'Cortex Studio',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  else mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+ipcMain.handle('media:pick', async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: 'Importar medios',
+    properties: ['openFile', 'multiSelections'],
+    filters: MEDIA_FILTERS,
+  });
+  return res.canceled ? [] : res.filePaths;
+});
+
+ipcMain.handle('media:analyze', async (_e, filePath) => {
+  const resolved = path.resolve(filePath);
+  const info = await ff.analyze(resolved);
+  allowedFiles.add(resolved);
+  return info;
+});
+
+ipcMain.handle('project:save', async (_e, data, filePath) => {
+  let target = filePath;
+  if (!target) {
+    const res = await dialog.showSaveDialog(mainWindow, {
+      title: 'Guardar proyecto',
+      defaultPath: 'Proyecto.cortex',
+      filters: PROJECT_FILTERS,
+    });
+    if (res.canceled || !res.filePath) return null;
+    target = res.filePath;
+  }
+  await fs.promises.writeFile(target, JSON.stringify(data, null, 2), 'utf8');
+  return target;
+});
+
+ipcMain.handle('project:open', async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: 'Abrir proyecto',
+    properties: ['openFile'],
+    filters: PROJECT_FILTERS,
+  });
+  if (res.canceled || !res.filePaths.length) return null;
+  const filePath = res.filePaths[0];
+  return { path: filePath, data: JSON.parse(await fs.promises.readFile(filePath, 'utf8')) };
+});
+
+ipcMain.handle('render:pickPath', async (_e, defaultName) => {
+  const res = await dialog.showSaveDialog(mainWindow, {
+    title: 'Renderizar como',
+    defaultPath: defaultName || 'Video.mp4',
+    filters: [{ name: 'Video MP4 (H.264/AAC)', extensions: ['mp4'] }],
+  });
+  return res.canceled ? null : res.filePath;
+});
+
+ipcMain.handle('render:start', async (event, project, settings, outPath) => {
+  if (renderProcess) return { ok: false, error: 'Ya hay un renderizado en curso.' };
+  let canceled = false;
+  try {
+    const result = await ff.render(project, settings, outPath, {
+      onSpawn: (proc) => {
+        renderProcess = proc;
+        proc.cancel = () => {
+          canceled = true;
+          proc.kill();
+        };
+      },
+      onProgress: (p) => event.sender.send('render:progress', p),
+    });
+    if (canceled) {
+      fs.promises.unlink(outPath).catch(() => {});
+      return { ok: false, canceled: true };
+    }
+    if (result.code !== 0) return { ok: false, error: result.stderr.trim().split('\n').slice(-8).join('\n') };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  } finally {
+    renderProcess = null;
+  }
+});
+
+ipcMain.handle('render:cancel', () => {
+  if (renderProcess) renderProcess.cancel();
+});
+
+ipcMain.handle('shell:reveal', (_e, filePath) => shell.showItemInFolder(filePath));
+ipcMain.handle('devtools:toggle', () => mainWindow && mainWindow.webContents.toggleDevTools());
+
+app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+  protocol.handle('media', serveMedia);
+  createWindow();
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (renderProcess) renderProcess.cancel();
+  if (process.platform !== 'darwin') app.quit();
+});
