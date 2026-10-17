@@ -35,6 +35,7 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 - **Línea de tiempo multipista:** pistas de video arriba y de audio abajo. Un video con sonido se coloca como dos eventos agrupados (video y audio) que se mueven y recortan juntos.
 - **Pistas:** silencio, solo, volumen (pistas de audio) y cambio de nombre con doble clic.
 - **Edición:** arrastrar para mover (también a otra pista), recortar por los bordes, dividir en el cursor y eliminar. Incluye ajuste magnético a bordes y al cursor, y deshacer/rehacer.
+- **Cursor como en VEGAS:** al hacer clic o arrastrar en la regla, en una pista o en un evento, el cursor se coloca ahí; con el ajuste activado (F8) se pega al principio o al final de los eventos cercanos y, si no, cae siempre en un fotograma exacto. Mayús mientras se arrastra desactiva el ajuste (también al mover eventos). El triángulo de arriba se arrastra sin saltar al puntero, para ajustes finos. Con el teclado: fotograma a fotograma (← →), de corte en corte (Ctrl+← →) y por marcas de la regla (Re Pág / Av Pág). Si el cursor sale de la vista, la línea de tiempo se desplaza para enseñarlo.
 - **Cortar, copiar y pegar** eventos (Ctrl+X, Ctrl+C, Ctrl+V). Se pega en el cursor, en las mismas pistas, y el cursor salta al final de lo pegado para poder pegar varias veces seguidas. **Agrupar** (G) y **quitar del grupo** (U) para que varios eventos se muevan juntos o separar el audio de su video.
 - **Menú contextual** con clic derecho: en un evento (cortar, copiar, pegar, eliminar, dividir, agrupar, quitar fundidos, volumen a 0 dB, volver a disolución cruzada, abrir la ubicación del archivo) y en una zona vacía de una pista (pegar ahí, seleccionar todo, insertar pistas).
 - **Fundidos de entrada y salida:** se arrastran desde los cuadraditos de las esquinas superiores del evento. En audio bajan el volumen; en video hacen aparecer o desaparecer el evento sobre lo que haya debajo (otra pista o negro). Al dividir, cada parte conserva su fundido.
@@ -59,8 +60,11 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 | Clic derecho | Menú contextual del evento o de la pista |
 | Ctrl+Z / Ctrl+Y | Deshacer / rehacer |
 | Ctrl + rueda, ↑ / ↓ | Zoom de la línea de tiempo |
-| ← / → | Fotograma anterior / siguiente |
-| Inicio / Fin | Ir al principio / al final |
+| ← / → (o Alt+← / →) | Fotograma anterior / siguiente |
+| Ctrl+← / Ctrl+→ | Punto de edición anterior / siguiente (principio o final de un evento) |
+| Re Pág / Av Pág | Marca anterior / siguiente de la regla |
+| Inicio / Fin (o Ctrl+Inicio / Ctrl+Fin) | Ir al principio / al final |
+| Mayús mientras se arrastra | Sin ajuste (cursor y eventos) |
 | Ctrl+clic | Añadir o quitar eventos de la selección |
 | Doble clic en un tirador de fundido | Quitar el fundido |
 | Doble clic en la línea de volumen del evento | Volver a 0 dB |

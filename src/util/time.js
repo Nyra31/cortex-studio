@@ -27,3 +27,6 @@ export function formatRuler(t, step) {
 }
 
 export const mediaUrl = (filePath) => `media://file/?p=${encodeURIComponent(filePath)}`;
+
+// Redondea t al fotograma más cercano (el cursor siempre queda en un fotograma exacto, como en VEGAS).
+export const quantize = (t, fps) => Math.max(0, Math.round(t * fps) / fps);

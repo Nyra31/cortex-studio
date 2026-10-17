@@ -588,17 +588,29 @@ input[type='number'] {
   color: #cfcfcf;
   white-space: nowrap;
 }
+/* Cabeza del cursor: triángulo que se puede arrastrar (con un área de agarre algo mayor que el dibujo). */
 .cursor-head {
   position: absolute;
+  top: 0;
+  width: 18px;
+  height: 16px;
+  margin-left: -9px;
+  cursor: ew-resize;
+  z-index: 2;
+}
+.cursor-head::before {
+  content: '';
+  position: absolute;
   top: 1px;
-  width: 0;
-  height: 0;
-  margin-left: -6px;
+  left: 3px;
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
   border-top: 10px solid var(--cursor);
   pointer-events: none;
-  z-index: 2;
+}
+.cursor-head:hover::before {
+  border-top-color: #fff;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.6));
 }
 
 .track-row {

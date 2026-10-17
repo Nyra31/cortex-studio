@@ -6,7 +6,8 @@ import MediaPool from './components/MediaPool.jsx';
 import TransitionsPanel from './components/TransitionsPanel.jsx';
 import Preview from './components/Preview.jsx';
 import Transport from './components/Transport.jsx';
-import Timeline, { MAX_PPS, MIN_PPS } from './components/Timeline.jsx';
+import Timeline, { MAX_PPS, MIN_PPS, gridStep } from './components/Timeline.jsx';
+import { quantize } from './util/time.js';
 import RenderDialog from './components/RenderDialog.jsx';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
@@ -45,7 +46,7 @@ export default function App() {
   const duration = projectDuration(project);
   const dirty = project !== savedProject;
   const live = useRef(null);
-  live.current = { project, time, playing, duration, dirty, selection, clipboard };
+  live.current = { project, time, playing, duration, dirty, selection, clipboard, pps };
   const playStart = useRef(0);
 
   useEffect(() => {
@@ -90,7 +91,11 @@ export default function App() {
     setPlaying(true);
   }, []);
 
-  const pause = useCallback(() => setPlaying(false), []);
+  // Al pausar, el cursor se queda en el fotograma que se estaba viendo.
+  const pause = useCallback(() => {
+    setPlaying(false);
+    setTime((t) => quantize(t, live.current.project.settings.fps));
+  }, []);
 
   // Detener: vuelve a donde empezó la reproducción (o al inicio si ya estaba detenido).
   const stop = useCallback(() => {
@@ -106,6 +111,25 @@ export default function App() {
     setPlaying(false);
     const step = 1 / live.current.project.settings.fps;
     setTime((t) => Math.max(0, Math.round(t / step + direction) * step));
+  }, []);
+
+  // Siguiente/anterior punto de edición (principio o final de un evento), como Ctrl+←/→ en VEGAS.
+  const jumpToEdit = useCallback((direction) => {
+    const { project: p, time: t } = live.current;
+    const points = [...new Set([0, ...p.events.flatMap((e) => [e.start, e.start + e.duration])])].sort((a, b) => a - b);
+    const target = direction > 0 ? points.find((x) => x > t + 1e-6) : points.reverse().find((x) => x < t - 1e-6);
+    if (target !== undefined) {
+      setPlaying(false);
+      setTime(target);
+    }
+  }, []);
+
+  // Re Pág / Av Pág: una marca de la rejilla de la regla (depende del zoom).
+  const stepGrid = useCallback((direction) => {
+    const { time: t, project: p } = live.current;
+    const step = gridStep(live.current.pps);
+    setPlaying(false);
+    setTime(quantize(Math.max(0, (Math.round(t / step) + direction) * step), p.settings.fps));
   }, []);
 
   // ---- Medios ----
@@ -419,6 +443,10 @@ export default function App() {
         'separator',
         { label: 'Ir al inicio', shortcut: 'Inicio', action: () => seek(0) },
         { label: 'Ir al final', shortcut: 'Fin', action: () => seek(duration) },
+        { label: 'Punto de edición anterior', shortcut: 'Ctrl+←', action: () => jumpToEdit(-1) },
+        { label: 'Punto de edición siguiente', shortcut: 'Ctrl+→', action: () => jumpToEdit(1) },
+        { label: 'Fotograma anterior', shortcut: '←', action: () => stepFrame(-1) },
+        { label: 'Fotograma siguiente', shortcut: '→', action: () => stepFrame(1) },
       ],
     },
     {
@@ -464,9 +492,15 @@ export default function App() {
         c: () => copyIds(selection),
         x: () => cutIds(selection),
         v: () => paste(),
+        arrowleft: () => jumpToEdit(-1),
+        arrowright: () => jumpToEdit(1),
+        home: () => seek(0),
+        end: () => seek(live.current.duration),
       }[key];
     } else if (e.altKey) {
       action = {
+        arrowleft: () => stepFrame(-1),
+        arrowright: () => stepFrame(1),
         enter: openProperties,
         4: () => setLeftTab('media'),
         8: () => setLeftTab('transitions'),
@@ -483,6 +517,8 @@ export default function App() {
         end: () => seek(live.current.duration),
         arrowleft: () => stepFrame(-1),
         arrowright: () => stepFrame(1),
+        pageup: () => stepGrid(-1),
+        pagedown: () => stepGrid(1),
         arrowup: () => zoom(1.25),
         arrowdown: () => zoom(0.8),
         f1: () => setShortcutsOpen(true),

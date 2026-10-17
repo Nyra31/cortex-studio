@@ -1,7 +1,7 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Waveform from './Waveform.jsx';
 import Icon from './Icon.jsx';
-import { formatRuler, formatTimecode } from '../util/time.js';
+import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
   EVENT_DEFAULTS, MIN_EVENT, MIN_VOLUME_DB, deleteTrack, eventFades, formatVolume, gainToVolume, isTrackActive,
   overlapAt, placeMedia, resolveTimeline, setTransitionAt, trackColor, volumeToGain,
@@ -35,8 +35,12 @@ const allowDrop = (e) => {
   e.dataTransfer.dropEffect = 'copy';
 };
 
+const majorStep = (pps) => TICK_STEPS.find((s) => s * pps >= 90) ?? 3600;
+// Separación de las marcas pequeñas de la regla (la "rejilla"): Re Pág / Av Pág mueven el cursor esto.
+export const gridStep = (pps) => majorStep(pps) / 5;
+
 const Ruler = memo(function Ruler({ pps, time, scrollLeft, viewWidth, laneWidth, onPointerDown }) {
-  const step = TICK_STEPS.find((s) => s * pps >= 90) ?? 3600;
+  const step = majorStep(pps);
   const minor = step / 5;
   const ticks = [];
   const first = Math.max(0, Math.floor(scrollLeft / pps / minor));
@@ -54,7 +58,7 @@ const Ruler = memo(function Ruler({ pps, time, scrollLeft, viewWidth, laneWidth,
     <div className="ruler" style={{ width: laneWidth }} onPointerDown={onPointerDown}>
       <div className="marker-bar" />
       {ticks}
-      <div className="cursor-head" style={{ left: time * pps }} />
+      <div className="cursor-head" style={{ left: time * pps }} title="Arrastra para ajustar el cursor (Mayús: sin ajuste)" />
     </div>
   );
 });
@@ -316,7 +320,7 @@ const Timeline = forwardRef(function Timeline({
 
   // Valores actuales para manejadores estables (evita re-renderizar todas las pistas a cada fotograma).
   const live = useRef(null);
-  live.current = { project, selection, time, pps, snap };
+  live.current = { project, selection, time, pps, snap, playing };
 
   const mediaById = useMemo(() => new Map(project.media.map((m) => [m.id, m])), [project.media]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
@@ -367,17 +371,38 @@ const Timeline = forwardRef(function Timeline({
     return [0, t, ...p.events.filter((e) => !exclude.has(e.id)).flatMap((e) => [e.start, e.start + e.duration])];
   }, []);
 
-  const startScrub = useCallback((e) => {
+  // Dónde queda el cursor al colocarlo con el ratón, como en VEGAS: con el ajuste activado se pega al
+  // principio o al final de los eventos cercanos (8 px); si no, cae en el fotograma más próximo.
+  // free (Mayús pulsada) desactiva el ajuste en ese momento. offset desplaza respecto al puntero.
+  const cursorTime = useCallback((clientX, free = false, offset = 0) => {
+    const { project: p, snap: enabled, pps: scale } = live.current;
+    const t = Math.max(0, timeAt(clientX) + offset);
+    if (enabled && !free) {
+      let best = null;
+      for (const x of [0, ...p.events.flatMap((e) => [e.start, e.start + e.duration])]) {
+        if (Math.abs(x - t) < 8 / scale && (best === null || Math.abs(x - t) < Math.abs(best - t))) best = x;
+      }
+      if (best !== null) return best;
+    }
+    return quantize(t, p.settings.fps);
+  }, [timeAt]);
+
+  // Arrastrar el cursor. Desde el triángulo de arriba (keepOffset) no salta a la posición del puntero:
+  // se desplaza lo que se mueva el ratón, para hacer ajustes pequeños.
+  const startScrub = useCallback((e, keepOffset = false) => {
     if (e.button !== 0) return;
-    seek(timeAt(e.clientX));
-    const move = (me) => seek(timeAt(me.clientX));
+    const offset = keepOffset ? live.current.time - timeAt(e.clientX) : 0;
+    if (!keepOffset) seek(cursorTime(e.clientX, e.shiftKey, offset)); // agarrar el triángulo no lo mueve
+    const move = (me) => seek(cursorTime(me.clientX, me.shiftKey, offset));
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
-  }, [seek, timeAt]);
+  }, [cursorTime, seek, timeAt]);
+
+  const onRulerDown = useCallback((e) => startScrub(e, e.target.classList.contains('cursor-head')), [startScrub]);
 
   const onLaneDown = useCallback((e) => {
     if (e.button !== 0) return;
@@ -421,7 +446,7 @@ const Timeline = forwardRef(function Timeline({
       let update;
 
       if (mode === 'move') {
-        dt = snapDelta(dt, [primary.start, primary.start + primary.duration], points, threshold);
+        dt = snapDelta(dt, [primary.start, primary.start + primary.duration], me.shiftKey ? [] : points, threshold);
         const minStart = Math.min(...[...origin.values()].map((o) => o.start));
         if (minStart + dt < 0) dt = -minStart;
         let shift = 0;
@@ -442,7 +467,7 @@ const Timeline = forwardRef(function Timeline({
           trackId: shift && trackType.get(o.trackId) === primaryType ? sameType[sameType.indexOf(o.trackId) + shift] : o.trackId,
         });
       } else if (mode === 'trimL') {
-        dt = snapDelta(dt, [primary.start], points, threshold);
+        dt = snapDelta(dt, [primary.start], me.shiftKey ? [] : points, threshold);
         for (const o of origin.values()) {
           if (!mediaOf(o)?.isImage) dt = Math.max(dt, -o.inPoint);
           dt = Math.max(dt, -o.start);
@@ -464,7 +489,7 @@ const Timeline = forwardRef(function Timeline({
         const dy = (me.clientY - startY) / bodyHeight(primaryType);
         update = (o) => ({ volume: gainToVolume(Math.min(1, Math.max(0, volumeToGain(o.volume ?? 0) - dy))) });
       } else {
-        dt = snapDelta(dt, [primary.start + primary.duration], points, threshold);
+        dt = snapDelta(dt, [primary.start + primary.duration], me.shiftKey ? [] : points, threshold);
         for (const o of origin.values()) {
           const m = mediaOf(o);
           dt = Math.max(dt, MIN_EVENT - o.duration);
@@ -478,14 +503,17 @@ const Timeline = forwardRef(function Timeline({
         record,
       );
     };
-    const onUp = () => {
+    const onUp = (ue) => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      if (!moved && alreadySelected) setSelection(group);
+      if (moved) return;
+      if (alreadySelected) setSelection(group);
+      // Un clic (sin arrastrar) en el cuerpo del evento también coloca el cursor ahí, como en VEGAS.
+      if (mode === 'move') seek(cursorTime(startX, ue.shiftKey));
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-  }, [setProject, setSelection, snapPoints, trackAt]);
+  }, [cursorTime, seek, setProject, setSelection, snapPoints, trackAt]);
 
   // Clic derecho en un evento: si no estaba seleccionado, se selecciona (con su grupo) y se abre su menú.
   const onEventMenu = useCallback((e, ev) => {
@@ -609,6 +637,16 @@ const Timeline = forwardRef(function Timeline({
     }
   }, [time, playing, pps]);
 
+  // En pausa, si el cursor sale de la vista (con las flechas o arrastrándolo fuera), la vista se
+  // desplaza lo justo para enseñarlo. Solo al cambiar el tiempo: al hacer zoom manda el ancla del zoom.
+  useEffect(() => {
+    if (live.current.playing) return;
+    const el = scrollRef.current;
+    const x = HEADER_W + time * live.current.pps;
+    if (x > el.scrollLeft + el.clientWidth - 20) el.scrollLeft = x - el.clientWidth + 60;
+    else if (x < el.scrollLeft + HEADER_W) el.scrollLeft = Math.max(0, x - HEADER_W - 40);
+  }, [time]);
+
   let videoCount = 0;
   let audioCount = 0;
 
@@ -626,7 +664,7 @@ const Timeline = forwardRef(function Timeline({
               scrollLeft={view.left}
               viewWidth={view.width}
               laneWidth={laneWidth}
-              onPointerDown={startScrub}
+              onPointerDown={onRulerDown}
             />
           </div>
           {project.tracks.map((track, index) => (
