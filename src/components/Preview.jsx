@@ -56,6 +56,37 @@ function audibleEvents(project, mediaById, resolved, t) {
     }));
 }
 
+// Reproductor que usa cada evento. Los eventos seguidos de una pista que continúan el mismo archivo
+// (por ejemplo, las dos partes de un evento dividido con S) comparten reproductor: al pasar de uno
+// a otro el video sigue reproduciéndose sin buscar ni arrancar de nuevo, y el corte no se nota.
+function playerKeys(events) {
+  const keys = new Map();
+  const byTrack = new Map();
+  for (const e of events) {
+    if (!byTrack.has(e.trackId)) byTrack.set(e.trackId, []);
+    byTrack.get(e.trackId).push(e);
+  }
+  for (const list of byTrack.values()) {
+    list.sort((a, b) => a.start - b.start);
+    list.forEach((e, i) => {
+      const prev = list[i - 1];
+      const continues =
+        prev &&
+        prev.mediaId === e.mediaId &&
+        Math.abs(prev.start + prev.duration - e.start) < 0.002 &&
+        Math.abs(prev.inPoint + prev.duration - e.inPoint) < 0.002;
+      keys.set(e.id, continues ? keys.get(prev.id) : e.id);
+    });
+  }
+  return keys;
+}
+
+// Prepara un reproductor que aún no suena: en pausa y, si el evento está por llegar, en su primer fotograma.
+function prepare(el, e, time) {
+  if (!el.paused) el.pause();
+  if (!el.seeking && time < e.start && Math.abs(el.currentTime - e.inPoint) > 0.05) el.currentTime = e.inPoint;
+}
+
 function sync(el, target, playing) {
   if (playing) {
     if (!el.seeking && Math.abs(el.currentTime - target) > DRIFT) el.currentTime = target;
@@ -69,9 +100,9 @@ function sync(el, target, playing) {
 export default function Preview({ project, time, playing, onOpenProperties }) {
   const canvasRef = useRef(null);
   const sourcesRef = useRef(null);
-  const videoEls = useRef(new Map()); // id de evento → <video> (silenciado: el sonido sale de las pistas de audio)
+  const videoEls = useRef(new Map()); // reproductor (ver playerKeys) → <video> (silenciado: el sonido sale de las pistas de audio)
   const imageEls = useRef(new Map()); // id de medio → <img>
-  const audioEls = useRef(new Map());
+  const audioEls = useRef(new Map()); // reproductor → <audio>
   const draw = useRef({ dirty: 0, playing: false, layers: [], frame: null });
   const [display, setDisplay] = useState({ width: 0, height: 0 });
   const [backing, setBacking] = useState({ width: 0, height: 0 });
@@ -80,6 +111,7 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
   const mediaById = useMemo(() => new Map(project.media.map((m) => [m.id, m])), [project.media]);
   const eventsById = useMemo(() => new Map(project.events.map((e) => [e.id, e])), [project.events]);
   const resolved = useMemo(() => resolveTimeline(project), [project.events, project.tracks]);
+  const players = useMemo(() => playerKeys(project.events), [project.events]);
 
   const layers = videoLayers(project, mediaById, resolved, eventsById, time);
 
@@ -101,7 +133,8 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
       }
       return img;
     }
-    let el = videoEls.current.get(e.id);
+    const key = players.get(e.id);
+    let el = videoEls.current.get(key);
     if (!el && create) {
       el = document.createElement('video');
       el.crossOrigin = 'anonymous';
@@ -113,30 +146,34 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
       el.src = mediaUrl(media.path);
       el.currentTime = e.inPoint;
       sourcesRef.current.appendChild(el);
-      videoEls.current.set(e.id, el);
+      videoEls.current.set(key, el);
     }
     return el;
   };
 
+  // Eventos cuyo reproductor hay que tener listo: los que suenan o se ven ahora y los que empiezan en
+  // los próximos segundos (así el siguiente clip ya está cargado y en su primer fotograma al llegar).
+  const isNear = (e) => time >= e.start - PRELOAD && time <= e.start + e.duration + KEEP;
+  const isNow = (e) => e.start <= time && time < e.start + e.duration;
+
   useEffect(() => {
     // Videos: se preparan los eventos cercanos al cursor, se sincronizan los visibles y se liberan los demás.
-    const visible = new Map();
+    const sorted = [...project.events].sort((a, b) => a.start - b.start);
+    const visible = new Set();
     for (const l of layers) {
-      for (const e of l.event ? [l.event] : [l.from, l.to]) visible.set(e.id, e);
+      for (const e of l.event ? [l.event] : [l.from, l.to]) visible.add(e.id);
     }
+    const busy = new Set([...visible].map((id) => players.get(id))); // reproductores que se están viendo
     const videoTracks = new Set(project.tracks.filter((t) => t.type === 'video' && isTrackActive(t, project.tracks)).map((t) => t.id));
     const needed = new Set();
-    for (const e of project.events) {
+    for (const e of sorted) {
       const m = mediaById.get(e.mediaId);
-      if (!videoTracks.has(e.trackId) || !m || m.missing || m.isImage) continue;
-      if (time < e.start - PRELOAD || time > e.start + e.duration + KEEP) continue;
-      needed.add(e.id);
+      if (!videoTracks.has(e.trackId) || !m || m.missing || m.isImage || !isNear(e)) continue;
+      const key = players.get(e.id);
       const el = sourceFor(e, true);
       if (visible.has(e.id)) sync(el, e.inPoint + time - e.start, playing);
-      else {
-        if (!el.paused) el.pause();
-        if (!el.seeking && time < e.start && Math.abs(el.currentTime - e.inPoint) > 0.05) el.currentTime = e.inPoint;
-      }
+      else if (!busy.has(key) && !needed.has(key)) prepare(el, e, time);
+      needed.add(key);
     }
     for (const [id, el] of videoEls.current) {
       if (needed.has(id)) continue;
@@ -157,30 +194,46 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
     draw.current.playing = playing;
     invalidate();
 
-    // Audio: un elemento por evento, con el volumen de pista, de evento y de los fundidos.
-    const audible = audibleEvents(project, mediaById, resolved, time);
-    const audibleIds = new Set(audible.map(({ event }) => event.id));
-    for (const { event: e, gain } of audible) {
+    // Audio: un reproductor por grupo de eventos seguidos (como el video), con el volumen de pista,
+    // de evento y de los fundidos. Los de los eventos que están por llegar se cargan por adelantado.
+    const audioFor = (e) => {
+      const key = players.get(e.id);
       const url = mediaUrl(mediaById.get(e.mediaId).path);
-      let el = audioEls.current.get(e.id);
+      let el = audioEls.current.get(key);
       if (!el || el.dataset.url !== url) {
+        if (el) el.removeAttribute('src');
         el = new Audio(url);
         el.dataset.url = url;
         el.preload = 'auto';
-        audioEls.current.set(e.id, el);
+        el.currentTime = e.inPoint;
+        audioEls.current.set(key, el);
       }
+      return el;
+    };
+    const audible = audibleEvents(project, mediaById, resolved, time);
+    const sounding = new Set(audible.map(({ event }) => players.get(event.id)));
+    const neededAudio = new Set(sounding);
+    for (const { event: e, gain } of audible) {
+      const el = audioFor(e);
       el.volume = Math.min(1, gain);
       if (playing) sync(el, e.inPoint + time - e.start, true);
       else if (!el.paused) el.pause();
     }
-    const existing = new Set(project.events.map((e) => e.id));
-    for (const [id, el] of audioEls.current) {
-      if (audibleIds.has(id)) continue;
-      if (!el.paused) el.pause();
-      if (!existing.has(id)) {
-        el.removeAttribute('src');
-        audioEls.current.delete(id);
-      }
+    const audioTracks = new Set(project.tracks.filter((t) => t.type === 'audio' && isTrackActive(t, project.tracks)).map((t) => t.id));
+    for (const e of sorted) {
+      const m = mediaById.get(e.mediaId);
+      if (!audioTracks.has(e.trackId) || !m || !m.hasAudio || m.missing || !isNear(e) || isNow(e)) continue;
+      const key = players.get(e.id);
+      if (neededAudio.has(key)) continue;
+      neededAudio.add(key);
+      prepare(audioFor(e), e, time);
+    }
+    for (const [key, el] of audioEls.current) {
+      if (neededAudio.has(key)) continue;
+      el.pause();
+      el.removeAttribute('src');
+      el.load();
+      audioEls.current.delete(key);
     }
   });
 

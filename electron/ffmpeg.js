@@ -155,20 +155,40 @@ function buildRender(project, settings, outPath) {
   let last = 'base';
   let n = 0;
 
-  // Añade un fragmento de un medio como entrada y devuelve el inicio de su cadena de filtros
-  // (escalado con bandas negras a la resolución y velocidad del proyecto).
-  const addVideoInput = (m, inPoint, dur) => {
-    if (m.isImage) inputs.push('-loop', '1', '-framerate', fps, '-t', num(dur), '-i', m.path);
-    else inputs.push('-ss', num(inPoint), '-t', num(dur), '-i', m.path);
+  // Todo el video se coloca sobre la rejilla de fotogramas del proyecto: un fragmento que va de
+  // start a start+dur ocupa los fotogramas cuyo instante cae en ese intervalo. Así, al dividir un
+  // evento o pegar dos seguidos, cada fotograma de salida pertenece a uno solo y no quedan huecos negros.
+  const [rateNum, rateDen = 1] = fps.split('/').map(Number);
+  const rate = rateNum / rateDen;
+  const frameSpan = (start, dur) => {
+    const first = Math.ceil(start * rate - 1e-6);
+    const end = Math.ceil((start + dur) * rate - 1e-6);
+    return { first, count: Math.max(1, end - first) };
+  };
+
+  // Añade un fragmento de un medio como entrada y devuelve su cadena de filtros: escalado con bandas
+  // negras, a la velocidad del proyecto y con exactamente `count` fotogramas (si fps se come el último,
+  // tpad lo repite). Empieza en el tiempo local 0, que corresponde al fotograma `first` del proyecto.
+  const addVideoInput = (m, inPoint, start, dur) => {
+    const { first, count } = frameSpan(start, dur);
+    const seek = Math.max(0, inPoint + first / rate - start);
+    const length = (count + 1) / rate;
+    if (m.isImage) inputs.push('-loop', '1', '-framerate', fps, '-t', num(length), '-i', m.path);
+    else inputs.push('-ss', num(seek), '-t', num(length), '-i', m.path);
     const i = n++;
     const chain =
       `[${i}:v]setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
-      `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps}`;
-    return { i, chain };
+      `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},` +
+      `tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${count}`;
+    return { i, chain, first, count };
   };
-  const overlayAt = (label, start, end) => {
+  // Desplaza el fragmento a su fotograma (la base de tiempo tras fps es 1/fps) y lo superpone solo en sus fotogramas.
+  const placeAt = (first) => `setpts=PTS-STARTPTS+${first}`;
+  const overlayAt = (label, first, count) => {
     const out = `o${n}_${filters.length}`;
-    filters.push(`[${last}][${label}]overlay=eof_action=pass:enable='between(t,${num(start)},${num(end)})'[${out}]`);
+    const from = (first - 0.5) / rate;
+    const to = (first + count - 0.5) / rate;
+    filters.push(`[${last}][${label}]overlay=eof_action=pass:enable='between(t,${from.toFixed(6)},${to.toFixed(6)})'[${out}]`);
     last = out;
   };
 
@@ -186,23 +206,23 @@ function buildRender(project, settings, outPath) {
     .filter((e) => tracks.get(e.trackId).type === 'video')
     .sort((a, b) => tracks.get(b.trackId).index - tracks.get(a.trackId).index || a.start - b.start);
   for (const e of videoEvents) {
-    const { i, chain } = addVideoInput(media.get(e.mediaId), e.inPoint, e.duration);
-    filters.push(`${chain}${videoFades(e)},setpts=PTS+${num(e.start)}/TB[v${i}]`);
-    overlayAt(`v${i}`, e.start, e.start + e.duration);
+    const v = addVideoInput(media.get(e.mediaId), e.inPoint, e.start, e.duration);
+    filters.push(`${v.chain}${videoFades(e)},${placeAt(v.first)}[v${v.i}]`);
+    overlayAt(`v${v.i}`, v.first, v.count);
 
     const tr = transitionInto.get(e.id);
     if (tr) {
       // Final del evento que sale y principio del que entra, mezclados con xfade.
       const from = eventsById.get(tr.from);
-      const a = addVideoInput(media.get(from.mediaId), from.inPoint + (tr.start - from.start), tr.duration);
-      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.duration);
+      const a = addVideoInput(media.get(from.mediaId), from.inPoint + (tr.start - from.start), tr.start, tr.duration);
+      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.start, tr.duration);
       filters.push(
         `${a.chain},format=yuv420p[ta${a.i}]`,
         `${b.chain},format=yuv420p[tb${b.i}]`,
-        `[ta${a.i}][tb${b.i}]xfade=transition=${tr.type}:duration=${num(tr.duration)}:offset=0,` +
-          `setpts=PTS+${num(tr.start)}/TB[tr${b.i}]`,
+        `[ta${a.i}][tb${b.i}]xfade=transition=${tr.type}:duration=${(b.count / rate).toFixed(6)}:offset=0,` +
+          `trim=end_frame=${b.count},${placeAt(b.first)}[tr${b.i}]`,
       );
-      overlayAt(`tr${b.i}`, tr.start, tr.start + tr.duration);
+      overlayAt(`tr${b.i}`, b.first, b.count);
     }
   }
   filters.push(`[${last}]format=yuv420p[vout]`);
