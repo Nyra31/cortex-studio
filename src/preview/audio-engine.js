@@ -17,14 +17,24 @@ export class AudioChain {
 
   set(effects, info) {
     const key = `${effects.map((fx) => `${fx.id}:${fx.type}`).join('|')}#${info.peak ?? ''}#${info.ready ? 1 : 0}`;
+    // Se llama en cada fotograma: solo se tocan los efectos cuyos valores han cambiado de verdad
+    // (algunos rehacen curvas o envían mensajes a su procesador al actualizarse).
     if (key === this.key) {
-      this.parts.forEach(({ part, fx }) => part.update(effects.find((e) => e.id === fx.id).params));
+      for (const p of this.parts) {
+        const params = effects.find((e) => e.id === p.fx.id).params;
+        const values = JSON.stringify(params);
+        if (values === p.values) continue;
+        p.values = values;
+        p.part.update(params);
+      }
       return;
     }
     this.key = key;
     this.input.disconnect();
     for (const { part } of this.parts) part.dispose();
-    this.parts = effects.map((fx) => ({ fx, part: buildAudioEffect(this.ctx, fx, info) })).filter(({ part }) => part);
+    this.parts = effects
+      .map((fx) => ({ fx, values: JSON.stringify(fx.params), part: buildAudioEffect(this.ctx, fx, info) }))
+      .filter(({ part }) => part);
     let node = this.input;
     for (const { part } of this.parts) {
       node.connect(part.input);
@@ -75,6 +85,8 @@ export class AudioEngine {
 
   // Volumen suavizado (unos milisegundos) para que los cambios fotograma a fotograma no chasqueen.
   setGain(p, value) {
+    if (p.gain === value) return;
+    p.gain = value;
     p.output.gain.setTargetAtTime(value, this.ctx.currentTime, 0.008);
   }
 

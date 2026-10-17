@@ -88,27 +88,45 @@ function drawWave(canvas, original, processed) {
   }
 }
 
+// Miniaturas ya dibujadas (id del efecto → promesa de un lienzo). Se calculan una sola vez por sesión:
+// si se rehicieran en cada redibujado del panel (que ocurre en cada fotograma al reproducir), el editor
+// iría a tirones, sobre todo las de audio, que procesan su sonido de ejemplo.
+const thumbnails = new Map();
+function thumbnail(item) {
+  if (thumbnails.has(item.id)) return thumbnails.get(item.id);
+  const canvas = document.createElement('canvas');
+  canvas.width = THUMB_W;
+  canvas.height = THUMB_H;
+  const effects = activeEffects([{ type: item.id, params: { ...effectDefaults(item.id), ...THUMB_PARAMS[item.id] } }]);
+  let promise;
+  if (item.kind === 'audio') {
+    const sound = sampleSound();
+    promise = renderOfflineAudio([sound, sound], AUDIO_RATE, effects, { peak: 0.6 }).then(([left]) => {
+      drawWave(canvas, sound, left);
+      return canvas;
+    });
+  } else {
+    const r = getRenderer();
+    if (r) {
+      r.compositor.render(SAMPLE, [{ a: r.sample, opacity: 1, fxA: effects }]);
+      canvas.getContext('2d').drawImage(r.canvas, 0, 0, THUMB_W, THUMB_H);
+    }
+    promise = Promise.resolve(r ? canvas : null);
+  }
+  promise = promise.catch(() => null);
+  thumbnails.set(item.id, promise);
+  return promise;
+}
+
 function EffectTile({ item }) {
   const ref = useRef(null);
   useEffect(() => {
-    const effects = activeEffects([{ type: item.id, params: { ...effectDefaults(item.id), ...item.sample } }]);
-    if (item.kind === 'audio') {
-      const sound = sampleSound();
-      let alive = true;
-      renderOfflineAudio([sound, sound], AUDIO_RATE, effects, { peak: 0.6 })
-        .then(([left]) => alive && drawWave(ref.current, sound, left))
-        .catch(() => {});
-      return () => {
-        alive = false;
-      };
-    }
-    const r = getRenderer();
-    if (!r) return undefined;
-    r.compositor.render(SAMPLE, [{ a: r.sample, opacity: 1, fxA: effects }]);
-    const ctx = ref.current.getContext('2d');
-    ctx.drawImage(r.canvas, 0, 0, ref.current.width, ref.current.height);
-    return undefined;
-  }, [item]);
+    let alive = true;
+    thumbnail(item).then((canvas) => alive && canvas && ref.current.getContext('2d').drawImage(canvas, 0, 0));
+    return () => {
+      alive = false;
+    };
+  }, [item.id]);
 
   return (
     <div
@@ -153,9 +171,7 @@ export default function EffectsPanel({ kind = 'video' }) {
     chosenGroup[kind] = g;
     setGroupState(g);
   };
-  const items = [...EFFECTS.values()]
-    .filter((fx) => fx.kind === kind && (group === ALL || fx.group === group))
-    .map((fx) => ({ ...fx, sample: THUMB_PARAMS[fx.id] }));
+  const items = [...EFFECTS.values()].filter((fx) => fx.kind === kind && (group === ALL || fx.group === group));
 
   return (
     <div className="transitions-panel">

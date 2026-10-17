@@ -41,11 +41,11 @@ const blurPasses = (sx, sy) =>
       code: `
         float r = ceil(uSigma * 3.0);
         float stepPx = max(1.0, r / 48.0);
+        int n = int(min(48.0, floor(r / stepPx)));
         vec4 acc = vec4(0.0);
         float wsum = 0.0;
-        for (int i = -48; i <= 48; i++) {
+        for (int i = -n; i <= n; i++) {
           float o = float(i) * stepPx;
-          if (abs(o) > r) continue;
           float w = exp(-0.5 * o * o / (uSigma * uSigma));
           acc += texture(uPrev, uv + uDir * o / uSize) * w;
           wsum += w;
@@ -105,9 +105,9 @@ const PASSES = {
       float y = dot(c.rgb, vec3(0.299, 0.587, 0.114));
       float sum = 0.0;
       float cnt = 0.0;
-      for (int j = -11; j <= 11; j++) {
-        for (int i = -11; i <= 11; i++) {
-          if (abs(float(i)) > uRadius || abs(float(j)) > uRadius) continue;
+      int n = int(min(11.0, uRadius));
+      for (int j = -n; j <= n; j++) {
+        for (int i = -n; i <= n; i++) {
           sum += dot(texture(uPrev, uv + vec2(float(i), float(j)) / uSize).rgb, vec3(0.299, 0.587, 0.114));
           cnt += 1.0;
         }
