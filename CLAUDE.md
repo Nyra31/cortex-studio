@@ -62,11 +62,11 @@ npm start
 
 `dist/` y `release/` no están en el repo: se regeneran con `npm run build` / `npm run dist` (el instalador solo se puede generar en Windows).
 
-## Estado (17/10/2026, v0.2.0)
+## Estado (17/10/2026, v0.3.0)
 
 v0.1.0 terminada: edición multipista, vista previa, renderizado a MP4, interfaz estilo editor clásico, propiedades del proyecto e instalador de Windows.
 v0.2.0: volumen por evento y fundidos de entrada/salida (formato `.cortex` versión 2; los de versión 1 se siguen abriendo).
-Después (sin publicar todavía): transiciones (fase 1 de 3), con vista previa WebGL y formato `.cortex` versión 3.
+v0.3.0: transiciones (fase 1 de 3) con vista previa WebGL (formato `.cortex` versión 3), cortes sin pausas en la vista previa y sin fotogramas negros en el render, cortar/copiar/pegar, agrupar, menú contextual, cursor como en VEGAS (ajuste a bordes, fotogramas exactos, Ctrl+←/→, Re Pág/Av Pág) y selección por área. No hay trabajo a medias.
 
 ## Pendiente (siguientes pasos naturales)
 

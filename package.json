@@ -1,6 +1,6 @@
 {
   "name": "cortex-studio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Editor de video de escritorio con línea de tiempo multipista",
   "private": true,
   "main": "electron/main.js",
