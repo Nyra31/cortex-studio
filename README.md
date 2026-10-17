@@ -35,6 +35,8 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 - **Línea de tiempo multipista:** pistas de video arriba y de audio abajo. Un video con sonido se coloca como dos eventos agrupados (video y audio) que se mueven y recortan juntos.
 - **Pistas:** silencio, solo, volumen (pistas de audio) y cambio de nombre con doble clic.
 - **Edición:** arrastrar para mover (también a otra pista), recortar por los bordes, dividir en el cursor y eliminar. Incluye ajuste magnético a bordes y al cursor, y deshacer/rehacer.
+- **Cortar, copiar y pegar** eventos (Ctrl+X, Ctrl+C, Ctrl+V). Se pega en el cursor, en las mismas pistas, y el cursor salta al final de lo pegado para poder pegar varias veces seguidas. **Agrupar** (G) y **quitar del grupo** (U) para que varios eventos se muevan juntos o separar el audio de su video.
+- **Menú contextual** con clic derecho: en un evento (cortar, copiar, pegar, eliminar, dividir, agrupar, quitar fundidos, volumen a 0 dB, volver a disolución cruzada, abrir la ubicación del archivo) y en una zona vacía de una pista (pegar ahí, seleccionar todo, insertar pistas).
 - **Fundidos de entrada y salida:** se arrastran desde los cuadraditos de las esquinas superiores del evento. En audio bajan el volumen; en video hacen aparecer o desaparecer el evento sobre lo que haya debajo (otra pista o negro). Al dividir, cada parte conserva su fundido.
 - **Volumen por evento:** en los eventos de audio, arrastrar en vertical la línea superior (de -∞ a 0 dB). El valor aparece en el título del evento y la forma de onda se escala. Se suma al volumen de la pista.
 - **Transiciones** al estilo de VEGAS: al solapar el final de un evento con el principio de otro en la misma pista se crea una disolución cruzada (en audio, un fundido cruzado). La duración es la del solapamiento. En la pestaña *Transiciones* (Alt+8) hay 49 preajustes en 12 categorías (disolución, barridos lineal, diagonal y de reloj, iris, puerta de granero, empujar, deslizar, persianas venecianas, comprimir, zoom y pixelado), con miniaturas animadas al pasar el ratón. Se aplican arrastrándolas sobre el solapamiento; doble clic en él vuelve a la disolución cruzada.
@@ -52,6 +54,9 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 | S | Dividir en el cursor (los eventos seleccionados o, si no hay selección, todos) |
 | Supr | Eliminar los eventos seleccionados |
 | Ctrl+A | Seleccionar todos los eventos |
+| Ctrl+X / Ctrl+C / Ctrl+V | Cortar / copiar / pegar eventos (se pega en el cursor) |
+| G / U | Agrupar los eventos seleccionados / quitarlos del grupo |
+| Clic derecho | Menú contextual del evento o de la pista |
 | Ctrl+Z / Ctrl+Y | Deshacer / rehacer |
 | Ctrl + rueda, ↑ / ↓ | Zoom de la línea de tiempo |
 | ← / → | Fotograma anterior / siguiente |

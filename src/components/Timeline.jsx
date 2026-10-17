@@ -93,7 +93,7 @@ function TransitionZone({ width, height, label, onReset }) {
 // fadeIn/fadeOut: fundidos efectivos (en audio incluyen los fundidos cruzados de los solapamientos).
 // overlapIn/overlapOut: segundos solapados con el evento anterior/siguiente de la pista.
 const EventView = memo(function EventView({
-  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset,
+  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu,
 }) {
   const width = Math.max(3, ev.duration * pps);
   const height = bodyHeight(type);
@@ -109,6 +109,7 @@ const EventView = memo(function EventView({
       className={`event ${type}${selected ? ' selected' : ''}${media?.missing ? ' missing' : ''}`}
       style={{ left: ev.start * pps, width }}
       onPointerDown={(e) => onDown(e, ev, 'move')}
+      onContextMenu={(e) => onMenu(e, ev)}
       title={media?.missing ? `Archivo no encontrado: ${media.path}` : media?.name}
     >
       <div className="event-title">
@@ -231,7 +232,7 @@ function VolumeSlider({ value, onChange }) {
 
 const TrackRow = memo(function TrackRow({
   track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef,
-  onLaneDown, onEventDown, onEventReset, onDrop, onUpdateTrack, onDelete,
+  onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onDrop, onUpdateTrack, onDelete,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
   return (
@@ -269,6 +270,7 @@ const TrackRow = memo(function TrackRow({
         className={`track-lane${inactive ? ' muted' : ''}`}
         style={{ width: laneWidth }}
         onPointerDown={onLaneDown}
+        onContextMenu={(e) => onLaneMenu(e, track.id)}
         onDragOver={allowDrop}
         onDrop={(e) => onDrop(e, track.id)}
       >
@@ -290,6 +292,7 @@ const TrackRow = memo(function TrackRow({
               transition={inc ? ev.transition : null}
               onDown={onEventDown}
               onReset={onEventReset}
+              onMenu={onEventMenu}
             />
           );
         })}
@@ -300,7 +303,7 @@ const TrackRow = memo(function TrackRow({
 
 const Timeline = forwardRef(function Timeline({
   project, setProject, selection, setSelection, time, seek, playing,
-  pps, setPps, snap, onDropFiles, onMessage, footer,
+  pps, setPps, snap, onDropFiles, onMessage, onContextMenu, footer,
 }, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -484,6 +487,25 @@ const Timeline = forwardRef(function Timeline({
     window.addEventListener('pointerup', onUp);
   }, [setProject, setSelection, snapPoints, trackAt]);
 
+  // Clic derecho en un evento: si no estaba seleccionado, se selecciona (con su grupo) y se abre su menú.
+  const onEventMenu = useCallback((e, ev) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const { project: p, selection: sel } = live.current;
+    let selected = sel;
+    if (!sel.includes(ev.id)) {
+      selected = ev.groupId ? p.events.filter((x) => x.groupId === ev.groupId).map((x) => x.id) : [ev.id];
+      setSelection(selected);
+    }
+    onContextMenu({ kind: 'event', x: e.clientX, y: e.clientY, event: ev, selection: selected, time: timeAt(e.clientX) });
+  }, [onContextMenu, setSelection, timeAt]);
+
+  // Clic derecho en una zona vacía de una pista.
+  const onLaneMenu = useCallback((e, trackId) => {
+    e.preventDefault();
+    onContextMenu({ kind: 'track', x: e.clientX, y: e.clientY, trackId, time: timeAt(e.clientX) });
+  }, [onContextMenu, timeAt]);
+
   // Doble clic en un tirador: quita el fundido (en todo el grupo) o devuelve el volumen a 0 dB.
   const onEventReset = useCallback((ev, mode) => {
     const field = mode === 'gain' ? 'volume' : mode;
@@ -624,6 +646,8 @@ const Timeline = forwardRef(function Timeline({
               onLaneDown={onLaneDown}
               onEventDown={onEventDown}
               onEventReset={onEventReset}
+              onEventMenu={onEventMenu}
+              onLaneMenu={onLaneMenu}
               onDrop={onDrop}
               onUpdateTrack={onUpdateTrack}
               onDelete={onDeleteTrack}

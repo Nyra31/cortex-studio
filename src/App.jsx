@@ -11,9 +11,10 @@ import RenderDialog from './components/RenderDialog.jsx';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import { useHistory } from './state/useHistory.js';
+import ContextMenu from './components/ContextMenu.jsx';
 import {
-  addTrack, deleteEvents, emptyProject, loadProject, mediaLength, placeMedia, projectDuration,
-  removeMedia, renderPayload, serializeProject, splitEvents, uid,
+  addTrack, copyEvents, deleteEvents, emptyProject, groupEvents, loadProject, mediaLength, pasteEvents, placeMedia,
+  projectDuration, removeMedia, renderPayload, serializeProject, splitEvents, uid, ungroupEvents, updateEvents,
 } from './state/project.js';
 
 const api = window.api;
@@ -37,12 +38,14 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions'
+  const [clipboard, setClipboard] = useState(null); // eventos copiados (copyEvents)
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, items }
   const timelineRef = useRef(null);
 
   const duration = projectDuration(project);
   const dirty = project !== savedProject;
   const live = useRef(null);
-  live.current = { project, time, playing, duration, dirty };
+  live.current = { project, time, playing, duration, dirty, selection, clipboard };
   const playStart = useRef(0);
 
   useEffect(() => {
@@ -178,6 +181,112 @@ export default function App() {
 
   const insertTrack = useCallback((type) => setProject((p) => addTrack(p, type).project), [setProject]);
 
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  // Portapapeles. Las acciones reciben los ids explícitamente porque el menú contextual puede
+  // cambiar la selección justo antes de llamarlas.
+  const copyIds = useCallback((ids) => {
+    const clip = copyEvents(live.current.project, ids);
+    if (!clip) return false;
+    setClipboard(clip);
+    setStatus(`${clip.events.length} ${clip.events.length === 1 ? 'evento copiado' : 'eventos copiados'}`);
+    return true;
+  }, []);
+
+  const deleteIds = useCallback((ids) => {
+    if (!ids.length) return;
+    setProject((p) => deleteEvents(p, ids));
+    setSelection((sel) => sel.filter((id) => !ids.includes(id)));
+  }, [setProject]);
+
+  const cutIds = useCallback((ids) => {
+    if (copyIds(ids)) deleteIds(ids);
+  }, [copyIds, deleteIds]);
+
+  // Pega en el cursor (o en el instante y la pista indicados), selecciona lo pegado y lleva el cursor
+  // a su final, para que al pegar varias veces seguidas los eventos queden uno detrás de otro.
+  const paste = useCallback((at = live.current.time, trackId = null) => {
+    const clip = live.current.clipboard;
+    if (!clip) return;
+    const res = pasteEvents(live.current.project, clip, at, trackId);
+    if (!res.ids.length) {
+      setStatus('No se puede pegar: los medios de lo copiado ya no están en el proyecto.');
+      return;
+    }
+    setProject(res.project);
+    setSelection(res.ids);
+    seek(res.end);
+  }, [seek, setProject]);
+
+  const groupIds = useCallback((ids) => setProject((p) => groupEvents(p, ids)), [setProject]);
+  const ungroupIds = useCallback((ids) => setProject((p) => ungroupEvents(p, ids)), [setProject]);
+
+  // Menú del clic derecho en un evento o en una zona vacía de una pista (lo pide la línea de tiempo).
+  const openContextMenu = useCallback((info) => {
+    const { project: p, time: t, clipboard: clip } = live.current;
+    let items;
+    if (info.kind === 'event') {
+      const ids = info.selection;
+      const selected = p.events.filter((e) => ids.includes(e.id));
+      const types = new Map(p.tracks.map((tr) => [tr.id, tr.type]));
+      const audio = selected.filter((e) => types.get(e.trackId) === 'audio');
+      const media = p.media.find((m) => m.id === info.event.mediaId);
+      const isVideo = types.get(info.event.trackId) === 'video';
+      items = [
+        { label: 'Cortar', shortcut: 'Ctrl+X', action: () => cutIds(ids) },
+        { label: 'Copiar', shortcut: 'Ctrl+C', action: () => copyIds(ids) },
+        { label: 'Pegar', shortcut: 'Ctrl+V', action: () => paste(), disabled: !clip },
+        { label: 'Eliminar', shortcut: 'Supr', action: () => deleteIds(ids) },
+        'separator',
+        {
+          label: 'Dividir en el cursor',
+          shortcut: 'S',
+          action: () => setProject((cur) => splitEvents(cur, live.current.time, ids)),
+          disabled: !selected.some((e) => e.start < t && t < e.start + e.duration),
+        },
+        'separator',
+        { label: 'Agrupar', shortcut: 'G', action: () => groupIds(ids), disabled: ids.length < 2 },
+        { label: 'Quitar del grupo', shortcut: 'U', action: () => ungroupIds(ids), disabled: !selected.some((e) => e.groupId) },
+        'separator',
+        {
+          label: 'Quitar fundidos',
+          action: () => setProject((cur) => updateEvents(cur, ids, { fadeIn: 0, fadeOut: 0 })),
+          disabled: !selected.some((e) => e.fadeIn > 0 || e.fadeOut > 0),
+        },
+        ...(audio.length
+          ? [{
+            label: 'Volumen del evento a 0 dB',
+            action: () => setProject((cur) => updateEvents(cur, audio.map((e) => e.id), { volume: 0 })),
+            disabled: !audio.some((e) => (e.volume ?? 0) !== 0),
+          }]
+          : []),
+        ...(isVideo && info.event.transition
+          ? [{
+            label: 'Volver a disolución cruzada',
+            action: () => setProject((cur) => updateEvents(cur, [info.event.id], { transition: null })),
+          }]
+          : []),
+        'separator',
+        {
+          label: 'Abrir la ubicación del archivo',
+          action: () => api.revealFile(media.path),
+          disabled: !media || media.missing,
+        },
+      ];
+    } else {
+      items = [
+        { label: 'Pegar aquí', action: () => paste(info.time, info.trackId), disabled: !clip },
+        { label: 'Pegar en el cursor', shortcut: 'Ctrl+V', action: () => paste(), disabled: !clip },
+        'separator',
+        { label: 'Seleccionar todo', shortcut: 'Ctrl+A', action: selectAll },
+        'separator',
+        { label: 'Insertar pista de video', shortcut: 'Ctrl+Mayús+Q', action: () => insertTrack('video') },
+        { label: 'Insertar pista de audio', shortcut: 'Ctrl+Q', action: () => insertTrack('audio') },
+      ];
+    }
+    setContextMenu({ x: info.x, y: info.y, items });
+  }, [copyIds, cutIds, deleteIds, groupIds, insertTrack, paste, selectAll, setProject, ungroupIds]);
+
   const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
 
   // ---- Proyecto ----
@@ -284,9 +393,16 @@ export default function App() {
         { label: 'Deshacer', shortcut: 'Ctrl+Z', action: history.undo, disabled: !history.canUndo },
         { label: 'Rehacer', shortcut: 'Ctrl+Y', action: history.redo, disabled: !history.canRedo },
         'separator',
+        { label: 'Cortar', shortcut: 'Ctrl+X', action: () => cutIds(selection), disabled: !selection.length },
+        { label: 'Copiar', shortcut: 'Ctrl+C', action: () => copyIds(selection), disabled: !selection.length },
+        { label: 'Pegar', shortcut: 'Ctrl+V', action: () => paste(), disabled: !clipboard },
+        'separator',
         { label: 'Dividir', shortcut: 'S', action: split },
         { label: 'Eliminar', shortcut: 'Supr', action: deleteSelected, disabled: !selection.length },
         { label: 'Seleccionar todo', shortcut: 'Ctrl+A', action: selectAll },
+        'separator',
+        { label: 'Agrupar', shortcut: 'G', action: () => groupIds(selection), disabled: selection.length < 2 },
+        { label: 'Quitar del grupo', shortcut: 'U', action: () => ungroupIds(selection), disabled: !selection.length },
         'separator',
         { label: 'Ajuste activado', shortcut: 'F8', action: () => setSnap((v) => !v), checked: snap },
       ],
@@ -345,6 +461,9 @@ export default function App() {
         m: openRender,
         a: selectAll,
         q: () => insertTrack(e.shiftKey ? 'video' : 'audio'),
+        c: () => copyIds(selection),
+        x: () => cutIds(selection),
+        v: () => paste(),
       }[key];
     } else if (e.altKey) {
       action = {
@@ -358,6 +477,8 @@ export default function App() {
         enter: () => (live.current.playing ? pause() : play()),
         s: split,
         delete: deleteSelected,
+        g: () => groupIds(selection),
+        u: () => ungroupIds(selection),
         home: () => seek(0),
         end: () => seek(live.current.duration),
         arrowleft: () => stepFrame(-1),
@@ -455,6 +576,7 @@ export default function App() {
         snap={snap}
         onDropFiles={dropFilesOnTimeline}
         onMessage={setStatus}
+        onContextMenu={openContextMenu}
         footer={
           <Transport
             playing={playing}
@@ -492,6 +614,7 @@ export default function App() {
         />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
+      {contextMenu && <ContextMenu {...contextMenu} onClose={closeContextMenu} />}
     </div>
   );
 }

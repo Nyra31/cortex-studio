@@ -25,7 +25,7 @@ Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está defi
 - `electron/preload.js`: única puerta entre interfaz y sistema (`window.api`). Cualquier función nueva del proceso principal se añade aquí y en `main.js`.
 - `src/state/project.js`: modelo de datos y operaciones de edición como **funciones puras** que devuelven un proyecto nuevo (inmutable). El esquema está documentado al principio del archivo.
 - `src/state/useHistory.js`: deshacer/rehacer. `set(updater, false)` actualiza sin crear paso (se usa durante los arrastres; al soltar se registra un solo paso).
-- `src/App.jsx`: estado global, reproducción, atajos de teclado, abrir/guardar.
+- `src/App.jsx`: estado global, reproducción, atajos de teclado, abrir/guardar, portapapeles (interno, no el del sistema) y el contenido del menú contextual (`openContextMenu`; la línea de tiempo solo avisa de dónde se hizo clic derecho).
 - `src/state/transitions.js`: catálogo de transiciones agrupado como en VEGAS. Cada preajuste es un `transition=` de `xfade` de FFmpeg.
 - `src/preview/compositor.js`: compositor WebGL2 de la vista previa. Las transiciones son traducciones a GLSL de `vf_xfade.c` (P va de 1 = solo A a 0 = solo B; `mixx(a,b,m) = a·m + b·(1−m)`), para que la vista previa coincida con el render. Para añadir una transición: entrada en `transitions.js` + fragmento en `GLSL` del compositor.
 - `src/components/`: MenuBar, Toolbar, Dock (con pestañas), MediaPool, TransitionsPanel, Preview (un `<video>` oculto por evento cercano al cursor; el compositor toma sus fotogramas), Timeline, Transport, Waveform y diálogos (Project, Render, Shortcuts).

@@ -152,6 +152,11 @@ input[type='number'] {
   background: var(--line);
   margin: 3px 0;
 }
+.context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 240px;
+}
 
 /* ---- Barra de iconos ---- */
 

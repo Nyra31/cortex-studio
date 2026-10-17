@@ -221,6 +221,81 @@ export function setTransitionAt(project, trackId, t, type) {
   return { ...project, events: project.events.map((e) => (e.id === target.id ? { ...e, transition: value } : e)) };
 }
 
+// Aplica los mismos cambios a varios eventos (o, si changes es una función, los que devuelva para cada uno).
+export function updateEvents(project, ids, changes) {
+  const set = new Set(ids);
+  if (!project.events.some((e) => set.has(e.id))) return project;
+  return {
+    ...project,
+    events: project.events.map((e) => (set.has(e.id) ? { ...e, ...(typeof changes === 'function' ? changes(e) : changes) } : e)),
+  };
+}
+
+// Agrupa los eventos para que se muevan, recorten y dividan juntos.
+export function groupEvents(project, ids) {
+  if (ids.length < 2) return project;
+  return updateEvents(project, ids, { groupId: uid('g') });
+}
+
+export function ungroupEvents(project, ids) {
+  return updateEvents(project, ids, { groupId: null });
+}
+
+// ---- Portapapeles ----
+
+// Copia los eventos indicados con su posición relativa al primero y el tipo de pista, para pegarlos después.
+export function copyEvents(project, ids) {
+  const set = new Set(ids);
+  const events = project.events.filter((e) => set.has(e.id));
+  if (!events.length) return null;
+  const origin = Math.min(...events.map((e) => e.start));
+  const types = new Map(project.tracks.map((t) => [t.id, t.type]));
+  return {
+    events: events.map((e) => ({ ...e, start: e.start - origin, trackType: types.get(e.trackId) })),
+    duration: Math.max(...events.map((e) => e.start + e.duration)) - origin,
+  };
+}
+
+// Pega en el instante t, en las mismas pistas de donde se copió (creando las que falten).
+// Con targetTrackId, los eventos de ese tipo bajan o suben de pista para que el de más arriba caiga en ella.
+// Devuelve { project, ids, end }: ids de los eventos nuevos y el final de lo pegado.
+export function pasteEvents(project, clip, t, targetTrackId = null) {
+  let p = project;
+  const mediaIds = new Set(p.media.map((m) => m.id));
+  const items = clip ? clip.events.filter((e) => mediaIds.has(e.mediaId)) : [];
+  if (!items.length) return { project, ids: [], end: t };
+
+  const sameType = (type) => p.tracks.filter((tr) => tr.type === type);
+  const target = p.tracks.find((tr) => tr.id === targetTrackId);
+  let shift = 0;
+  if (target) {
+    const list = sameType(target.type).map((tr) => tr.id);
+    const used = items.filter((e) => e.trackType === target.type).map((e) => Math.max(0, list.indexOf(e.trackId)));
+    if (used.length) shift = list.indexOf(target.id) - Math.min(...used);
+  }
+  const trackFor = (e) => {
+    let list = sameType(e.trackType);
+    let i = Math.max(0, list.findIndex((tr) => tr.id === e.trackId)); // si la pista ya no existe, la primera de su tipo
+    if (target && e.trackType === target.type) i += shift;
+    while (list.length <= i) {
+      p = addTrack(p, e.trackType).project;
+      list = sameType(e.trackType);
+    }
+    return list[i].id;
+  };
+
+  const groups = new Map();
+  const added = items.map(({ trackType, ...e }) => {
+    let groupId = null;
+    if (e.groupId) {
+      if (!groups.has(e.groupId)) groups.set(e.groupId, uid('g'));
+      groupId = groups.get(e.groupId);
+    }
+    return { ...e, id: uid('e'), trackId: trackFor({ ...e, trackType }), start: t + e.start, groupId };
+  });
+  return { project: { ...p, events: [...p.events, ...added] }, ids: added.map((e) => e.id), end: t + clip.duration };
+}
+
 export function deleteEvents(project, ids) {
   const remove = new Set(ids);
   return { ...project, events: project.events.filter((e) => !remove.has(e.id)) };
