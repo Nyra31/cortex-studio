@@ -1,8 +1,9 @@
-// Compositor de la vista previa con WebGL2: dibuja las capas de video (con fundidos y transiciones)
+// Compositor de la vista previa con WebGL2: dibuja las capas de video (con fundidos, transiciones y efectos)
 // igual que el render de FFmpeg. Las transiciones son traducciones directas de las de xfade
 // (libavfilter/vf_xfade.c): P va de 1 (solo A, el evento que sale) a 0 (solo B, el que entra),
 // x/y en píxeles del proyecto con el origen arriba a la izquierda, y mixx(a, b, m) = a·m + b·(1−m).
 import { TRANSITIONS } from '../state/transitions.js';
+import { GLSL_HELPERS, effectPasses } from './effects-gl.js';
 
 const GLSL = {
   fade: 'return mixx(A(uv), B(uv), P);',
@@ -94,13 +95,14 @@ uniform float uP;
 uniform float uOpacity;
 const float PI = 3.14159265358979;
 
-vec3 fit(sampler2D t, vec2 s, bool has, vec2 uv) {
+// Imagen encajada en el cuadro; fuera de ella (bandas) negro opaco. Dentro conserva el alfa (croma).
+vec4 fit(sampler2D t, vec2 s, bool has, vec2 uv) {
   vec2 q = (uv - 0.5) / s + 0.5;
-  if (!has || q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) return vec3(0.0);
-  return texture(t, q).rgb;
+  if (!has || q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) return vec4(0.0, 0.0, 0.0, 1.0);
+  return texture(t, q);
 }
-vec3 A(vec2 uv) { return fit(uA, uScaleA, uHasA, uv); }
-vec3 B(vec2 uv) { return fit(uB, uScaleB, uHasB, uv); }
+vec3 A(vec2 uv) { return fit(uA, uScaleA, uHasA, uv).rgb; }
+vec3 B(vec2 uv) { return fit(uB, uScaleB, uHasB, uv).rgb; }
 vec3 Ap(vec2 p) { return A(p / uFrame); }
 vec3 Bp(vec2 p) { return B(p / uFrame); }
 vec3 mixx(vec3 a, vec3 b, float m) { return a * m + b * (1.0 - m); }
@@ -116,9 +118,26 @@ ${transitionCases}
 }
 
 void main() {
-  vec3 c = uTransition ? transition(vUv) : A(vUv);
-  outColor = vec4(c * uOpacity, uOpacity);
+  if (uTransition) {
+    outColor = vec4(transition(vUv), 1.0); // como xfade en yuv420p: la transición es opaca
+  } else {
+    vec4 c = fit(uA, uScaleA, uHasA, vUv);
+    float a = c.a * uOpacity;
+    outColor = vec4(c.rgb * a, a);
+  }
 }`;
+
+// Pasadas de efectos: dibujan en un búfer del tamaño de la imagen encajada, con la fila 0 arriba
+// (igual que las texturas de video), para que todas las texturas tengan la misma orientación.
+const FX_VERTEX = `#version 300 es
+in vec2 aPos;
+out vec2 vUv;
+void main() {
+  vUv = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+
+const uniformType = (v) => (Array.isArray(v) ? `vec${v.length}` : 'float');
 
 function compile(gl, type, source) {
   const shader = gl.createShader(type);
@@ -126,6 +145,16 @@ function compile(gl, type, source) {
   gl.compileShader(shader);
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
   return shader;
+}
+
+function link(gl, vertex, fragment) {
+  const program = gl.createProgram();
+  gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, vertex));
+  gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, fragment));
+  gl.bindAttribLocation(program, 0, 'aPos');
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+  return program;
 }
 
 const sourceSize = (el) =>
@@ -138,6 +167,18 @@ const isReady = (el) =>
     : el instanceof HTMLImageElement ? el.complete && el.naturalWidth > 0
       : el.width > 0;
 
+function setupTexture(gl) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return tex;
+}
+
+const SCRATCH = 7; // unidad de textura para subir y crear texturas sin tocar las que están en uso
+
 export class Compositor {
   constructor(canvas, { preserveDrawingBuffer = false } = {}) {
     const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, preserveDrawingBuffer });
@@ -145,16 +186,14 @@ export class Compositor {
     this.gl = gl;
     this.canvas = canvas;
     this.textures = new WeakMap(); // elemento → { tex, still } (still: imagen ya subida)
+    this.fxPrograms = new Map(); // código de la pasada → { program, loc }
+    this.pool = []; // búferes intermedios de los efectos: { fbo, tex, w, h, busy }
 
-    const program = gl.createProgram();
-    gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERTEX));
-    gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, FRAGMENT));
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
-    gl.useProgram(program);
+    this.program = link(gl, VERTEX, FRAGMENT);
+    gl.useProgram(this.program);
     this.u = {};
     for (const name of ['uA', 'uB', 'uScaleA', 'uScaleB', 'uHasA', 'uHasB', 'uFrame', 'uTransition', 'uType', 'uP', 'uOpacity']) {
-      this.u[name] = gl.getUniformLocation(program, name);
+      this.u[name] = gl.getUniformLocation(this.program, name);
     }
     gl.uniform1i(this.u.uA, 0);
     gl.uniform1i(this.u.uB, 1);
@@ -162,11 +201,9 @@ export class Compositor {
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(program, 'aPos');
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-    gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // colores premultiplicados
   }
 
@@ -177,20 +214,14 @@ export class Compositor {
     }
   }
 
-  // Sube el fotograma actual del elemento a su textura en la unidad indicada. Devuelve la escala de encaje o null.
-  bind(el, unit, frame) {
+  // Sube el fotograma actual del elemento a su textura (las imágenes, solo una vez). Devuelve { tex, w, h } o null.
+  upload(el) {
     const gl = this.gl;
     if (!el || !isReady(el)) return null;
-    gl.activeTexture(gl.TEXTURE0 + unit); // antes de crear la textura, para no pisar la de la otra unidad
+    gl.activeTexture(gl.TEXTURE0 + SCRATCH);
     let entry = this.textures.get(el);
     if (!entry) {
-      const tex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      entry = { tex, still: false };
+      entry = { tex: setupTexture(gl), still: false };
       this.textures.set(el, entry);
     }
     gl.bindTexture(gl.TEXTURE_2D, entry.tex);
@@ -199,31 +230,144 @@ export class Compositor {
       entry.still = el instanceof HTMLImageElement;
     }
     const [w, h] = sourceSize(el);
-    const frameAspect = frame.width / frame.height;
-    const aspect = w / h;
-    return aspect > frameAspect ? [1, frameAspect / aspect] : [aspect / frameAspect, 1];
+    return { tex: entry.tex, w, h };
   }
 
-  // layers: de abajo a arriba. { a, opacity } o { a, b, type (índice), progress (P de xfade) }.
+  // Búfer intermedio libre de w×h (se reutilizan de un fotograma a otro).
+  acquire(w, h) {
+    const gl = this.gl;
+    let target = this.pool.find((t) => !t.busy && t.w === w && t.h === h);
+    if (!target) {
+      gl.activeTexture(gl.TEXTURE0 + SCRATCH);
+      const tex = setupTexture(gl);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      target = { fbo, tex, w, h, busy: false };
+      this.pool.push(target);
+    }
+    target.busy = true;
+    target.used = true;
+    return target;
+  }
+
+  fxProgram(pass) {
+    const gl = this.gl;
+    const names = Object.keys(pass.uniforms);
+    const key = pass.code + names.map((name) => `${name}:${uniformType(pass.uniforms[name])}`).join();
+    let entry = this.fxPrograms.get(key);
+    if (!entry) {
+      const fragment = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uPrev;
+uniform sampler2D uSrc;
+uniform vec2 uSize;
+${names.map((name) => `uniform ${uniformType(pass.uniforms[name])} ${name};`).join('\n')}
+${GLSL_HELPERS}
+vec4 fx(vec2 uv) {
+${pass.code}
+}
+void main() { outColor = fx(vUv); }`;
+      const program = link(gl, FX_VERTEX, fragment);
+      const loc = {};
+      for (const name of ['uPrev', 'uSrc', 'uSize', ...names]) loc[name] = gl.getUniformLocation(program, name);
+      entry = { program, loc };
+      this.fxPrograms.set(key, entry);
+    }
+    return entry;
+  }
+
+  // Aplica la cadena de efectos a una textura, a w×h píxeles (la imagen encajada). Devuelve la textura resultante.
+  applyEffects(tex, effects, w, h) {
+    const gl = this.gl;
+    gl.disable(gl.BLEND);
+    gl.viewport(0, 0, w, h);
+    let current = tex;
+    for (const fx of effects) {
+      const input = current;
+      for (const pass of effectPasses(fx, { w, h })) {
+        const target = this.acquire(w, h);
+        const { program, loc } = this.fxProgram(pass);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+        gl.useProgram(program);
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, current);
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, input);
+        gl.uniform1i(loc.uPrev, 2);
+        gl.uniform1i(loc.uSrc, 3);
+        gl.uniform2f(loc.uSize, w, h);
+        for (const [name, value] of Object.entries(pass.uniforms)) {
+          const v = Array.isArray(value) ? value : [value];
+          gl[`uniform${v.length}fv`](loc[name], v);
+        }
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        current = target.tex;
+      }
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.useProgram(this.program);
+    return current;
+  }
+
+  // Textura lista para componer (con sus efectos aplicados) y escala de encaje en el cuadro, o null.
+  prepare(el, effects, frame) {
+    const src = this.upload(el);
+    if (!src) return null;
+    const frameAspect = frame.width / frame.height;
+    const aspect = src.w / src.h;
+    const scale = aspect > frameAspect ? [1, frameAspect / aspect] : [aspect / frameAspect, 1];
+    if (!effects?.length) return { tex: src.tex, scale };
+    const w = Math.max(2, Math.round(this.canvas.width * scale[0]));
+    const h = Math.max(2, Math.round(this.canvas.height * scale[1]));
+    return { tex: this.applyEffects(src.tex, effects, w, h), scale };
+  }
+
+  // layers: de abajo a arriba. { a, opacity, fxA } o { a, b, type (índice), progress (P de xfade), fxA, fxB }.
+  // fxA/fxB: efectos activos de cada evento (activeEffects).
   render(frame, layers) {
     const gl = this.gl;
+    for (const t of this.pool) t.used = false;
+    const prepared = layers.map((layer) => ({
+      layer,
+      a: this.prepare(layer.a, layer.fxA, frame),
+      b: layer.b !== undefined ? this.prepare(layer.b, layer.fxB, frame) : null,
+    }));
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.useProgram(this.program);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.enable(gl.BLEND);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform2f(this.u.uFrame, frame.width, frame.height);
-    for (const layer of layers) {
-      const scaleA = this.bind(layer.a, 0, frame);
-      const scaleB = layer.b !== undefined ? this.bind(layer.b, 1, frame) : null;
-      gl.uniform1i(this.u.uHasA, scaleA ? 1 : 0);
-      gl.uniform1i(this.u.uHasB, scaleB ? 1 : 0);
-      if (scaleA) gl.uniform2f(this.u.uScaleA, ...scaleA);
-      if (scaleB) gl.uniform2f(this.u.uScaleB, ...scaleB);
+    for (const { layer, a, b } of prepared) {
       const transition = layer.b !== undefined;
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, a ? a.tex : null);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, b ? b.tex : null);
+      gl.uniform1i(this.u.uHasA, a ? 1 : 0);
+      gl.uniform1i(this.u.uHasB, b ? 1 : 0);
+      if (a) gl.uniform2f(this.u.uScaleA, ...a.scale);
+      if (b) gl.uniform2f(this.u.uScaleB, ...b.scale);
       gl.uniform1i(this.u.uTransition, transition ? 1 : 0);
       gl.uniform1i(this.u.uType, transition ? layer.type : 0);
       gl.uniform1f(this.u.uP, transition ? layer.progress : 1);
       gl.uniform1f(this.u.uOpacity, transition ? 1 : layer.opacity);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
+
+    // Los búferes quedan libres para el siguiente fotograma; los que no se han usado se borran.
+    this.pool = this.pool.filter((t) => {
+      t.busy = false;
+      if (t.used) return true;
+      gl.deleteFramebuffer(t.fbo);
+      gl.deleteTexture(t.tex);
+      return false;
+    });
   }
 }

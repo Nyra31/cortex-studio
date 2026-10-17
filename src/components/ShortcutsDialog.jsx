@@ -25,7 +25,7 @@ const SHORTCUTS = [
   ['Ctrl+I', 'Importar medios'],
   ['Ctrl+M', 'Renderizar como…'],
   ['Alt+Intro', 'Propiedades del proyecto'],
-  ['Alt+4 / Alt+8', 'Ventana de medios / de transiciones'],
+  ['Alt+4 / Alt+7 / Alt+8', 'Ventana de medios / de transiciones / de efectos de video'],
   ['Doble clic en un solapamiento', 'Volver a disolución cruzada'],
   ['Doble clic en una pista', 'Cambiar el nombre de la pista'],
   ['Doble clic en el volumen', 'Volver a 0 dB'],

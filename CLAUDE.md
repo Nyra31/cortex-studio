@@ -27,7 +27,9 @@ Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está defi
 - `src/state/useHistory.js`: deshacer/rehacer. `set(updater, false)` actualiza sin crear paso (se usa durante los arrastres; al soltar se registra un solo paso).
 - `src/App.jsx`: estado global, reproducción, atajos de teclado, abrir/guardar, portapapeles (interno, no el del sistema) y el contenido del menú contextual (`openContextMenu`; la línea de tiempo solo avisa de dónde se hizo clic derecho).
 - `src/state/transitions.js`: catálogo de transiciones agrupado como en VEGAS. Cada preajuste es un `transition=` de `xfade` de FFmpeg.
-- `src/preview/compositor.js`: compositor WebGL2 de la vista previa. Las transiciones son traducciones a GLSL de `vf_xfade.c` (P va de 1 = solo A a 0 = solo B; `mixx(a,b,m) = a·m + b·(1−m)`), para que la vista previa coincida con el render. Para añadir una transición: entrada en `transitions.js` + fragmento en `GLSL` del compositor.
+- `src/state/effects.js`: catálogo de efectos de video (FX de evento). Cada efecto define sus parámetros y su filtro de FFmpeg (`ffmpeg(p, ctx)` lineal o `graph(...)` con ramas, p. ej. el brillo difuso). Las medidas son **relativas a la altura de la imagen** para que vista previa y render coincidan. `effectsGraph` monta la cadena con etiquetas `@IN@`/`@OUT@`/`@N@` que rellena `electron/ffmpeg.js`. Si un efecto deja transparencia (croma), los siguientes deben conservar el alfa (`gbrap`, no `gbrp`).
+- `src/preview/effects-gl.js`: los mismos efectos como pasadas de shader (mismas fórmulas que el filtro de FFmpeg; eq/hue/vignette trabajan en YUV BT.601 de rango limitado). Para añadir un efecto: entrada en `effects.js` + pasadas en `effects-gl.js`, y comprobar que vista previa y render coinciden.
+- `src/preview/compositor.js`: compositor WebGL2 de la vista previa. Las transiciones son traducciones a GLSL de `vf_xfade.c` (P va de 1 = solo A a 0 = solo B; `mixx(a,b,m) = a·m + b·(1−m)`), para que la vista previa coincida con el render. Para añadir una transición: entrada en `transitions.js` + fragmento en `GLSL` del compositor. Los efectos se aplican antes de componer, a la imagen encajada (sin bandas), en búferes intermedios (`applyEffects`).
 - `src/components/`: MenuBar, Toolbar, Dock (con pestañas), MediaPool, TransitionsPanel, Preview (un `<video>` oculto por evento cercano al cursor; el compositor toma sus fotogramas), Timeline, Transport, Waveform y diálogos (Project, Render, Shortcuts).
 - `src/styles.css`: un único archivo de estilos, tema oscuro estilo editor clásico.
 
@@ -71,8 +73,8 @@ v0.3.0: transiciones (fase 1 de 3) con vista previa WebGL (formato `.cortex` ver
 ## Pendiente (siguientes pasos naturales)
 
 El usuario pidió «transiciones y efectos de sonido y video, los mismos que tiene VEGAS integrados». Plan acordado en tres fases:
-1. Transiciones: **hecha**.
-2. Efectos de video por evento (cadena con parámetros): brillo y contraste, corrección de color, tono/saturación/luminosidad, blanco y negro, sepia, invertir, desenfoque gaussiano, enfoque, pixelado, espejo, viñeta, brillo difuso, croma. Vista previa con shaders en el compositor y render con filtros de FFmpeg.
+1. Transiciones: **hecha** (v0.3.0).
+2. **Hecha** (sin publicar todavía; formato `.cortex` versión 4). Efectos de video por evento (cadena con parámetros): brillo y contraste, corrección de color, tono/saturación/luminosidad, blanco y negro, sepia, invertir, desenfoque gaussiano, enfoque, pixelado, espejo, viñeta, brillo difuso, croma. Vista previa con shaders en el compositor y render con filtros de FFmpeg.
 3. Efectos de audio: ecualizador, compresor, reverberación, eco/retardo, chorus, flanger, cambio de tono, puerta de ruido, normalizar, distorsión. Vista previa con Web Audio y render con FFmpeg; incluir aquí la amplificación por encima de 0 dB.
 
 Otros: títulos, curvas de fundido, transiciones sobre un fundido hacia la pista de debajo (sin solapamiento). La amplificación por encima de 0 dB necesita Web Audio en la vista previa, porque `HTMLMediaElement.volume` no pasa de 1. La vista previa usa el reproductor de Chromium, así que algunos códecs (HEVC, ProRes, AVI antiguos) se renderizan pero no se ven en la vista previa.

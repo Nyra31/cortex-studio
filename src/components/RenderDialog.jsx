@@ -13,7 +13,8 @@ const QUALITIES = [
 ];
 const even = (v) => Math.max(2, Math.round(v / 2) * 2);
 
-export default function RenderDialog({ payload, settings, defaultName, onClose }) {
+// makePayload(size): datos para el proceso principal, calculados para el tamaño final (los efectos dependen de él).
+export default function RenderDialog({ makePayload, settings, defaultName, onClose }) {
   const [scale, setScale] = useState(0);
   const [quality, setQuality] = useState(1);
   const [phase, setPhase] = useState('settings'); // settings | rendering | done | error
@@ -41,7 +42,7 @@ export default function RenderDialog({ payload, settings, defaultName, onClose }
     const off = window.api.onRenderProgress(setProgress);
     try {
       const result = await window.api.startRender(
-        payload,
+        makePayload({ width, height }),
         { width, height, fps: settings.fps, crf: QUALITIES[quality].crf },
         target,
       );

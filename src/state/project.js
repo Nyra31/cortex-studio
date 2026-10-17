@@ -1,13 +1,15 @@
 // Modelo del proyecto y operaciones de edición (funciones puras).
 import { DEFAULT_TRANSITION } from './transitions.js';
+import { effectsGraph } from './effects.js';
 
 //
 // project = {
 //   settings: { width, height, fps },
 //   media:  [{ id, path, name, duration, width, height, fps, hasVideo, hasAudio, isImage, thumb, peaks, peaksPerSecond, missing }],
 //   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume }],  // ordenadas de arriba a abajo; volume en dB
-//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition }],
+//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition, effects }],
 // }
+// effects (solo eventos de video): cadena [{ id, type, enabled, params }] aplicada en orden (ver effects.js).
 // Tiempos en segundos. volume del evento en dB (solo afecta al audio); fadeIn/fadeOut = duración de los fundidos.
 // Si un evento empieza encima del final de otro de su misma pista, el solapamiento es una transición:
 // en video, la de `transition` del evento que entra (null = disolución cruzada); en audio, un fundido cruzado.
@@ -52,7 +54,15 @@ export const volumeToGain = (db) => (db <= MIN_VOLUME_DB ? 0 : 10 ** (db / 20));
 export const gainToVolume = (gain) => (gain <= volumeToGain(MIN_VOLUME_DB) ? MIN_VOLUME_DB : Math.min(0, 20 * Math.log10(gain)));
 export const formatVolume = (db) => (db <= MIN_VOLUME_DB ? '-∞ dB' : `${db.toFixed(1).replace('.', ',')} dB`);
 
-export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0, transition: null };
+export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0, transition: null, effects: [] };
+
+// Tamaño de una imagen de mw×mh encajada (sin recortar) en un cuadro de W×H, en píxeles pares.
+// Es el mismo encaje que hace la vista previa y el render (bandas negras alrededor).
+export function fitSize(mw, mh, W, H) {
+  if (!mw || !mh) return null;
+  const even = (v) => Math.max(2, Math.round(v / 2) * 2);
+  return mw / mh > W / H ? { w: even(W), h: even((W * mh) / mw) } : { w: even((H * mw) / mh), h: even(H) };
+}
 
 // Fundidos guardados, reducidos si el evento se ha acortado para que no se solapen.
 export function eventFades(e) {
@@ -321,7 +331,7 @@ export function deleteTrack(project, trackId) {
 export function serializeProject(project) {
   return {
     format: 'cortex-studio',
-    version: 3,
+    version: 4,
     settings: project.settings,
     media: project.media.map(({ id, path, name }) => ({ id, path, name })),
     tracks: project.tracks,
@@ -339,10 +349,21 @@ export function loadProject(data, media) {
   };
 }
 
-// Lo mínimo que necesita el proceso principal para renderizar (con el silencio/solo, los fundidos
-// y las transiciones ya resueltos).
-export function renderPayload(project) {
+// Lo mínimo que necesita el proceso principal para renderizar (con el silencio/solo, los fundidos,
+// las transiciones y los efectos ya resueltos). size = { width, height } del video que se va a generar.
+// Los eventos de video con efectos llevan fx = { w, h, graph, alpha }: el tamaño encajado y el
+// subgrafo de FFmpeg de su cadena de efectos (ver effects.js).
+export function renderPayload(project, size = project.settings) {
   const { fades, transitions } = resolveTimeline(project);
+  const mediaById = new Map(project.media.map((m) => [m.id, m]));
+  const trackType = new Map(project.tracks.map((t) => [t.id, t.type]));
+  const fxOf = (e) => {
+    if (trackType.get(e.trackId) !== 'video' || !e.effects?.length) return null;
+    const m = mediaById.get(e.mediaId);
+    const fit = m && fitSize(m.width, m.height, size.width, size.height);
+    const g = fit && effectsGraph(e.effects, fit);
+    return g ? { ...fit, ...g } : null;
+  };
   return {
     media: project.media.map(({ id, path, isImage, hasVideo, hasAudio, missing }) => ({ id, path, isImage, hasVideo, hasAudio, missing })),
     tracks: project.tracks.map((t) => ({
@@ -351,7 +372,12 @@ export function renderPayload(project) {
       muted: !isTrackActive(t, project.tracks),
       gain: volumeToGain(t.volume ?? 0),
     })),
-    events: project.events.map((e) => ({ ...e, ...fades.get(e.id), gain: volumeToGain(e.volume ?? 0) })),
+    events: project.events.map(({ effects, ...e }) => ({
+      ...e,
+      ...fades.get(e.id),
+      gain: volumeToGain(e.volume ?? 0),
+      fx: fxOf({ ...e, effects }),
+    })),
     transitions,
   };
 }

@@ -58,6 +58,12 @@ async function probe(file) {
   const isImage = IMAGE_EXTENSIONS.has(path.extname(file).toLowerCase());
   if (!video && !audio) throw new Error('El archivo no contiene video ni audio');
   const duration = parseFloat(info.format && info.format.duration) || parseFloat(video && video.duration) || 0;
+  // Videos de móvil grabados en vertical: ancho y alto vienen antes de girar; FFmpeg y el navegador
+  // los muestran ya girados, así que se intercambian para trabajar siempre con las medidas reales.
+  const rotation = video
+    ? Number((video.side_data_list || []).find((d) => d.rotation !== undefined)?.rotation ?? video.tags?.rotate ?? 0)
+    : 0;
+  const turned = Math.abs(rotation) % 180 === 90;
   return {
     path: file,
     name: path.basename(file),
@@ -65,8 +71,8 @@ async function probe(file) {
     hasVideo: !!video,
     hasAudio: !!audio && !isImage,
     duration: isImage ? null : duration,
-    width: video ? video.width : null,
-    height: video ? video.height : null,
+    width: video ? (turned ? video.height : video.width) : null,
+    height: video ? (turned ? video.width : video.height) : null,
     fps: video ? parseRate(video.avg_frame_rate) || parseRate(video.r_frame_rate) : null,
   };
 }
@@ -169,18 +175,26 @@ function buildRender(project, settings, outPath) {
   // Añade un fragmento de un medio como entrada y devuelve su cadena de filtros: escalado con bandas
   // negras, a la velocidad del proyecto y con exactamente `count` fotogramas (si fps se come el último,
   // tpad lo repite). Empieza en el tiempo local 0, que corresponde al fotograma `first` del proyecto.
-  const addVideoInput = (m, inPoint, start, dur) => {
+  // Con efectos (fx, calculado en la interfaz por renderPayload), la imagen se escala a su tamaño
+  // encajado, pasa por el subgrafo de efectos y después se le ponen las bandas negras.
+  const addVideoInput = (m, inPoint, start, dur, fx = null) => {
     const { first, count } = frameSpan(start, dur);
     const seek = Math.max(0, inPoint + first / rate - start);
     const length = (count + 1) / rate;
     if (m.isImage) inputs.push('-loop', '1', '-framerate', fps, '-t', num(length), '-i', m.path);
     else inputs.push('-ss', num(seek), '-t', num(length), '-i', m.path);
     const i = n++;
-    const chain =
-      `[${i}:v]setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
+    const tail =
       `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},` +
       `tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${count}`;
-    return { i, chain, first, count };
+    if (!fx) {
+      return { i, first, count, chain: `[${i}:v]setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,${tail}` };
+    }
+    filters.push(
+      `[${i}:v]setpts=PTS-STARTPTS,scale=${fx.w}:${fx.h},setsar=1[fxin${i}]`,
+      fx.graph.replaceAll('@IN@', `fxin${i}`).replaceAll('@OUT@', `fxout${i}`).replaceAll('@N@', `fx${i}_`),
+    );
+    return { i, first, count, chain: `[fxout${i}]format=${fx.alpha ? 'yuva420p' : 'yuv420p'},${tail}` };
   };
   // Desplaza el fragmento a su fotograma (la base de tiempo tras fps es 1/fps) y lo superpone solo en sus fotogramas.
   const placeAt = (first) => `setpts=PTS-STARTPTS+${first}`;
@@ -206,7 +220,7 @@ function buildRender(project, settings, outPath) {
     .filter((e) => tracks.get(e.trackId).type === 'video')
     .sort((a, b) => tracks.get(b.trackId).index - tracks.get(a.trackId).index || a.start - b.start);
   for (const e of videoEvents) {
-    const v = addVideoInput(media.get(e.mediaId), e.inPoint, e.start, e.duration);
+    const v = addVideoInput(media.get(e.mediaId), e.inPoint, e.start, e.duration, e.fx);
     filters.push(`${v.chain}${videoFades(e)},${placeAt(v.first)}[v${v.i}]`);
     overlayAt(`v${v.i}`, v.first, v.count);
 
@@ -214,8 +228,8 @@ function buildRender(project, settings, outPath) {
     if (tr) {
       // Final del evento que sale y principio del que entra, mezclados con xfade.
       const from = eventsById.get(tr.from);
-      const a = addVideoInput(media.get(from.mediaId), from.inPoint + (tr.start - from.start), tr.start, tr.duration);
-      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.start, tr.duration);
+      const a = addVideoInput(media.get(from.mediaId), from.inPoint + (tr.start - from.start), tr.start, tr.duration, from.fx);
+      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.start, tr.duration, e.fx);
       filters.push(
         `${a.chain},format=yuv420p[ta${a.i}]`,
         `${b.chain},format=yuv420p[tb${b.i}]`,

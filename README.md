@@ -41,7 +41,8 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 - **Menú contextual** con clic derecho: en un evento (cortar, copiar, pegar, eliminar, dividir, agrupar, quitar fundidos, volumen a 0 dB, volver a disolución cruzada, abrir la ubicación del archivo) y en una zona vacía de una pista (pegar ahí, seleccionar todo, insertar pistas).
 - **Fundidos de entrada y salida:** se arrastran desde los cuadraditos de las esquinas superiores del evento. En audio bajan el volumen; en video hacen aparecer o desaparecer el evento sobre lo que haya debajo (otra pista o negro). Al dividir, cada parte conserva su fundido.
 - **Volumen por evento:** en los eventos de audio, arrastrar en vertical la línea superior (de -∞ a 0 dB). El valor aparece en el título del evento y la forma de onda se escala. Se suma al volumen de la pista.
-- **Transiciones** al estilo de VEGAS: al solapar el final de un evento con el principio de otro en la misma pista se crea una disolución cruzada (en audio, un fundido cruzado). La duración es la del solapamiento. En la pestaña *Transiciones* (Alt+8) hay 49 preajustes en 12 categorías (disolución, barridos lineal, diagonal y de reloj, iris, puerta de granero, empujar, deslizar, persianas venecianas, comprimir, zoom y pixelado), con miniaturas animadas al pasar el ratón. Se aplican arrastrándolas sobre el solapamiento; doble clic en él vuelve a la disolución cruzada.
+- **Transiciones** al estilo de VEGAS: al solapar el final de un evento con el principio de otro en la misma pista se crea una disolución cruzada (en audio, un fundido cruzado). La duración es la del solapamiento. En la pestaña *Transiciones* (Alt+7) hay 49 preajustes en 12 categorías (disolución, barridos lineal, diagonal y de reloj, iris, puerta de granero, empujar, deslizar, persianas venecianas, comprimir, zoom y pixelado), con miniaturas animadas al pasar el ratón. Se aplican arrastrándolas sobre el solapamiento; doble clic en él vuelve a la disolución cruzada.
+- **Efectos de video por evento** al estilo de VEGAS: en la pestaña *Efectos de video* (Alt+8) hay 13 efectos en 4 categorías (color: brillo y contraste, corrección de color, tono/saturación/luminosidad, blanco y negro, sepia, invertir; desenfoque y nitidez: desenfoque gaussiano, enfocar, brillo difuso; estilizar: pixelar, viñeta, espejo; composición: croma). Se añaden arrastrándolos sobre un evento de video. El botón **fx** de cada evento (verde si tiene efectos) abre su ventana de efectos: la cadena en el orden en que se aplican (se pueden activar, desactivar, reordenar y quitar) y los controles del efecto elegido, con la vista previa al momento. El croma deja transparente el color elegido y se ve la pista de debajo.
 - **Vista previa** dibujada con WebGL, sincronizada con la línea de tiempo y con la proporción del proyecto. Muestra las transiciones, los fundidos y las pistas superpuestas igual que el renderizado.
 - **Forma de onda** en los eventos de audio y **miniaturas** en los de video.
 - **Proyectos** guardados como archivos `.cortex` (JSON con las rutas de los medios y los ajustes).
@@ -76,7 +77,7 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 | Ctrl+I | Importar medios |
 | Ctrl+M | Renderizar |
 | Alt+Intro | Propiedades del proyecto |
-| Alt+4 / Alt+8 | Ventana de medios del proyecto / de transiciones |
+| Alt+4 / Alt+7 / Alt+8 | Ventana de medios del proyecto / de transiciones / de efectos de video |
 | Doble clic en un solapamiento | Volver a disolución cruzada |
 | F1 | Lista de atajos |
 | F12 | Herramientas de desarrollo |
@@ -90,14 +91,17 @@ electron/preload.js     API segura expuesta a la interfaz (window.api)
 src/App.jsx             Estado global, reproducción, atajos y proyecto
 src/state/project.js    Modelo de datos y operaciones de edición
 src/state/transitions.js  Catálogo de transiciones (preajustes de xfade de FFmpeg)
-src/preview/compositor.js Compositor WebGL de la vista previa (capas, fundidos y transiciones)
+src/state/effects.js      Catálogo de efectos de video (parámetros y filtro de FFmpeg de cada uno)
+src/preview/compositor.js Compositor WebGL de la vista previa (capas, fundidos, transiciones y efectos)
+src/preview/effects-gl.js Efectos en la vista previa (shaders con las mismas fórmulas que FFmpeg)
 src/components/         Menús, línea de tiempo, vista previa, medios, transiciones, transporte y diálogos
 ```
 
 ## Limitaciones conocidas
 
 - La vista previa usa el reproductor de Chromium. Algunos códecs (por ejemplo, ciertos HEVC/H.265, ProRes o archivos AVI antiguos) se importan y se renderizan bien, pero puede que no se vean en la vista previa.
-- Todavía no hay efectos de video ni de audio, ni títulos. Son los siguientes pasos naturales.
+- Todavía no hay efectos de audio ni títulos. Son los siguientes pasos naturales.
+- Los efectos de video se aplican al evento entero (sin fotogramas clave para animar sus valores).
 - Las transiciones necesitan dos eventos solapados en la misma pista; no se pueden aplicar a un fundido hacia la pista de debajo (los fundidos de video son solo de transparencia).
 - Si dos eventos de video del mismo archivo coinciden en el mismo instante, la vista previa abre el archivo dos veces; con archivos muy pesados puede ir más lenta.
 - El volumen de pista y el de evento van de -∞ a 0 dB (no amplifican).

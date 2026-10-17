@@ -3,6 +3,7 @@ import Icon from './Icon.jsx';
 import { mediaUrl, frameNumber, formatTimecode } from '../util/time.js';
 import { fadeFactor, formatFps, isTrackActive, resolveTimeline, volumeToGain } from '../state/project.js';
 import { transitionInfo } from '../state/transitions.js';
+import { activeEffects } from '../state/effects.js';
 import { Compositor } from '../preview/compositor.js';
 
 const DRIFT = 0.3;
@@ -187,8 +188,15 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
 
     draw.current.layers = layers.map((l) =>
       l.event
-        ? { a: sourceFor(l.event, false), opacity: l.opacity }
-        : { a: sourceFor(l.from, false), b: sourceFor(l.to, false), type: l.type, progress: l.progress },
+        ? { a: sourceFor(l.event, false), opacity: l.opacity, fxA: activeEffects(l.event.effects) }
+        : {
+          a: sourceFor(l.from, false),
+          b: sourceFor(l.to, false),
+          type: l.type,
+          progress: l.progress,
+          fxA: activeEffects(l.from.effects),
+          fxB: activeEffects(l.to.effects),
+        },
     );
     draw.current.frame = { width, height };
     draw.current.playing = playing;

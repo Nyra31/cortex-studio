@@ -4,6 +4,8 @@ import Toolbar from './components/Toolbar.jsx';
 import Dock from './components/Dock.jsx';
 import MediaPool from './components/MediaPool.jsx';
 import TransitionsPanel from './components/TransitionsPanel.jsx';
+import EffectsPanel from './components/EffectsPanel.jsx';
+import EventFxDialog from './components/EventFxDialog.jsx';
 import Preview from './components/Preview.jsx';
 import Transport from './components/Transport.jsx';
 import Timeline, { MAX_PPS, MIN_PPS, gridStep } from './components/Timeline.jsx';
@@ -38,7 +40,8 @@ export default function App() {
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
-  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions'
+  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects'
+  const [fxEventId, setFxEventId] = useState(null); // evento cuya ventana de efectos está abierta
   const [clipboard, setClipboard] = useState(null); // eventos copiados (copyEvents)
   const [contextMenu, setContextMenu] = useState(null); // { x, y, items }
   const timelineRef = useRef(null);
@@ -207,6 +210,13 @@ export default function App() {
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
+  // Ventana de efectos del evento: se cierra sola si el evento desaparece (borrado, deshacer…).
+  const fxEvent = fxEventId ? project.events.find((e) => e.id === fxEventId) : null;
+  const closeFx = useCallback(() => setFxEventId(null), []);
+  const updateFxEffects = useCallback((fn, record) => {
+    setProject((p) => updateEvents(p, [fxEventId], (e) => ({ effects: fn(e.effects) })), record);
+  }, [fxEventId, setProject]);
+
   // Portapapeles. Las acciones reciben los ids explícitamente porque el menú contextual puede
   // cambiar la selección justo antes de llamarlas.
   const copyIds = useCallback((ids) => {
@@ -254,6 +264,7 @@ export default function App() {
       const selected = p.events.filter((e) => ids.includes(e.id));
       const types = new Map(p.tracks.map((tr) => [tr.id, tr.type]));
       const audio = selected.filter((e) => types.get(e.trackId) === 'audio');
+      const video = selected.filter((e) => types.get(e.trackId) === 'video');
       const media = p.media.find((m) => m.id === info.event.mediaId);
       const isVideo = types.get(info.event.trackId) === 'video';
       items = [
@@ -289,6 +300,17 @@ export default function App() {
             label: 'Volver a disolución cruzada',
             action: () => setProject((cur) => updateEvents(cur, [info.event.id], { transition: null })),
           }]
+          : []),
+        ...(isVideo
+          ? [
+            'separator',
+            { label: 'Efectos del evento…', action: () => setFxEventId(info.event.id) },
+            {
+              label: 'Quitar efectos',
+              action: () => setProject((cur) => updateEvents(cur, video.map((e) => e.id), { effects: [] })),
+              disabled: !video.some((e) => e.effects?.length),
+            },
+          ]
           : []),
         'separator',
         {
@@ -439,7 +461,8 @@ export default function App() {
         { label: 'Ajustar el proyecto a la ventana', action: () => timelineRef.current?.zoomToFit() },
         'separator',
         { label: 'Medios del proyecto', shortcut: 'Alt+4', action: () => setLeftTab('media'), checked: leftTab === 'media' },
-        { label: 'Transiciones', shortcut: 'Alt+8', action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
+        { label: 'Transiciones', shortcut: 'Alt+7', action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
+        { label: 'Efectos de video', shortcut: 'Alt+8', action: () => setLeftTab('effects'), checked: leftTab === 'effects' },
         'separator',
         { label: 'Ir al inicio', shortcut: 'Inicio', action: () => seek(0) },
         { label: 'Ir al final', shortcut: 'Fin', action: () => seek(duration) },
@@ -503,7 +526,8 @@ export default function App() {
         arrowright: () => stepFrame(1),
         enter: openProperties,
         4: () => setLeftTab('media'),
-        8: () => setLeftTab('transitions'),
+        7: () => setLeftTab('transitions'),
+        8: () => setLeftTab('effects'),
       }[key];
     } else {
       action = {
@@ -577,11 +601,12 @@ export default function App() {
           tabs={[
             { id: 'media', title: 'Medios del proyecto' },
             { id: 'transitions', title: 'Transiciones' },
+            { id: 'effects', title: 'Efectos de video' },
           ]}
           active={leftTab}
           onTab={setLeftTab}
         >
-          {leftTab === 'media' ? (
+          {leftTab === 'media' && (
             <MediaPool
               media={project.media}
               onImport={importDialog}
@@ -589,9 +614,9 @@ export default function App() {
               onRemove={removeMediaItem}
               onAdd={addAtCursor}
             />
-          ) : (
-            <TransitionsPanel />
           )}
+          {leftTab === 'transitions' && <TransitionsPanel />}
+          {leftTab === 'effects' && <EffectsPanel />}
         </Dock>
         <Dock title="Vista previa de video" className="preview-dock">
           <Preview project={project} time={time} playing={playing} onOpenProperties={openProperties} />
@@ -613,6 +638,7 @@ export default function App() {
         onDropFiles={dropFilesOnTimeline}
         onMessage={setStatus}
         onContextMenu={openContextMenu}
+        onOpenFx={setFxEventId}
         footer={
           <Transport
             playing={playing}
@@ -635,7 +661,7 @@ export default function App() {
       </div>
       {renderOpen && (
         <RenderDialog
-          payload={renderPayload(project)}
+          makePayload={(size) => renderPayload(project, size)}
           settings={project.settings}
           defaultName={`${baseName(projectPath)}.mp4`}
           onClose={() => setRenderOpen(false)}
@@ -651,6 +677,15 @@ export default function App() {
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
       {contextMenu && <ContextMenu {...contextMenu} onClose={closeContextMenu} />}
+      {fxEvent && (
+        <EventFxDialog
+          key={fxEvent.id}
+          event={fxEvent}
+          mediaName={project.media.find((m) => m.id === fxEvent.mediaId)?.name ?? ''}
+          onChange={updateFxEffects}
+          onClose={closeFx}
+        />
+      )}
     </div>
   );
 }

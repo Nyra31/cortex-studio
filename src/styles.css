@@ -420,6 +420,126 @@ input[type='number'] {
   text-overflow: ellipsis;
 }
 
+/* ---- Efectos ---- */
+
+/* Botón «fx» en la barra de título de los eventos de video (a la izquierda del tirador de fundido). */
+.event-fx {
+  position: absolute;
+  top: 2px;
+  right: 13px;
+  z-index: 3;
+  height: 12px;
+  padding: 0 3px;
+  font: italic 600 9px/10px Georgia, serif;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
+}
+.event-fx:hover {
+  color: #fff;
+  border-color: #fff;
+}
+.event-fx.active {
+  color: #10240f;
+  background: #7ed36f;
+  border-color: #b9f0ae;
+}
+
+/* Ventana flotante de efectos del evento. */
+.fx-window {
+  position: fixed;
+  z-index: 150;
+  width: 420px;
+  background: var(--panel);
+  border: 1px solid #4a4a4a;
+  box-shadow: 2px 8px 24px rgba(0, 0, 0, 0.6);
+}
+.fx-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 4px 10px;
+  background: var(--panel-hi);
+  border-bottom: 1px solid var(--edge);
+  cursor: move;
+  user-select: none;
+}
+.fx-title span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fx-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+  border-bottom: 1px solid var(--edge);
+  background: var(--panel-lo);
+}
+.fx-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 4px;
+  border: 1px solid var(--line);
+  background: #2e2e2e;
+  cursor: default;
+  white-space: nowrap;
+}
+.fx-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.fx-chip.off {
+  color: var(--text-faint);
+}
+.fx-chip input {
+  margin: 0;
+}
+.fx-add {
+  max-width: 150px;
+}
+.fx-params {
+  padding: 8px 10px 10px;
+}
+.fx-params-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.fx-buttons {
+  display: flex;
+  gap: 3px;
+}
+.fx-buttons button {
+  padding: 1px 7px;
+}
+.fx-param {
+  display: grid;
+  grid-template-columns: 110px 1fr 54px;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0;
+}
+.fx-param input[type='range'] {
+  width: 100%;
+}
+.fx-param input[type='checkbox'] {
+  justify-self: start;
+}
+.fx-param-value {
+  text-align: right;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.fx-empty {
+  padding: 14px 12px;
+  color: var(--text-dim);
+}
+
 /* ---- Vista previa ---- */
 
 .preview-window {

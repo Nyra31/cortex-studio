@@ -7,6 +7,7 @@ import {
   overlapAt, placeMedia, resolveTimeline, setTransitionAt, trackColor, volumeToGain,
 } from '../state/project.js';
 import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
+import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
 
 export const MEDIA_MIME = 'application/x-cortex-media';
 const HEADER_W = 230;
@@ -97,7 +98,7 @@ function TransitionZone({ width, height, label, onReset }) {
 // fadeIn/fadeOut: fundidos efectivos (en audio incluyen los fundidos cruzados de los solapamientos).
 // overlapIn/overlapOut: segundos solapados con el evento anterior/siguiente de la pista.
 const EventView = memo(function EventView({
-  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu,
+  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx,
 }) {
   const width = Math.max(3, ev.duration * pps);
   const height = bodyHeight(type);
@@ -114,12 +115,27 @@ const EventView = memo(function EventView({
       style={{ left: ev.start * pps, width }}
       onPointerDown={(e) => onDown(e, ev, 'move')}
       onContextMenu={(e) => onMenu(e, ev)}
+      data-event={ev.id}
       title={media?.missing ? `Archivo no encontrado: ${media.path}` : media?.name}
     >
       <div className="event-title">
         {name}
         {type === 'audio' && volume !== 0 && <span className="event-gain"> · {formatVolume(volume)}</span>}
       </div>
+      {type === 'video' && width > 46 && (
+        <button
+          className={`event-fx${ev.effects?.length ? ' active' : ''}`}
+          title={
+            ev.effects?.length
+              ? `Efectos del evento: ${ev.effects.map((fx) => EFFECTS.get(fx.type)?.name ?? fx.type).join(', ')}`
+              : 'Efectos del evento'
+          }
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onFx(ev.id)}
+        >
+          fx
+        </button>
+      )}
       <div className="event-body" style={bodyStyle}>
         {type === 'audio' && media?.peaks && (
           <Waveform
@@ -236,7 +252,7 @@ function VolumeSlider({ value, onChange }) {
 
 const TrackRow = memo(function TrackRow({
   track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef,
-  onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onDrop, onUpdateTrack, onDelete,
+  onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onDrop, onUpdateTrack, onDelete,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
   return (
@@ -297,6 +313,7 @@ const TrackRow = memo(function TrackRow({
               onDown={onEventDown}
               onReset={onEventReset}
               onMenu={onEventMenu}
+              onFx={onOpenFx}
             />
           );
         })}
@@ -307,7 +324,7 @@ const TrackRow = memo(function TrackRow({
 
 const Timeline = forwardRef(function Timeline({
   project, setProject, selection, setSelection, time, seek, playing,
-  pps, setPps, snap, onDropFiles, onMessage, onContextMenu, footer,
+  pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, footer,
 }, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -595,6 +612,25 @@ const Timeline = forwardRef(function Timeline({
 
   const onDrop = useCallback((e, target) => {
     e.preventDefault();
+    // Efecto soltado sobre un evento de video: se añade al final de su cadena y se abre su ventana de efectos.
+    const effect = e.dataTransfer.getData(EFFECT_MIME);
+    if (effect) {
+      const id = e.target.closest?.('[data-event]')?.dataset.event;
+      const { project: p } = live.current;
+      const ev = p.events.find((x) => x.id === id);
+      const type = ev && p.tracks.find((tr) => tr.id === ev.trackId)?.type;
+      if (type !== 'video') {
+        onMessage('Suelta el efecto encima de un evento de una pista de video.');
+        return;
+      }
+      setProject((cur) => ({
+        ...cur,
+        events: cur.events.map((x) => (x.id === id ? { ...x, effects: [...(x.effects || []), newEffect(effect)] } : x)),
+      }));
+      onMessage('');
+      onOpenFx(id);
+      return;
+    }
     const transition = e.dataTransfer.getData(TRANSITION_MIME);
     if (transition) {
       const { project: p } = live.current;
@@ -622,7 +658,7 @@ const Timeline = forwardRef(function Timeline({
     } else if (e.dataTransfer.files.length) {
       onDropFiles([...e.dataTransfer.files], t, target);
     }
-  }, [onDropFiles, onMessage, setProject, snapPoints, timeAt]);
+  }, [onDropFiles, onMessage, onOpenFx, setProject, snapPoints, timeAt]);
 
   const onUpdateTrack = useCallback((trackId, changes, record) => {
     setProject((p) => ({ ...p, tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, ...changes } : t)) }), record);
@@ -734,6 +770,7 @@ const Timeline = forwardRef(function Timeline({
               onEventReset={onEventReset}
               onEventMenu={onEventMenu}
               onLaneMenu={onLaneMenu}
+              onOpenFx={onOpenFx}
               onDrop={onDrop}
               onUpdateTrack={onUpdateTrack}
               onDelete={onDeleteTrack}
