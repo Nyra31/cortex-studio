@@ -16,6 +16,7 @@ const SHORTCUTS = [
   ['G / U', 'Agrupar / quitar del grupo'],
   ['Clic derecho', 'Menú contextual del evento o de la pista'],
   ['Ctrl+clic', 'Añadir o quitar eventos de la selección'],
+  ['Arrastrar en zona vacía', 'Seleccionar eventos con un rectángulo (Ctrl: añadir)'],
   ['Ctrl+Z / Ctrl+Y', 'Deshacer / rehacer'],
   ['↑ / ↓, Ctrl+rueda', 'Acercar / alejar la línea de tiempo'],
   ['F8', 'Activar o desactivar el ajuste'],

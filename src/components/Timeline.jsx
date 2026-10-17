@@ -316,6 +316,7 @@ const Timeline = forwardRef(function Timeline({
   const zoomAnchor = useRef(null);
   const prevPps = useRef(pps);
   const [view, setView] = useState({ left: 0, width: 1200 });
+  const [marquee, setMarquee] = useState(null); // rectángulo de selección { left, right, top, bottom } en px del contenido
   const fps = project.settings.fps;
 
   // Valores actuales para manejadores estables (evita re-renderizar todas las pistas a cada fotograma).
@@ -404,11 +405,58 @@ const Timeline = forwardRef(function Timeline({
 
   const onRulerDown = useCallback((e) => startScrub(e, e.target.classList.contains('cursor-head')), [startScrub]);
 
+  // Zona vacía de una pista: un clic coloca el cursor (y quita la selección, salvo con Ctrl); arrastrar
+  // dibuja un rectángulo que selecciona los eventos que toca (con Ctrl se añaden a los ya seleccionados).
+  // Se selecciona siempre el grupo entero, para que el audio no se separe de su video al moverlos.
   const onLaneDown = useCallback((e) => {
     if (e.button !== 0) return;
-    if (!e.ctrlKey) setSelection([]);
-    startScrub(e);
-  }, [setSelection, startScrub]);
+    const at = (ev) => {
+      const r = contentRef.current.getBoundingClientRect();
+      return { x: Math.max(HEADER_W, ev.clientX - r.left), y: ev.clientY - r.top };
+    };
+    const start = at(e);
+    const base = e.ctrlKey ? live.current.selection : [];
+    let dragging = false;
+
+    const move = (me) => {
+      const cur = at(me);
+      if (!dragging && Math.abs(cur.x - start.x) < 4 && Math.abs(cur.y - start.y) < 4) return;
+      dragging = true;
+      const box = {
+        left: Math.min(start.x, cur.x),
+        right: Math.max(start.x, cur.x),
+        top: Math.min(start.y, cur.y),
+        bottom: Math.max(start.y, cur.y),
+      };
+      setMarquee(box);
+      const { project: p, pps: scale } = live.current;
+      const t1 = (box.left - HEADER_W) / scale;
+      const t2 = (box.right - HEADER_W) / scale;
+      const contentTop = contentRef.current.getBoundingClientRect().top;
+      const tracks = new Set(
+        p.tracks
+          .filter((t) => {
+            const row = rowRefs.current.get(t.id)?.getBoundingClientRect();
+            return row && row.bottom - contentTop > box.top && row.top - contentTop < box.bottom;
+          })
+          .map((t) => t.id),
+      );
+      const hits = p.events.filter((ev) => tracks.has(ev.trackId) && ev.start < t2 && ev.start + ev.duration > t1);
+      const groups = new Set(hits.map((ev) => ev.groupId).filter(Boolean));
+      const ids = p.events.filter((ev) => hits.includes(ev) || groups.has(ev.groupId)).map((ev) => ev.id);
+      setSelection([...new Set([...base, ...ids])]);
+    };
+    const up = (ue) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setMarquee(null);
+      if (dragging) return;
+      if (!e.ctrlKey) setSelection([]);
+      seek(cursorTime(e.clientX, ue.shiftKey));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [cursorTime, seek, setSelection]);
 
   const onEventDown = useCallback((e, ev, mode) => {
     if (e.button !== 0) return;
@@ -696,6 +744,17 @@ const Timeline = forwardRef(function Timeline({
             <div className="track-lane" style={{ width: laneWidth }} onPointerDown={onLaneDown} />
           </div>
           <div className="cursor-line" style={{ left: HEADER_W + time * pps }} />
+          {marquee && (
+            <div
+              className="marquee"
+              style={{
+                left: marquee.left,
+                top: marquee.top,
+                width: marquee.right - marquee.left,
+                height: marquee.bottom - marquee.top,
+              }}
+            />
+          )}
         </div>
       </div>
       <div className="timeline-footer">

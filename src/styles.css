@@ -879,6 +879,15 @@ input[type='number'] {
   background: #6fc2ff;
 }
 
+/* Rectángulo de selección al arrastrar por una zona vacía de las pistas. */
+.marquee {
+  position: absolute;
+  z-index: 4;
+  border: 1px dashed rgba(255, 255, 255, 0.85);
+  background: rgba(61, 142, 230, 0.18);
+  pointer-events: none;
+}
+
 .cursor-line {
   position: absolute;
   top: 0;
