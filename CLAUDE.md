@@ -4,6 +4,8 @@ Editor de video de escritorio (Electron 44 + React 18 + Vite 5 + FFmpeg). Toda l
 
 Repositorio: https://github.com/Nyra31/cortex-studio (rama `main`, etiqueta `v0.1.0` = primera versión con instalador).
 
+Releases: cada versión publicada tiene etiqueta `vX.Y.Z` y una release en GitHub con `Cortex-Studio-Setup-X.Y.Z.exe` adjunto. Pasos: subir `version` en `package.json`, `npm run dist`, commit, etiqueta, push y crear la release subiendo el `.exe` (con `gh` si está instalado; si no, con la API de GitHub usando el token de `git credential fill`).
+
 ## Comandos
 
 ```bash
@@ -54,7 +56,7 @@ npm start
 
 `dist/` y `release/` no están en el repo: se regeneran con `npm run build` / `npm run dist` (el instalador solo se puede generar en Windows).
 
-## Estado (17/10/2026)
+## Estado (17/10/2026, v0.2.0)
 
 v0.1.0 terminada: edición multipista, vista previa, renderizado a MP4, interfaz estilo editor clásico, propiedades del proyecto e instalador de Windows.
 Después: volumen por evento y fundidos de entrada/salida (formato `.cortex` versión 2; los de versión 1 se siguen abriendo).
