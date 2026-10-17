@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { EFFECT_GROUPS, EFFECT_MIME, EFFECTS, activeEffects, effectDefaults } from '../state/effects.js';
+import { EFFECT_MIME, EFFECTS, activeEffects, effectDefaults, effectGroups } from '../state/effects.js';
 import { Compositor } from '../preview/compositor.js';
+import { renderOfflineAudio } from '../preview/audio-engine.js';
 
 const THUMB_W = 112;
 const THUMB_H = 63;
@@ -53,15 +54,60 @@ function getRenderer() {
   return renderer;
 }
 
+// Sonido de ejemplo para las miniaturas de audio: dos notas que se apagan (0,8 s a 24 kHz).
+const AUDIO_RATE = 24000;
+function sampleSound() {
+  const n = Math.round(0.8 * AUDIO_RATE);
+  const data = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / AUDIO_RATE;
+    const local = t % 0.4;
+    data[i] = 0.6 * Math.exp(-7 * local) * (Math.sin(2 * Math.PI * 330 * t) + 0.35 * Math.sin(2 * Math.PI * 2100 * t));
+  }
+  return data;
+}
+
+// Forma de onda (envolvente por columnas) del sonido original, en gris, y del procesado, encima.
+function drawWave(canvas, original, processed) {
+  const ctx = canvas.getContext('2d');
+  const { width: w, height: h } = canvas;
+  ctx.fillStyle = '#151515';
+  ctx.fillRect(0, 0, w, h);
+  const column = (data, x) => {
+    const per = data.length / w;
+    let max = 0;
+    for (let i = Math.floor(x * per); i < Math.floor((x + 1) * per); i++) max = Math.max(max, Math.abs(data[i]));
+    return Math.min(1, max) * (h / 2 - 2);
+  };
+  for (const [data, color] of [[original, '#4a4a4a'], [processed, '#e0a030']]) {
+    ctx.fillStyle = color;
+    for (let x = 0; x < w; x++) {
+      const a = column(data, x);
+      ctx.fillRect(x, h / 2 - a, 1, Math.max(1, a * 2));
+    }
+  }
+}
+
 function EffectTile({ item }) {
   const ref = useRef(null);
   useEffect(() => {
-    const r = getRenderer();
-    if (!r) return;
     const effects = activeEffects([{ type: item.id, params: { ...effectDefaults(item.id), ...item.sample } }]);
+    if (item.kind === 'audio') {
+      const sound = sampleSound();
+      let alive = true;
+      renderOfflineAudio([sound, sound], AUDIO_RATE, effects, { peak: 0.6 })
+        .then(([left]) => alive && drawWave(ref.current, sound, left))
+        .catch(() => {});
+      return () => {
+        alive = false;
+      };
+    }
+    const r = getRenderer();
+    if (!r) return undefined;
     r.compositor.render(SAMPLE, [{ a: r.sample, opacity: 1, fxA: effects }]);
     const ctx = ref.current.getContext('2d');
     ctx.drawImage(r.canvas, 0, 0, ref.current.width, ref.current.height);
+    return undefined;
   }, [item]);
 
   return (
@@ -72,7 +118,7 @@ function EffectTile({ item }) {
         e.dataTransfer.setData(EFFECT_MIME, item.id);
         e.dataTransfer.effectAllowed = 'copy';
       }}
-      title={`${item.group}: ${item.name}\nArrastra sobre un evento de video para añadírselo`}
+      title={`${item.group}: ${item.name}\nArrastra sobre un evento de ${item.kind === 'audio' ? 'audio' : 'video'} para añadírselo`}
     >
       <canvas ref={ref} width={THUMB_W} height={THUMB_H} />
       <div className="transition-name">{item.name}</div>
@@ -88,24 +134,40 @@ const THUMB_PARAMS = {
   blur: { horizontal: 0.7, vertical: 0.7 },
   sharpen: { amount: 1 },
   glow: { threshold: 0.5, intensity: 1, radius: 0.6 },
+  graphiceq: { g250: 12, g2k: -12 },
+  lowpass: { frequency: 500 },
+  highpass: { frequency: 1500 },
+  compressor: { threshold: -24, ratio: 10 },
+  gate: { threshold: -20 },
+  echo: { delay: 120, feedback: 0.6 },
+  distortion: { drive: 12, output: 0 },
+  reverb: { decay: 1, mix: 0.6 },
 };
 
-export default function EffectsPanel() {
-  const [group, setGroup] = useState(ALL);
+// kind: 'video' o 'audio'. El grupo elegido se recuerda por tipo mientras la app está abierta.
+const chosenGroup = { video: ALL, audio: ALL };
+
+export default function EffectsPanel({ kind = 'video' }) {
+  const [group, setGroupState] = useState(chosenGroup[kind]);
+  const setGroup = (g) => {
+    chosenGroup[kind] = g;
+    setGroupState(g);
+  };
   const items = [...EFFECTS.values()]
-    .filter((fx) => group === ALL || fx.group === group)
+    .filter((fx) => fx.kind === kind && (group === ALL || fx.group === group))
     .map((fx) => ({ ...fx, sample: THUMB_PARAMS[fx.id] }));
 
   return (
     <div className="transitions-panel">
       <div className="dock-toolbar">
         <span className="dock-toolbar-label">
-          Arrastra un efecto sobre un evento de video, o pulsa el botón «fx» del evento para ver y ajustar sus efectos
+          Arrastra un efecto sobre un evento de {kind === 'audio' ? 'audio' : 'video'}, o pulsa el botón «fx» del evento para
+          ver y ajustar sus efectos
         </span>
       </div>
       <div className="transitions-body">
         <div className="transition-groups">
-          {[ALL, ...EFFECT_GROUPS.map((g) => g.name)].map((name) => (
+          {[ALL, ...effectGroups(kind).map((g) => g.name)].map((name) => (
             <div
               key={name}
               className={`transition-group${group === name ? ' active' : ''}`}

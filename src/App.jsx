@@ -40,7 +40,7 @@ export default function App() {
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
-  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects'
+  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects'
   const [fxEventId, setFxEventId] = useState(null); // evento cuya ventana de efectos está abierta
   const [clipboard, setClipboard] = useState(null); // eventos copiados (copyEvents)
   const [contextMenu, setContextMenu] = useState(null); // { x, y, items }
@@ -264,7 +264,6 @@ export default function App() {
       const selected = p.events.filter((e) => ids.includes(e.id));
       const types = new Map(p.tracks.map((tr) => [tr.id, tr.type]));
       const audio = selected.filter((e) => types.get(e.trackId) === 'audio');
-      const video = selected.filter((e) => types.get(e.trackId) === 'video');
       const media = p.media.find((m) => m.id === info.event.mediaId);
       const isVideo = types.get(info.event.trackId) === 'video';
       items = [
@@ -301,17 +300,13 @@ export default function App() {
             action: () => setProject((cur) => updateEvents(cur, [info.event.id], { transition: null })),
           }]
           : []),
-        ...(isVideo
-          ? [
-            'separator',
-            { label: 'Efectos del evento…', action: () => setFxEventId(info.event.id) },
-            {
-              label: 'Quitar efectos',
-              action: () => setProject((cur) => updateEvents(cur, video.map((e) => e.id), { effects: [] })),
-              disabled: !video.some((e) => e.effects?.length),
-            },
-          ]
-          : []),
+        'separator',
+        { label: 'Efectos del evento…', action: () => setFxEventId(info.event.id) },
+        {
+          label: 'Quitar efectos',
+          action: () => setProject((cur) => updateEvents(cur, ids, { effects: [] })),
+          disabled: !selected.some((e) => e.effects?.length),
+        },
         'separator',
         {
           label: 'Abrir la ubicación del archivo',
@@ -463,6 +458,7 @@ export default function App() {
         { label: 'Medios del proyecto', shortcut: 'Alt+4', action: () => setLeftTab('media'), checked: leftTab === 'media' },
         { label: 'Transiciones', shortcut: 'Alt+7', action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
         { label: 'Efectos de video', shortcut: 'Alt+8', action: () => setLeftTab('effects'), checked: leftTab === 'effects' },
+        { label: 'Efectos de audio', action: () => setLeftTab('audioEffects'), checked: leftTab === 'audioEffects' },
         'separator',
         { label: 'Ir al inicio', shortcut: 'Inicio', action: () => seek(0) },
         { label: 'Ir al final', shortcut: 'Fin', action: () => seek(duration) },
@@ -602,6 +598,7 @@ export default function App() {
             { id: 'media', title: 'Medios del proyecto' },
             { id: 'transitions', title: 'Transiciones' },
             { id: 'effects', title: 'Efectos de video' },
+            { id: 'audioEffects', title: 'Efectos de audio' },
           ]}
           active={leftTab}
           onTab={setLeftTab}
@@ -616,7 +613,8 @@ export default function App() {
             />
           )}
           {leftTab === 'transitions' && <TransitionsPanel />}
-          {leftTab === 'effects' && <EffectsPanel />}
+          {leftTab === 'effects' && <EffectsPanel key="video" kind="video" />}
+          {leftTab === 'audioEffects' && <EffectsPanel key="audio" kind="audio" />}
         </Dock>
         <Dock title="Vista previa de video" className="preview-dock">
           <Preview project={project} time={time} playing={playing} onOpenProperties={openProperties} />
@@ -681,6 +679,7 @@ export default function App() {
         <EventFxDialog
           key={fxEvent.id}
           event={fxEvent}
+          kind={project.tracks.find((t) => t.id === fxEvent.trackId)?.type ?? 'video'}
           mediaName={project.media.find((m) => m.id === fxEvent.mediaId)?.name ?? ''}
           onChange={updateFxEffects}
           onClose={closeFx}

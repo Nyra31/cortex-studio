@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
-import { EFFECT_GROUPS, EFFECTS, effectDefaults, newEffect } from '../state/effects.js';
+import { EFFECTS, effectDefaults, effectGroups, newEffect } from '../state/effects.js';
 
-// Ventana flotante con los efectos de un evento de video (como «FX de evento» de VEGAS):
-// arriba la cadena (en el orden en que se aplican), abajo los controles del efecto elegido.
-// Los cambios se ven al momento en la vista previa; un arrastre de control es un solo paso de deshacer.
-export default function EventFxDialog({ event, mediaName, onChange, onClose }) {
+// Ventana flotante con los efectos de un evento (como «FX de evento» de VEGAS); kind = 'video' o 'audio'
+// según la pista. Arriba la cadena (en el orden en que se aplican), abajo los controles del efecto elegido.
+// Los cambios se ven (y se oyen) al momento en la vista previa; un arrastre de control es un solo paso de deshacer.
+export default function EventFxDialog({ event, kind, mediaName, onChange, onClose }) {
   const effects = event.effects || [];
   const [selectedId, setSelectedId] = useState(effects[0]?.id ?? null);
   const [pos, setPos] = useState({ x: 16, y: 120 });
@@ -66,7 +66,7 @@ export default function EventFxDialog({ event, mediaName, onChange, onClose }) {
   return (
     <div className="fx-window" style={{ left: pos.x, top: pos.y }}>
       <div className="fx-title" onPointerDown={startDrag}>
-        <span>Efectos del evento: {mediaName}</span>
+        <span>Efectos {kind === 'audio' ? 'de audio' : 'de video'} del evento: {mediaName}</span>
         <button className="track-btn" title="Cerrar (Esc)" onClick={onClose}>
           <Icon name="close" size={11} />
         </button>
@@ -96,7 +96,7 @@ export default function EventFxDialog({ event, mediaName, onChange, onClose }) {
           title="Añadir un efecto al final de la cadena"
         >
           <option value="">+ Añadir efecto…</option>
-          {EFFECT_GROUPS.map((g) => (
+          {effectGroups(kind).map((g) => (
             <optgroup key={g.name} label={g.name}>
               {g.items.map((item) => (
                 <option key={item.id} value={item.id}>{item.name}</option>
@@ -161,7 +161,8 @@ export default function EventFxDialog({ event, mediaName, onChange, onClose }) {
         </div>
       ) : (
         <div className="fx-empty">
-          Este evento no tiene efectos. Añade uno con «+ Añadir efecto…» o arrastrándolo desde la ventana Efectos de video (Alt+8).
+          Este evento no tiene efectos. Añade uno con «+ Añadir efecto…» o arrastrándolo desde la ventana
+          {kind === 'audio' ? ' Efectos de audio.' : ' Efectos de video (Alt+8).'}
         </div>
       )}
     </div>

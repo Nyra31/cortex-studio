@@ -9,7 +9,8 @@ import { effectsGraph } from './effects.js';
 //   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume }],  // ordenadas de arriba a abajo; volume en dB
 //   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition, effects }],
 // }
-// effects (solo eventos de video): cadena [{ id, type, enabled, params }] aplicada en orden (ver effects.js).
+// effects: cadena [{ id, type, enabled, params }] aplicada en orden; efectos de video en los eventos de video
+// y de audio en los de audio (ver effects.js y audio-effects.js).
 // Tiempos en segundos. volume del evento en dB (solo afecta al audio); fadeIn/fadeOut = duración de los fundidos.
 // Si un evento empieza encima del final de otro de su misma pista, el solapamiento es una transición:
 // en video, la de `transition` del evento que entra (null = disolución cruzada); en audio, un fundido cruzado.
@@ -19,6 +20,7 @@ export const IMAGE_DURATION = 5;
 export const DEFAULT_SETTINGS = { width: 1920, height: 1080, fps: 30 };
 export const FRAME_RATES = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
 export const MIN_VOLUME_DB = -48; // en el mínimo la pista queda en silencio (-∞)
+export const MAX_TRACK_VOLUME_DB = 12; // las pistas amplifican hasta +12 dB, como en VEGAS (los eventos, hasta 0 dB)
 export const TRACK_COLORS = ['#5b80d6', '#9b66cf', '#cf5f80', '#d58a48', '#c4ad45', '#5aa86a', '#47a5b3'];
 export const trackColor = (index) => TRACK_COLORS[index % TRACK_COLORS.length];
 
@@ -52,7 +54,18 @@ export function isTrackActive(track, tracks) {
 
 export const volumeToGain = (db) => (db <= MIN_VOLUME_DB ? 0 : 10 ** (db / 20));
 export const gainToVolume = (gain) => (gain <= volumeToGain(MIN_VOLUME_DB) ? MIN_VOLUME_DB : Math.min(0, 20 * Math.log10(gain)));
-export const formatVolume = (db) => (db <= MIN_VOLUME_DB ? '-∞ dB' : `${db.toFixed(1).replace('.', ',')} dB`);
+export const formatVolume = (db) => (db <= MIN_VOLUME_DB ? '-∞ dB' : `${db > 0 ? '+' : ''}${db.toFixed(1).replace('.', ',')} dB`);
+
+// Pico (0–1) del audio de un evento según la forma de onda del medio (lo usa el efecto Normalizar).
+export function eventPeak(media, e) {
+  if (!media?.peaks?.length) return 0;
+  const pps = media.peaksPerSecond;
+  const from = Math.max(0, Math.floor(e.inPoint * pps));
+  const to = Math.min(media.peaks.length, Math.ceil((e.inPoint + e.duration) * pps));
+  let max = 0;
+  for (let i = from; i < to; i++) if (media.peaks[i] > max) max = media.peaks[i];
+  return max / 255;
+}
 
 export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0, transition: null, effects: [] };
 
@@ -357,6 +370,10 @@ export function renderPayload(project, size = project.settings) {
   const { fades, transitions } = resolveTimeline(project);
   const mediaById = new Map(project.media.map((m) => [m.id, m]));
   const trackType = new Map(project.tracks.map((t) => [t.id, t.type]));
+  const afxOf = (e) => {
+    if (trackType.get(e.trackId) !== 'audio' || !e.effects?.length) return null;
+    return effectsGraph(e.effects, { peak: eventPeak(mediaById.get(e.mediaId), e) }, 'audio');
+  };
   const fxOf = (e) => {
     if (trackType.get(e.trackId) !== 'video' || !e.effects?.length) return null;
     const m = mediaById.get(e.mediaId);
@@ -377,6 +394,7 @@ export function renderPayload(project, size = project.settings) {
       ...fades.get(e.id),
       gain: volumeToGain(e.volume ?? 0),
       fx: fxOf({ ...e, effects }),
+      afx: afxOf({ ...e, effects }),
     })),
     transitions,
   };

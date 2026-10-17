@@ -9,6 +9,9 @@
 // previa (a menos resolución) y el render den el mismo resultado. La vista previa aplica las mismas
 // fórmulas con shaders: ver preview/effects-gl.js.
 import { uid } from './project.js';
+import { AUDIO_EFFECT_GROUPS } from './audio-effects.js';
+
+export { AUDIO_EFFECT_GROUPS };
 
 export const EFFECT_MIME = 'application/x-cortex-effect';
 
@@ -194,11 +197,14 @@ export function sepiaMatrix(a) {
   return s.map((v, i) => id[i] + (v - id[i]) * a);
 }
 
-// id → definición (con group e index para la interfaz)
+// id → definición, con group, index (para la interfaz) y kind: 'video' o 'audio' (el tipo de pista en que se usa).
 export const EFFECTS = new Map();
-for (const group of EFFECT_GROUPS) {
-  for (const item of group.items) EFFECTS.set(item.id, { ...item, group: group.name, index: EFFECTS.size });
+for (const [kind, groups] of [['video', EFFECT_GROUPS], ['audio', AUDIO_EFFECT_GROUPS]]) {
+  for (const group of groups) {
+    for (const item of group.items) EFFECTS.set(item.id, { ...item, kind, group: group.name, index: EFFECTS.size });
+  }
 }
+export const effectGroups = (kind) => (kind === 'audio' ? AUDIO_EFFECT_GROUPS : EFFECT_GROUPS);
 
 export function effectDefaults(type) {
   return Object.fromEntries(EFFECTS.get(type).params.map((p) => [p.id, p.default]));
@@ -215,8 +221,9 @@ export function activeEffects(effects) {
 
 // Subgrafo de FFmpeg con toda la cadena de efectos de un evento, entre las etiquetas @IN@ y @OUT@
 // (@N@ es un prefijo único que pone el proceso principal). alpha: si deja transparencia (croma).
-export function effectsGraph(effects, ctx) {
-  const list = activeEffects(effects);
+// kind: 'video' o 'audio' (solo cambia el filtro que no hace nada: null / anull).
+export function effectsGraph(effects, ctx, kind = 'video') {
+  const list = activeEffects(effects).filter((fx) => EFFECTS.get(fx.type).kind === kind);
   if (!list.length) return null;
   const parts = [];
   let chain = [];
@@ -224,7 +231,7 @@ export function effectsGraph(effects, ctx) {
   let k = 0;
   let alpha = false;
   const flush = (out) => {
-    parts.push(`[${cur}]${chain.length ? chain.join(',') : 'null'}[${out}]`);
+    parts.push(`[${cur}]${chain.length ? chain.join(',') : kind === 'audio' ? 'anull' : 'null'}[${out}]`);
     chain = [];
     cur = out;
   };

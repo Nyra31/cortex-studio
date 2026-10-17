@@ -251,9 +251,19 @@ function buildRender(project, settings, outPath) {
     inputs.push('-ss', num(e.inPoint), '-t', num(e.duration), '-i', m.path);
     const i = n++;
     const delay = Math.round(e.start * 1000);
+    const format = 'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo';
+    let head = `[${i}:a]asetpts=PTS-STARTPTS,${format}`;
+    if (e.afx) {
+      // Efectos del evento (subgrafo calculado en la interfaz). Las colas (eco, reverberación) se cortan
+      // al final del evento, igual que en la vista previa.
+      filters.push(
+        `${head}[afxin${i}]`,
+        e.afx.graph.replaceAll('@IN@', `afxin${i}`).replaceAll('@OUT@', `afxout${i}`).replaceAll('@N@', `afx${i}_`),
+      );
+      head = `[afxout${i}]${format},atrim=duration=${num(e.duration)},asetpts=PTS-STARTPTS`;
+    }
     filters.push(
-      `[${i}:a]asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo${audioFades(e)},` +
-        `adelay=delays=${delay}:all=1${gain === 1 ? '' : `,volume=${gain.toFixed(4)}`}[a${i}]`,
+      `${head}${audioFades(e)},adelay=delays=${delay}:all=1${gain === 1 ? '' : `,volume=${gain.toFixed(4)}`}[a${i}]`,
     );
     mix.push(`[a${i}]`);
   }

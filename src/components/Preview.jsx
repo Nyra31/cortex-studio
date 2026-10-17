@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import { mediaUrl, frameNumber, formatTimecode } from '../util/time.js';
-import { fadeFactor, formatFps, isTrackActive, resolveTimeline, volumeToGain } from '../state/project.js';
+import { eventPeak, fadeFactor, formatFps, isTrackActive, resolveTimeline, volumeToGain } from '../state/project.js';
 import { transitionInfo } from '../state/transitions.js';
-import { activeEffects } from '../state/effects.js';
+import { EFFECTS, activeEffects } from '../state/effects.js';
 import { Compositor } from '../preview/compositor.js';
+import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
+
+// Para las pruebas automáticas: procesar un sonido con la misma cadena de efectos que la vista previa.
+window.cortexPruebas = { renderOfflineAudio, activeEffects };
 
 const DRIFT = 0.3;
 const PRELOAD = 2; // segundos antes de que empiece un evento se prepara su <video>
@@ -103,7 +107,7 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
   const sourcesRef = useRef(null);
   const videoEls = useRef(new Map()); // reproductor (ver playerKeys) → <video> (silenciado: el sonido sale de las pistas de audio)
   const imageEls = useRef(new Map()); // id de medio → <img>
-  const audioEls = useRef(new Map()); // reproductor → <audio>
+  const audio = useRef(null); // AudioEngine
   const draw = useRef({ dirty: 0, playing: false, layers: [], frame: null });
   const [display, setDisplay] = useState({ width: 0, height: 0 });
   const [backing, setBacking] = useState({ width: 0, height: 0 });
@@ -202,30 +206,25 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
     draw.current.playing = playing;
     invalidate();
 
-    // Audio: un reproductor por grupo de eventos seguidos (como el video), con el volumen de pista,
-    // de evento y de los fundidos. Los de los eventos que están por llegar se cargan por adelantado.
+    // Audio: un reproductor por grupo de eventos seguidos (como el video), que pasa por los efectos del
+    // evento y por el volumen de pista × evento × fundidos (Web Audio, ver AudioEngine). Los de los eventos
+    // que están por llegar se cargan y se montan por adelantado, en silencio.
+    const engine = audio.current;
+    if (!engine) return;
+    if (playing) engine.resume();
     const audioFor = (e) => {
-      const key = players.get(e.id);
-      const url = mediaUrl(mediaById.get(e.mediaId).path);
-      let el = audioEls.current.get(key);
-      if (!el || el.dataset.url !== url) {
-        if (el) el.removeAttribute('src');
-        el = new Audio(url);
-        el.dataset.url = url;
-        el.preload = 'auto';
-        el.currentTime = e.inPoint;
-        audioEls.current.set(key, el);
-      }
-      return el;
+      const p = engine.player(players.get(e.id), mediaUrl(mediaById.get(e.mediaId).path), e.inPoint);
+      const effects = activeEffects(e.effects).filter((fx) => EFFECTS.get(fx.type).kind === 'audio');
+      engine.setEffects(p, effects, { peak: eventPeak(mediaById.get(e.mediaId), e) });
+      return p;
     };
     const audible = audibleEvents(project, mediaById, resolved, time);
-    const sounding = new Set(audible.map(({ event }) => players.get(event.id)));
-    const neededAudio = new Set(sounding);
+    const neededAudio = new Set(audible.map(({ event }) => players.get(event.id)));
     for (const { event: e, gain } of audible) {
-      const el = audioFor(e);
-      el.volume = Math.min(1, gain);
-      if (playing) sync(el, e.inPoint + time - e.start, true);
-      else if (!el.paused) el.pause();
+      const p = audioFor(e);
+      engine.setGain(p, gain);
+      if (playing) sync(p.el, e.inPoint + time - e.start, true);
+      else if (!p.el.paused) p.el.pause();
     }
     const audioTracks = new Set(project.tracks.filter((t) => t.type === 'audio' && isTrackActive(t, project.tracks)).map((t) => t.id));
     for (const e of sorted) {
@@ -234,16 +233,24 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
       const key = players.get(e.id);
       if (neededAudio.has(key)) continue;
       neededAudio.add(key);
-      prepare(audioFor(e), e, time);
+      const p = audioFor(e);
+      engine.setGain(p, 0);
+      prepare(p.el, e, time);
     }
-    for (const [key, el] of audioEls.current) {
-      if (neededAudio.has(key)) continue;
-      el.pause();
-      el.removeAttribute('src');
-      el.load();
-      audioEls.current.delete(key);
+    for (const key of [...engine.players.keys()]) {
+      if (!neededAudio.has(key)) engine.remove(key);
     }
   });
+
+  // Motor de audio de la vista previa (uno por ventana).
+  useEffect(() => {
+    audio.current = new AudioEngine();
+    window.cortexPruebas.audio = audio.current;
+    return () => {
+      audio.current.close();
+      audio.current = null;
+    };
+  }, []);
 
   // Bucle de dibujo: cada fotograma mientras se reproduce; en pausa, solo cuando algo cambia.
   useEffect(() => {
@@ -271,7 +278,6 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
         el.remove();
       }
       videoEls.current.clear();
-      for (const el of audioEls.current.values()) el.pause();
     };
   }, []);
 

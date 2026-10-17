@@ -3,7 +3,7 @@ import Waveform from './Waveform.jsx';
 import Icon from './Icon.jsx';
 import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
-  EVENT_DEFAULTS, MIN_EVENT, MIN_VOLUME_DB, deleteTrack, eventFades, formatVolume, gainToVolume, isTrackActive,
+  EVENT_DEFAULTS, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_VOLUME_DB, deleteTrack, eventFades, formatVolume, gainToVolume, isTrackActive,
   overlapAt, placeMedia, resolveTimeline, setTransitionAt, trackColor, volumeToGain,
 } from '../state/project.js';
 import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
@@ -122,7 +122,7 @@ const EventView = memo(function EventView({
         {name}
         {type === 'audio' && volume !== 0 && <span className="event-gain"> · {formatVolume(volume)}</span>}
       </div>
-      {type === 'video' && width > 46 && (
+      {width > 46 && (
         <button
           className={`event-fx${ev.effects?.length ? ' active' : ''}`}
           title={
@@ -234,7 +234,7 @@ function VolumeSlider({ value, onChange }) {
       <input
         type="range"
         min={MIN_VOLUME_DB}
-        max={0}
+        max={MAX_TRACK_VOLUME_DB}
         step={0.1}
         value={value}
         onPointerDown={() => (first.current = true)}
@@ -612,15 +612,16 @@ const Timeline = forwardRef(function Timeline({
 
   const onDrop = useCallback((e, target) => {
     e.preventDefault();
-    // Efecto soltado sobre un evento de video: se añade al final de su cadena y se abre su ventana de efectos.
+    // Efecto soltado sobre un evento de su tipo (video o audio): se añade al final de su cadena y se abre su ventana de efectos.
     const effect = e.dataTransfer.getData(EFFECT_MIME);
     if (effect) {
       const id = e.target.closest?.('[data-event]')?.dataset.event;
       const { project: p } = live.current;
       const ev = p.events.find((x) => x.id === id);
       const type = ev && p.tracks.find((tr) => tr.id === ev.trackId)?.type;
-      if (type !== 'video') {
-        onMessage('Suelta el efecto encima de un evento de una pista de video.');
+      const kind = EFFECTS.get(effect)?.kind;
+      if (type !== kind) {
+        onMessage(`Suelta el efecto encima de un evento de una pista de ${kind === 'audio' ? 'audio' : 'video'}.`);
         return;
       }
       setProject((cur) => ({
