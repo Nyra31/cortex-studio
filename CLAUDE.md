@@ -33,6 +33,7 @@ Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está defi
 - Pistas ordenadas de arriba a abajo: las de video siempre encima de las de audio (`addTrack` lo respeta).
 - Un video con sonido = dos eventos con el mismo `groupId`; se mueven, recortan y dividen juntos.
 - Volumen de pista en dB (`MIN_VOLUME_DB` = silencio, máximo 0 dB). Silencio/solo se resuelven con `isTrackActive`.
+- Cada evento tiene `volume` (dB, solo afecta al audio), `fadeIn` y `fadeOut` (segundos). Usar `eventFades(e)` para los valores efectivos (recortados si el evento se acorta) y `fadeFactor(e, t)` para la vista previa. En video el fundido es de transparencia (`fade ... alpha=1` en FFmpeg; opacidad de capas en `Preview`).
 - Archivo `.cortex` = JSON de `serializeProject` (`format: 'cortex-studio'`, `version`). Miniaturas y formas de onda no se guardan; se regeneran al abrir. Si cambia el formato, `loadProject` debe seguir abriendo los archivos antiguos (rellenar campos por defecto).
 - IDs con `uid(prefijo)`: `t` pistas, `e` eventos, `g` grupos.
 
@@ -53,13 +54,14 @@ npm start
 
 `dist/` y `release/` no están en el repo: se regeneran con `npm run build` / `npm run dist` (el instalador solo se puede generar en Windows).
 
-## Estado (16/10/2026)
+## Estado (17/10/2026)
 
-v0.1.0 terminada: edición multipista, vista previa, renderizado a MP4, interfaz estilo editor clásico, propiedades del proyecto e instalador de Windows. No hay trabajo a medias. El siguiente paso está por decidir entre los puntos de la lista de abajo.
+v0.1.0 terminada: edición multipista, vista previa, renderizado a MP4, interfaz estilo editor clásico, propiedades del proyecto e instalador de Windows.
+Después: volumen por evento y fundidos de entrada/salida (formato `.cortex` versión 2; los de versión 1 se siguen abriendo).
 
 ## Pendiente (siguientes pasos naturales)
 
-Transiciones, efectos, títulos, volumen por evento, amplificación por encima de 0 dB. La vista previa usa el reproductor de Chromium, así que algunos códecs (HEVC, ProRes, AVI antiguos) se renderizan pero no se ven en la vista previa.
+Transiciones (los fundidos de video ya funden sobre la pista de debajo, base para fundidos cruzados), efectos, títulos, amplificación por encima de 0 dB (la vista previa necesitaría Web Audio, porque `HTMLMediaElement.volume` no pasa de 1), curvas de fundido. La vista previa usa el reproductor de Chromium, así que algunos códecs (HEVC, ProRes, AVI antiguos) se renderizan pero no se ven en la vista previa.
 
 ## Al terminar una función
 

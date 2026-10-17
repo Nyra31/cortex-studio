@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import { mediaUrl, frameNumber, formatTimecode } from '../util/time.js';
-import { formatFps, isTrackActive, volumeToGain } from '../state/project.js';
+import { fadeFactor, formatFps, isTrackActive, volumeToGain } from '../state/project.js';
 
 const DRIFT = 0.3;
 
-// El evento visible en t: el de la pista de video activa más alta; dentro de una pista, el que empieza más tarde.
-function activeVisual(project, mediaById, t) {
+// Capas visibles en t, de arriba a abajo: en cada pista de video activa, el evento que empieza más tarde.
+// Se baja de pista mientras la capa de encima esté fundiéndose (opacidad < 1).
+function visibleLayers(project, mediaById, t) {
+  const layers = [];
   for (const track of project.tracks) {
     if (track.type !== 'video' || !isTrackActive(track, project.tracks)) continue;
     let best = null;
@@ -14,9 +16,14 @@ function activeVisual(project, mediaById, t) {
       if (e.trackId === track.id && e.start <= t && t < e.start + e.duration && (!best || e.start >= best.start)) best = e;
     }
     const media = best && mediaById.get(best.mediaId);
-    if (media && !media.missing) return { event: best, media };
+    if (!media || media.missing) continue;
+    // Un mismo archivo solo tiene un <video>: si ya está en una capa superior, no se repite.
+    if (!media.isImage && layers.some((l) => l.media.id === media.id)) continue;
+    const opacity = fadeFactor(best, t);
+    layers.push({ event: best, media, opacity });
+    if (opacity >= 1) break;
   }
-  return null;
+  return layers;
 }
 
 function audibleEvents(project, mediaById, t) {
@@ -30,7 +37,7 @@ function audibleEvents(project, mediaById, t) {
       const m = mediaById.get(e.mediaId);
       return gains.get(e.trackId) > 0 && m && m.hasAudio && !m.missing && e.start <= t && t < e.start + e.duration;
     })
-    .map((e) => ({ event: e, gain: gains.get(e.trackId) }));
+    .map((e) => ({ event: e, gain: gains.get(e.trackId) * volumeToGain(e.volume ?? 0) * fadeFactor(e, t) }));
 }
 
 function sync(el, target, playing) {
@@ -58,11 +65,14 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
     return project.media.filter((m) => used.has(m.id) && m.hasVideo && !m.isImage && !m.missing);
   }, [project.media, project.events, project.tracks]);
 
-  const active = activeVisual(project, mediaById, time);
+  const layers = visibleLayers(project, mediaById, time);
+  const layerOf = (mediaId) => layers.find((l) => l.media.id === mediaId);
+  const layerStyle = (layer) => ({ opacity: layer.opacity, zIndex: layers.length - layers.indexOf(layer) });
 
   useEffect(() => {
     for (const [id, el] of videoEls.current) {
-      if (active && active.media.id === id) sync(el, active.event.inPoint + time - active.event.start, playing);
+      const layer = layerOf(id);
+      if (layer) sync(el, layer.event.inPoint + time - layer.event.start, playing);
       else if (!el.paused) el.pause();
     }
 
@@ -113,17 +123,25 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
       </div>
       <div className="preview">
         <div className="screen" ref={screenRef} style={{ '--aspect': width / height }}>
-          {videoMedia.map((m) => (
-            <video
-              key={m.id}
-              ref={(el) => (el ? videoEls.current.set(m.id, el) : videoEls.current.delete(m.id))}
-              src={mediaUrl(m.path)}
-              muted
-              preload="auto"
-              className={active && active.media.id === m.id ? 'visible' : ''}
-            />
-          ))}
-          {active && active.media.isImage && <img className="visible" src={mediaUrl(active.media.path)} alt="" />}
+          {videoMedia.map((m) => {
+            const layer = layerOf(m.id);
+            return (
+              <video
+                key={m.id}
+                ref={(el) => (el ? videoEls.current.set(m.id, el) : videoEls.current.delete(m.id))}
+                src={mediaUrl(m.path)}
+                muted
+                preload="auto"
+                className={layer ? 'visible' : ''}
+                style={layer ? layerStyle(layer) : undefined}
+              />
+            );
+          })}
+          {layers
+            .filter((l) => l.media.isImage)
+            .map((l) => (
+              <img key={l.event.id} className="visible" style={layerStyle(l)} src={mediaUrl(l.media.path)} alt="" />
+            ))}
         </div>
       </div>
       <div className="preview-info">

@@ -4,8 +4,9 @@
 //   settings: { width, height, fps },
 //   media:  [{ id, path, name, duration, width, height, fps, hasVideo, hasAudio, isImage, thumb, peaks, peaksPerSecond, missing }],
 //   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume }],  // ordenadas de arriba a abajo; volume en dB
-//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId }], // tiempos en segundos
+//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut }],
 // }
+// Tiempos en segundos. volume del evento en dB (solo afecta al audio); fadeIn/fadeOut = duración de los fundidos.
 
 export const MIN_EVENT = 0.04;
 export const IMAGE_DURATION = 5;
@@ -44,6 +45,26 @@ export function isTrackActive(track, tracks) {
 }
 
 export const volumeToGain = (db) => (db <= MIN_VOLUME_DB ? 0 : 10 ** (db / 20));
+export const gainToVolume = (gain) => (gain <= volumeToGain(MIN_VOLUME_DB) ? MIN_VOLUME_DB : Math.min(0, 20 * Math.log10(gain)));
+export const formatVolume = (db) => (db <= MIN_VOLUME_DB ? '-∞ dB' : `${db.toFixed(1).replace('.', ',')} dB`);
+
+export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0 };
+
+// Fundidos efectivos: si el evento se acorta, se reducen para que no se solapen.
+export function eventFades(e) {
+  const fadeIn = Math.min(e.fadeIn || 0, e.duration);
+  return { fadeIn, fadeOut: Math.min(e.fadeOut || 0, e.duration - fadeIn) };
+}
+
+// Factor de 0 a 1 que aplican los fundidos en el instante t (lineal, igual que fade y afade de FFmpeg).
+export function fadeFactor(e, t) {
+  const { fadeIn, fadeOut } = eventFades(e);
+  const local = t - e.start;
+  let f = 1;
+  if (fadeIn > 0 && local < fadeIn) f = Math.min(f, Math.max(0, local / fadeIn));
+  if (fadeOut > 0 && local > e.duration - fadeOut) f = Math.min(f, Math.max(0, (e.duration - local) / fadeOut));
+  return f;
+}
 
 export function formatFps(fps) {
   return Number.isInteger(fps) ? String(fps) : fps.toFixed(3).replace(/0+$/, '').replace('.', ',');
@@ -93,14 +114,11 @@ export function placeMedia(project, media, start, target = null) {
   const groupId = wantVideo && wantAudio ? uid('g') : null;
   const duration = mediaLength(media);
   const events = [];
-  if (wantVideo) {
-    const track = pickTrack('video');
-    events.push({ id: uid('e'), trackId: track.id, mediaId: media.id, start, inPoint: 0, duration, groupId });
-  }
-  if (wantAudio) {
-    const track = pickTrack('audio');
-    events.push({ id: uid('e'), trackId: track.id, mediaId: media.id, start, inPoint: 0, duration, groupId });
-  }
+  const newEvent = (track) => ({
+    id: uid('e'), trackId: track.id, mediaId: media.id, start, inPoint: 0, duration, groupId, ...EVENT_DEFAULTS,
+  });
+  if (wantVideo) events.push(newEvent(pickTrack('video')));
+  if (wantAudio) events.push(newEvent(pickTrack('audio')));
   return { ...p, events: [...p.events, ...events] };
 }
 
@@ -123,8 +141,9 @@ export function splitEvents(project, t, selection) {
       if (!newGroups.has(e.groupId)) newGroups.set(e.groupId, uid('g'));
       groupId = newGroups.get(e.groupId);
     }
-    added.push({ ...e, id: uid('e'), start: t, inPoint: e.inPoint + left, duration: e.duration - left, groupId });
-    return { ...e, duration: left };
+    // El fundido de entrada se queda en la parte izquierda y el de salida pasa a la derecha.
+    added.push({ ...e, id: uid('e'), start: t, inPoint: e.inPoint + left, duration: e.duration - left, groupId, fadeIn: 0 });
+    return { ...e, duration: left, fadeOut: 0 };
   });
   return { ...project, events: [...events, ...added] };
 }
@@ -154,7 +173,7 @@ export function deleteTrack(project, trackId) {
 export function serializeProject(project) {
   return {
     format: 'cortex-studio',
-    version: 1,
+    version: 2,
     settings: project.settings,
     media: project.media.map(({ id, path, name }) => ({ id, path, name })),
     tracks: project.tracks,
@@ -168,7 +187,7 @@ export function loadProject(data, media) {
     settings: { ...DEFAULT_SETTINGS, ...data.settings },
     media,
     tracks: data.tracks.map((t) => ({ muted: false, solo: false, volume: 0, ...t })),
-    events: data.events,
+    events: data.events.map((e) => ({ ...EVENT_DEFAULTS, ...e })),
   };
 }
 
@@ -182,6 +201,6 @@ export function renderPayload(project) {
       muted: !isTrackActive(t, project.tracks),
       gain: volumeToGain(t.volume ?? 0),
     })),
-    events: project.events,
+    events: project.events.map((e) => ({ ...e, ...eventFades(e), gain: volumeToGain(e.volume ?? 0) })),
   };
 }

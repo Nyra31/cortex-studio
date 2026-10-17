@@ -19,6 +19,9 @@ const SHORTCUTS = [
   ['Alt+Intro', 'Propiedades del proyecto'],
   ['Doble clic en una pista', 'Cambiar el nombre de la pista'],
   ['Doble clic en el volumen', 'Volver a 0 dB'],
+  ['Arrastrar esquina superior', 'Fundido de entrada / salida del evento'],
+  ['Doble clic en la esquina', 'Quitar el fundido'],
+  ['Arrastrar línea de volumen', 'Volumen del evento de audio (doble clic: 0 dB)'],
 ];
 
 export default function ShortcutsDialog({ onClose }) {

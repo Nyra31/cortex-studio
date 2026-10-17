@@ -643,6 +643,7 @@ input[type='number'] {
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
 }
 .event-body {
+  position: relative;
   flex: 1;
   min-height: 0;
   background-repeat: repeat-x;
@@ -679,6 +680,59 @@ input[type='number'] {
 }
 .handle:hover {
   background: rgba(255, 255, 255, 0.22);
+}
+.event-gain {
+  color: #ffd27a;
+}
+.envelope {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.envelope polygon {
+  fill: rgba(0, 0, 0, 0.45);
+}
+.envelope polyline {
+  fill: none;
+  stroke: #6fc2ff;
+  stroke-width: 1.5;
+}
+/* Tirador de fundido: cuadradito en la barra de título, se arrastra hacia dentro del evento. */
+.fade-handle {
+  position: absolute;
+  top: 4px;
+  width: 8px;
+  height: 8px;
+  z-index: 3;
+  cursor: ew-resize;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0;
+}
+.event:hover .fade-handle,
+.fade-handle.active {
+  opacity: 1;
+}
+.fade-handle.active {
+  background: #6fc2ff;
+}
+/* Línea de volumen del evento: franja invisible que se arrastra en vertical. */
+.gain-handle {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  height: 6px;
+  z-index: 2;
+  cursor: ns-resize;
+}
+.gain-handle:hover::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 2px;
+  background: #6fc2ff;
 }
 
 .cursor-line {

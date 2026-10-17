@@ -35,7 +35,9 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 - **Línea de tiempo multipista:** pistas de video arriba y de audio abajo. Un video con sonido se coloca como dos eventos agrupados (video y audio) que se mueven y recortan juntos.
 - **Pistas:** silencio, solo, volumen (pistas de audio) y cambio de nombre con doble clic.
 - **Edición:** arrastrar para mover (también a otra pista), recortar por los bordes, dividir en el cursor y eliminar. Incluye ajuste magnético a bordes y al cursor, y deshacer/rehacer.
-- **Vista previa** sincronizada con la línea de tiempo y con la proporción del proyecto. Si varias pistas de video coinciden, se ve la de más arriba.
+- **Fundidos de entrada y salida:** se arrastran desde los cuadraditos de las esquinas superiores del evento. En audio bajan el volumen; en video hacen aparecer o desaparecer el evento sobre lo que haya debajo (otra pista o negro). Al dividir, cada parte conserva su fundido.
+- **Volumen por evento:** en los eventos de audio, arrastrar en vertical la línea superior (de -∞ a 0 dB). El valor aparece en el título del evento y la forma de onda se escala. Se suma al volumen de la pista.
+- **Vista previa** sincronizada con la línea de tiempo y con la proporción del proyecto. Si varias pistas de video coinciden, se ve la de más arriba (y la de debajo mientras la de arriba se funde).
 - **Forma de onda** en los eventos de audio y **miniaturas** en los de video.
 - **Proyectos** guardados como archivos `.cortex` (JSON con las rutas de los medios y los ajustes).
 - **Renderizado** a MP4 (H.264 + AAC) con la resolución y velocidad del proyecto, al 100 %, 75 % o 50 % del tamaño.
@@ -54,6 +56,8 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 | ← / → | Fotograma anterior / siguiente |
 | Inicio / Fin | Ir al principio / al final |
 | Ctrl+clic | Añadir o quitar eventos de la selección |
+| Doble clic en un tirador de fundido | Quitar el fundido |
+| Doble clic en la línea de volumen del evento | Volver a 0 dB |
 | F8 | Activar o desactivar el ajuste |
 | Ctrl+Q / Ctrl+Mayús+Q | Insertar pista de audio / de video |
 | Ctrl+N / Ctrl+O / Ctrl+S | Nuevo / abrir / guardar |
@@ -77,8 +81,9 @@ src/components/         Menús, línea de tiempo, vista previa, medios, transpor
 ## Limitaciones conocidas
 
 - La vista previa usa el reproductor de Chromium. Algunos códecs (por ejemplo, ciertos HEVC/H.265, ProRes o archivos AVI antiguos) se importan y se renderizan bien, pero puede que no se vean en la vista previa.
-- Todavía no hay transiciones, efectos, títulos ni volumen por evento. Son los siguientes pasos naturales.
-- El volumen de pista va de -∞ a 0 dB (no amplifica).
+- Todavía no hay transiciones, efectos ni títulos. Son los siguientes pasos naturales.
+- El volumen de pista y el de evento van de -∞ a 0 dB (no amplifican).
+- Los fundidos son lineales (no se puede elegir la curva).
 
 ## Solución de problemas
 

@@ -2,12 +2,16 @@ import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayou
 import Waveform from './Waveform.jsx';
 import Icon from './Icon.jsx';
 import { formatRuler, formatTimecode } from '../util/time.js';
-import { MIN_EVENT, MIN_VOLUME_DB, deleteTrack, isTrackActive, placeMedia, trackColor } from '../state/project.js';
+import {
+  EVENT_DEFAULTS, MIN_EVENT, MIN_VOLUME_DB, deleteTrack, eventFades, formatVolume, gainToVolume, isTrackActive,
+  placeMedia, trackColor, volumeToGain,
+} from '../state/project.js';
 
 export const MEDIA_MIME = 'application/x-cortex-media';
 const HEADER_W = 230;
 const TRACK_H = { video: 64, audio: 72 };
 const TITLE_H = 16;
+const bodyHeight = (type) => TRACK_H[type] - TITLE_H - 6;
 const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
 export const MIN_PPS = 1;
 export const MAX_PPS = 800;
@@ -54,9 +58,30 @@ const Ruler = memo(function Ruler({ pps, time, scrollLeft, viewWidth, laneWidth,
   );
 });
 
-const EventView = memo(function EventView({ ev, media, type, selected, pps, onDown }) {
+// Envolvente del evento: fundidos en las esquinas y, en audio, la línea de ganancia. Lo que queda por encima se oscurece.
+function Envelope({ width, height, gainY, fadeIn, fadeOut }) {
+  const a = fadeIn;
+  const b = width - fadeOut;
+  const line = `0,${height} ${a},${gainY} ${b},${gainY} ${width},${height}`;
+  return (
+    <svg className="envelope" width={width} height={height}>
+      <polygon points={`0,0 ${line} ${width},0`} />
+      <polyline points={line} />
+    </svg>
+  );
+}
+
+const EventView = memo(function EventView({ ev, media, type, selected, pps, onDown, onReset }) {
   const width = Math.max(3, ev.duration * pps);
+  const height = bodyHeight(type);
+  const { fadeIn, fadeOut } = eventFades(ev);
+  const volume = ev.volume ?? 0;
+  const gain = type === 'audio' ? volumeToGain(volume) : 1;
+  const gainY = (1 - gain) * height;
+  const showEnvelope = fadeIn > 0 || fadeOut > 0 || gain < 1;
   const bodyStyle = type === 'video' && media?.thumb ? { backgroundImage: `url(${media.thumb})` } : undefined;
+  const name = media ? media.name : '?';
+  const fadeHandleX = (x) => Math.min(width - 8, Math.max(0, x - 4));
   return (
     <div
       className={`event ${type}${selected ? ' selected' : ''}${media?.missing ? ' missing' : ''}`}
@@ -64,7 +89,10 @@ const EventView = memo(function EventView({ ev, media, type, selected, pps, onDo
       onPointerDown={(e) => onDown(e, ev, 'move')}
       title={media?.missing ? `Archivo no encontrado: ${media.path}` : media?.name}
     >
-      <div className="event-title">{media ? media.name : '?'}</div>
+      <div className="event-title">
+        {name}
+        {type === 'audio' && volume !== 0 && <span className="event-gain"> · {formatVolume(volume)}</span>}
+      </div>
       <div className="event-body" style={bodyStyle}>
         {type === 'audio' && media?.peaks && (
           <Waveform
@@ -73,12 +101,39 @@ const EventView = memo(function EventView({ ev, media, type, selected, pps, onDo
             inPoint={ev.inPoint}
             duration={ev.duration}
             width={width}
-            height={TRACK_H.audio - TITLE_H - 6}
+            height={height}
+            gain={gain}
+            fadeIn={fadeIn}
+            fadeOut={fadeOut}
           />
         )}
+        {showEnvelope && <Envelope width={width} height={height} gainY={gainY} fadeIn={fadeIn * pps} fadeOut={fadeOut * pps} />}
       </div>
       <div className="handle left" onPointerDown={(e) => onDown(e, ev, 'trimL')} />
       <div className="handle right" onPointerDown={(e) => onDown(e, ev, 'trimR')} />
+      {type === 'audio' && (
+        <div
+          className="gain-handle"
+          style={{ top: TITLE_H + gainY - 3 }}
+          title={`Volumen del evento: ${formatVolume(volume)} (doble clic: 0 dB)`}
+          onPointerDown={(e) => onDown(e, ev, 'gain')}
+          onDoubleClick={() => onReset(ev, 'gain')}
+        />
+      )}
+      <div
+        className={`fade-handle${fadeIn > 0 ? ' active' : ''}`}
+        style={{ left: fadeHandleX(fadeIn * pps) }}
+        title="Fundido de entrada (doble clic: quitar)"
+        onPointerDown={(e) => onDown(e, ev, 'fadeIn')}
+        onDoubleClick={() => onReset(ev, 'fadeIn')}
+      />
+      <div
+        className={`fade-handle${fadeOut > 0 ? ' active' : ''}`}
+        style={{ left: fadeHandleX(width - fadeOut * pps) }}
+        title="Fundido de salida (doble clic: quitar)"
+        onPointerDown={(e) => onDown(e, ev, 'fadeOut')}
+        onDoubleClick={() => onReset(ev, 'fadeOut')}
+      />
     </div>
   );
 });
@@ -117,7 +172,7 @@ function TrackName({ name, onRename }) {
 
 function VolumeSlider({ value, onChange }) {
   const first = useRef(true);
-  const label = value <= MIN_VOLUME_DB ? '-∞ dB' : `${value.toFixed(1).replace('.', ',')} dB`;
+  const label = formatVolume(value);
   return (
     <div className="track-slider" title="Volumen de la pista (doble clic: 0 dB)">
       <span className="slider-label">Vol:</span>
@@ -142,7 +197,7 @@ function VolumeSlider({ value, onChange }) {
 
 const TrackRow = memo(function TrackRow({
   track, number, color, inactive, events, mediaById, selectedSet, pps, laneWidth, rowRef,
-  onLaneDown, onEventDown, onDrop, onUpdateTrack, onDelete,
+  onLaneDown, onEventDown, onEventReset, onDrop, onUpdateTrack, onDelete,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
   return (
@@ -192,6 +247,7 @@ const TrackRow = memo(function TrackRow({
             selected={selectedSet.has(ev.id)}
             pps={pps}
             onDown={onEventDown}
+            onReset={onEventReset}
           />
         ))}
       </div>
@@ -296,8 +352,8 @@ const Timeline = forwardRef(function Timeline({
     const activeSelection = alreadySelected ? sel : group;
     if (!alreadySelected) setSelection(group);
 
-    // Mover afecta a toda la selección; recortar solo al evento y a su grupo.
-    const affected = new Set(mode === 'move' ? activeSelection : group);
+    // Mover afecta a toda la selección; recortar y fundir, al evento y a su grupo; el volumen, solo al evento.
+    const affected = new Set(mode === 'move' ? activeSelection : mode === 'gain' ? [ev.id] : group);
     const origin = new Map(p.events.filter((x) => affected.has(x.id)).map((x) => [x.id, x]));
     const primary = origin.get(ev.id);
     const mediaOf = (o) => p.media.find((m) => m.id === o.mediaId);
@@ -350,6 +406,16 @@ const Timeline = forwardRef(function Timeline({
           inPoint: mediaOf(o)?.isImage ? 0 : o.inPoint + dt,
           duration: o.duration - dt,
         });
+      } else if (mode === 'fadeIn' || mode === 'fadeOut') {
+        update = (o) => {
+          const fades = eventFades(o);
+          return mode === 'fadeIn'
+            ? { fadeIn: Math.min(o.duration - fades.fadeOut, Math.max(0, fades.fadeIn + dt)) }
+            : { fadeOut: Math.min(o.duration - fades.fadeIn, Math.max(0, fades.fadeOut - dt)) };
+        };
+      } else if (mode === 'gain') {
+        const dy = (me.clientY - startY) / bodyHeight(primaryType);
+        update = (o) => ({ volume: gainToVolume(Math.min(1, Math.max(0, volumeToGain(o.volume ?? 0) - dy))) });
       } else {
         dt = snapDelta(dt, [primary.start + primary.duration], points, threshold);
         for (const o of origin.values()) {
@@ -373,6 +439,16 @@ const Timeline = forwardRef(function Timeline({
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   }, [setProject, setSelection, snapPoints, trackAt]);
+
+  // Doble clic en un tirador: quita el fundido (en todo el grupo) o devuelve el volumen a 0 dB.
+  const onEventReset = useCallback((ev, mode) => {
+    const field = mode === 'gain' ? 'volume' : mode;
+    const isTarget = (x) => x.id === ev.id || (mode !== 'gain' && ev.groupId && x.groupId === ev.groupId);
+    setProject((p) => {
+      if (!p.events.some((x) => isTarget(x) && x[field] !== EVENT_DEFAULTS[field])) return p;
+      return { ...p, events: p.events.map((x) => (isTarget(x) ? { ...x, [field]: EVENT_DEFAULTS[field] } : x)) };
+    });
+  }, [setProject]);
 
   const onDrop = useCallback((e, target) => {
     e.preventDefault();
@@ -486,6 +562,7 @@ const Timeline = forwardRef(function Timeline({
               rowRef={rowRefFor(track.id)}
               onLaneDown={onLaneDown}
               onEventDown={onEventDown}
+              onEventReset={onEventReset}
               onDrop={onDrop}
               onUpdateTrack={onUpdateTrack}
               onDelete={onDeleteTrack}

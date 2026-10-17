@@ -121,6 +121,22 @@ function frameRate(fps) {
   return String(fps);
 }
 
+// Fundidos del evento en su tiempo local (empieza en 0). En video se funde la transparencia,
+// así que el evento aparece sobre lo que haya debajo (otra pista o negro).
+function videoFades(e) {
+  const out = [];
+  if (e.fadeIn > 0) out.push(`fade=t=in:st=0:d=${num(e.fadeIn)}:alpha=1`);
+  if (e.fadeOut > 0) out.push(`fade=t=out:st=${num(e.duration - e.fadeOut)}:d=${num(e.fadeOut)}:alpha=1`);
+  return out.length ? `,format=yuva420p,${out.join(',')}` : '';
+}
+
+function audioFades(e) {
+  let out = '';
+  if (e.fadeIn > 0) out += `,afade=t=in:st=0:d=${num(e.fadeIn)}`;
+  if (e.fadeOut > 0) out += `,afade=t=out:st=${num(e.duration - e.fadeOut)}:d=${num(e.fadeOut)}`;
+  return out;
+}
+
 // Construye los argumentos de FFmpeg y el grafo de filtros para renderizar la línea de tiempo.
 function buildRender(project, settings, outPath) {
   const { width: W, height: H, crf } = settings;
@@ -150,7 +166,7 @@ function buildRender(project, settings, outPath) {
     const i = n++;
     filters.push(
       `[${i}:v]setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
-        `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},setpts=PTS+${num(e.start)}/TB[v${i}]`,
+        `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps}${videoFades(e)},setpts=PTS+${num(e.start)}/TB[v${i}]`,
       `[${last}][v${i}]overlay=eof_action=pass:enable='between(t,${num(e.start)},${num(e.start + e.duration)})'[o${i}]`,
     );
     last = `o${i}`;
@@ -162,13 +178,13 @@ function buildRender(project, settings, outPath) {
   const mix = ['[abase]'];
   for (const e of usable.filter((ev) => tracks.get(ev.trackId).type === 'audio')) {
     const m = media.get(e.mediaId);
-    const gain = tracks.get(e.trackId).gain ?? 1;
+    const gain = (tracks.get(e.trackId).gain ?? 1) * (e.gain ?? 1);
     if (!m.hasAudio || gain === 0) continue;
     inputs.push('-ss', num(e.inPoint), '-t', num(e.duration), '-i', m.path);
     const i = n++;
     const delay = Math.round(e.start * 1000);
     filters.push(
-      `[${i}:a]asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,` +
+      `[${i}:a]asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo${audioFades(e)},` +
         `adelay=delays=${delay}:all=1${gain === 1 ? '' : `,volume=${gain.toFixed(4)}`}[a${i}]`,
     );
     mix.push(`[a${i}]`);
