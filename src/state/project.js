@@ -1,12 +1,16 @@
 // Modelo del proyecto y operaciones de edición (funciones puras).
+import { DEFAULT_TRANSITION } from './transitions.js';
+
 //
 // project = {
 //   settings: { width, height, fps },
 //   media:  [{ id, path, name, duration, width, height, fps, hasVideo, hasAudio, isImage, thumb, peaks, peaksPerSecond, missing }],
 //   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume }],  // ordenadas de arriba a abajo; volume en dB
-//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut }],
+//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition }],
 // }
 // Tiempos en segundos. volume del evento en dB (solo afecta al audio); fadeIn/fadeOut = duración de los fundidos.
+// Si un evento empieza encima del final de otro de su misma pista, el solapamiento es una transición:
+// en video, la de `transition` del evento que entra (null = disolución cruzada); en audio, un fundido cruzado.
 
 export const MIN_EVENT = 0.04;
 export const IMAGE_DURATION = 5;
@@ -48,17 +52,65 @@ export const volumeToGain = (db) => (db <= MIN_VOLUME_DB ? 0 : 10 ** (db / 20));
 export const gainToVolume = (gain) => (gain <= volumeToGain(MIN_VOLUME_DB) ? MIN_VOLUME_DB : Math.min(0, 20 * Math.log10(gain)));
 export const formatVolume = (db) => (db <= MIN_VOLUME_DB ? '-∞ dB' : `${db.toFixed(1).replace('.', ',')} dB`);
 
-export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0 };
+export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0, transition: null };
 
-// Fundidos efectivos: si el evento se acorta, se reducen para que no se solapen.
+// Fundidos guardados, reducidos si el evento se ha acortado para que no se solapen.
 export function eventFades(e) {
   const fadeIn = Math.min(e.fadeIn || 0, e.duration);
   return { fadeIn, fadeOut: Math.min(e.fadeOut || 0, e.duration - fadeIn) };
 }
 
+// Solapamientos entre eventos de una misma pista y fundidos que se aplican de verdad:
+// - incoming: B.id → { from: A, duration, type }   (B empieza dentro de A y termina después)
+// - outgoing: A.id → { to: B, duration }
+// - fades: id → { fadeIn, fadeOut }. En audio el solapamiento es un fundido cruzado; en video
+//   la transición sustituye a los fundidos de transparencia de esos bordes.
+// - transitions: transiciones de video [{ trackId, from, to, start, duration, type }]
+export function resolveTimeline(project) {
+  const trackType = new Map(project.tracks.map((t) => [t.id, t.type]));
+  const byTrack = new Map();
+  for (const e of project.events) {
+    if (!byTrack.has(e.trackId)) byTrack.set(e.trackId, []);
+    byTrack.get(e.trackId).push(e);
+  }
+  const incoming = new Map();
+  const outgoing = new Map();
+  const transitions = [];
+  for (const [trackId, list] of byTrack) {
+    list.sort((a, b) => a.start - b.start);
+    for (let j = 0; j < list.length; j++) {
+      const b = list[j];
+      let from = null;
+      for (let i = 0; i < j; i++) {
+        const a = list[i];
+        const aEnd = a.start + a.duration;
+        if (a.start < b.start && aEnd > b.start + MIN_EVENT / 2 && aEnd < b.start + b.duration) from = a;
+      }
+      if (!from) continue;
+      const duration = from.start + from.duration - b.start;
+      const type = b.transition || DEFAULT_TRANSITION;
+      incoming.set(b.id, { from, duration, type });
+      if (!outgoing.has(from.id) || outgoing.get(from.id).duration < duration) outgoing.set(from.id, { to: b, duration });
+      if (trackType.get(trackId) === 'video') transitions.push({ trackId, from: from.id, to: b.id, start: b.start, duration, type });
+    }
+  }
+  const fades = new Map();
+  for (const e of project.events) {
+    const stored = eventFades(e);
+    const audio = trackType.get(e.trackId) === 'audio';
+    const inc = incoming.get(e.id);
+    const out = outgoing.get(e.id);
+    const fadeIn = inc ? (audio ? inc.duration : 0) : stored.fadeIn;
+    let fadeOut = out ? (audio ? out.duration : 0) : stored.fadeOut;
+    fadeOut = Math.min(fadeOut, e.duration - fadeIn);
+    fades.set(e.id, { fadeIn, fadeOut });
+  }
+  return { incoming, outgoing, fades, transitions };
+}
+
 // Factor de 0 a 1 que aplican los fundidos en el instante t (lineal, igual que fade y afade de FFmpeg).
-export function fadeFactor(e, t) {
-  const { fadeIn, fadeOut } = eventFades(e);
+export function fadeFactor(e, t, fades = eventFades(e)) {
+  const { fadeIn, fadeOut } = fades;
   const local = t - e.start;
   let f = 1;
   if (fadeIn > 0 && local < fadeIn) f = Math.min(f, Math.max(0, local / fadeIn));
@@ -142,10 +194,31 @@ export function splitEvents(project, t, selection) {
       groupId = newGroups.get(e.groupId);
     }
     // El fundido de entrada se queda en la parte izquierda y el de salida pasa a la derecha.
-    added.push({ ...e, id: uid('e'), start: t, inPoint: e.inPoint + left, duration: e.duration - left, groupId, fadeIn: 0 });
+    added.push({ ...e, id: uid('e'), start: t, inPoint: e.inPoint + left, duration: e.duration - left, groupId, fadeIn: 0, transition: null });
     return { ...e, duration: left, fadeOut: 0 };
   });
   return { ...project, events: [...events, ...added] };
+}
+
+// Evento que entra en el solapamiento de la pista que contiene el instante t (o null si no hay ninguno).
+export function overlapAt(project, trackId, t) {
+  const { incoming } = resolveTimeline(project);
+  let target = null;
+  for (const e of project.events) {
+    const inc = e.trackId === trackId && incoming.get(e.id);
+    if (inc && t >= e.start - 0.05 && t <= e.start + inc.duration + 0.05) target = e;
+  }
+  return target;
+}
+
+// Asigna una transición al solapamiento de la pista que contiene el instante t.
+// Devuelve el mismo proyecto si ahí no hay ningún solapamiento.
+export function setTransitionAt(project, trackId, t, type) {
+  const target = overlapAt(project, trackId, t);
+  if (!target) return project;
+  const value = type === DEFAULT_TRANSITION ? null : type;
+  if ((target.transition || null) === value) return project;
+  return { ...project, events: project.events.map((e) => (e.id === target.id ? { ...e, transition: value } : e)) };
 }
 
 export function deleteEvents(project, ids) {
@@ -173,7 +246,7 @@ export function deleteTrack(project, trackId) {
 export function serializeProject(project) {
   return {
     format: 'cortex-studio',
-    version: 2,
+    version: 3,
     settings: project.settings,
     media: project.media.map(({ id, path, name }) => ({ id, path, name })),
     tracks: project.tracks,
@@ -191,8 +264,10 @@ export function loadProject(data, media) {
   };
 }
 
-// Lo mínimo que necesita el proceso principal para renderizar (con el silencio/solo ya resuelto).
+// Lo mínimo que necesita el proceso principal para renderizar (con el silencio/solo, los fundidos
+// y las transiciones ya resueltos).
 export function renderPayload(project) {
+  const { fades, transitions } = resolveTimeline(project);
   return {
     media: project.media.map(({ id, path, isImage, hasVideo, hasAudio, missing }) => ({ id, path, isImage, hasVideo, hasAudio, missing })),
     tracks: project.tracks.map((t) => ({
@@ -201,6 +276,7 @@ export function renderPayload(project) {
       muted: !isTrackActive(t, project.tracks),
       gain: volumeToGain(t.volume ?? 0),
     })),
-    events: project.events.map((e) => ({ ...e, ...eventFades(e), gain: volumeToGain(e.volume ?? 0) })),
+    events: project.events.map((e) => ({ ...e, ...fades.get(e.id), gain: volumeToGain(e.volume ?? 0) })),
+    transitions,
   };
 }

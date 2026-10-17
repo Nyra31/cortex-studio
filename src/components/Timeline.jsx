@@ -4,8 +4,9 @@ import Icon from './Icon.jsx';
 import { formatRuler, formatTimecode } from '../util/time.js';
 import {
   EVENT_DEFAULTS, MIN_EVENT, MIN_VOLUME_DB, deleteTrack, eventFades, formatVolume, gainToVolume, isTrackActive,
-  placeMedia, trackColor, volumeToGain,
+  overlapAt, placeMedia, resolveTimeline, setTransitionAt, trackColor, volumeToGain,
 } from '../state/project.js';
+import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
 
 export const MEDIA_MIME = 'application/x-cortex-media';
 const HEADER_W = 230;
@@ -71,10 +72,31 @@ function Envelope({ width, height, gainY, fadeIn, fadeOut }) {
   );
 }
 
-const EventView = memo(function EventView({ ev, media, type, selected, pps, onDown, onReset }) {
+// Zona de solapamiento al principio del evento que entra: aspa de la transición y su nombre.
+function TransitionZone({ width, height, label, onReset }) {
+  return (
+    <div
+      className="transition-zone"
+      style={{ top: TITLE_H, width, height }}
+      title={onReset ? `${label} (doble clic: volver a disolución cruzada)` : label}
+      onDoubleClick={onReset}
+    >
+      <svg width={width} height={height}>
+        <line x1={0} y1={0} x2={width} y2={height} />
+        <line x1={0} y1={height} x2={width} y2={0} />
+      </svg>
+      {width > 40 && <span>{label}</span>}
+    </div>
+  );
+}
+
+// fadeIn/fadeOut: fundidos efectivos (en audio incluyen los fundidos cruzados de los solapamientos).
+// overlapIn/overlapOut: segundos solapados con el evento anterior/siguiente de la pista.
+const EventView = memo(function EventView({
+  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset,
+}) {
   const width = Math.max(3, ev.duration * pps);
   const height = bodyHeight(type);
-  const { fadeIn, fadeOut } = eventFades(ev);
   const volume = ev.volume ?? 0;
   const gain = type === 'audio' ? volumeToGain(volume) : 1;
   const gainY = (1 - gain) * height;
@@ -109,6 +131,14 @@ const EventView = memo(function EventView({ ev, media, type, selected, pps, onDo
         )}
         {showEnvelope && <Envelope width={width} height={height} gainY={gainY} fadeIn={fadeIn * pps} fadeOut={fadeOut * pps} />}
       </div>
+      {overlapIn > 0 && (
+        <TransitionZone
+          width={Math.min(width, overlapIn * pps)}
+          height={height}
+          label={type === 'video' ? transitionLabel(transition) : 'Fundido cruzado'}
+          onReset={type === 'video' && transition ? () => onReset(ev, 'transition') : undefined}
+        />
+      )}
       <div className="handle left" onPointerDown={(e) => onDown(e, ev, 'trimL')} />
       <div className="handle right" onPointerDown={(e) => onDown(e, ev, 'trimR')} />
       {type === 'audio' && (
@@ -120,20 +150,24 @@ const EventView = memo(function EventView({ ev, media, type, selected, pps, onDo
           onDoubleClick={() => onReset(ev, 'gain')}
         />
       )}
-      <div
-        className={`fade-handle${fadeIn > 0 ? ' active' : ''}`}
-        style={{ left: fadeHandleX(fadeIn * pps) }}
-        title="Fundido de entrada (doble clic: quitar)"
-        onPointerDown={(e) => onDown(e, ev, 'fadeIn')}
-        onDoubleClick={() => onReset(ev, 'fadeIn')}
-      />
-      <div
-        className={`fade-handle${fadeOut > 0 ? ' active' : ''}`}
-        style={{ left: fadeHandleX(width - fadeOut * pps) }}
-        title="Fundido de salida (doble clic: quitar)"
-        onPointerDown={(e) => onDown(e, ev, 'fadeOut')}
-        onDoubleClick={() => onReset(ev, 'fadeOut')}
-      />
+      {!overlapIn && (
+        <div
+          className={`fade-handle${fadeIn > 0 ? ' active' : ''}`}
+          style={{ left: fadeHandleX(fadeIn * pps) }}
+          title="Fundido de entrada (doble clic: quitar)"
+          onPointerDown={(e) => onDown(e, ev, 'fadeIn')}
+          onDoubleClick={() => onReset(ev, 'fadeIn')}
+        />
+      )}
+      {!overlapOut && (
+        <div
+          className={`fade-handle${fadeOut > 0 ? ' active' : ''}`}
+          style={{ left: fadeHandleX(width - fadeOut * pps) }}
+          title="Fundido de salida (doble clic: quitar)"
+          onPointerDown={(e) => onDown(e, ev, 'fadeOut')}
+          onDoubleClick={() => onReset(ev, 'fadeOut')}
+        />
+      )}
     </div>
   );
 });
@@ -196,7 +230,7 @@ function VolumeSlider({ value, onChange }) {
 }
 
 const TrackRow = memo(function TrackRow({
-  track, number, color, inactive, events, mediaById, selectedSet, pps, laneWidth, rowRef,
+  track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef,
   onLaneDown, onEventDown, onEventReset, onDrop, onUpdateTrack, onDelete,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
@@ -238,18 +272,27 @@ const TrackRow = memo(function TrackRow({
         onDragOver={allowDrop}
         onDrop={(e) => onDrop(e, track.id)}
       >
-        {events.map((ev) => (
-          <EventView
-            key={ev.id}
-            ev={ev}
-            media={mediaById.get(ev.mediaId)}
-            type={track.type}
-            selected={selectedSet.has(ev.id)}
-            pps={pps}
-            onDown={onEventDown}
-            onReset={onEventReset}
-          />
-        ))}
+        {events.map((ev) => {
+          const fades = resolved.fades.get(ev.id);
+          const inc = resolved.incoming.get(ev.id);
+          return (
+            <EventView
+              key={ev.id}
+              ev={ev}
+              media={mediaById.get(ev.mediaId)}
+              type={track.type}
+              selected={selectedSet.has(ev.id)}
+              pps={pps}
+              fadeIn={fades.fadeIn}
+              fadeOut={fades.fadeOut}
+              overlapIn={inc ? inc.duration : 0}
+              overlapOut={resolved.outgoing.get(ev.id)?.duration ?? 0}
+              transition={inc ? ev.transition : null}
+              onDown={onEventDown}
+              onReset={onEventReset}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -257,7 +300,7 @@ const TrackRow = memo(function TrackRow({
 
 const Timeline = forwardRef(function Timeline({
   project, setProject, selection, setSelection, time, seek, playing,
-  pps, setPps, snap, onDropFiles, footer,
+  pps, setPps, snap, onDropFiles, onMessage, footer,
 }, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -281,6 +324,7 @@ const Timeline = forwardRef(function Timeline({
     for (const list of map.values()) list.sort((a, b) => a.start - b.start);
     return map;
   }, [project.events, project.tracks]);
+  const resolved = useMemo(() => resolveTimeline(project), [project.events, project.tracks]);
   const duration = useMemo(() => project.events.reduce((m, e) => Math.max(m, e.start + e.duration), 0), [project.events]);
   const laneWidth = Math.max(view.width - HEADER_W, (duration + 60) * pps);
 
@@ -443,7 +487,8 @@ const Timeline = forwardRef(function Timeline({
   // Doble clic en un tirador: quita el fundido (en todo el grupo) o devuelve el volumen a 0 dB.
   const onEventReset = useCallback((ev, mode) => {
     const field = mode === 'gain' ? 'volume' : mode;
-    const isTarget = (x) => x.id === ev.id || (mode !== 'gain' && ev.groupId && x.groupId === ev.groupId);
+    const onlyEvent = mode === 'gain' || mode === 'transition';
+    const isTarget = (x) => x.id === ev.id || (!onlyEvent && ev.groupId && x.groupId === ev.groupId);
     setProject((p) => {
       if (!p.events.some((x) => isTarget(x) && x[field] !== EVENT_DEFAULTS[field])) return p;
       return { ...p, events: p.events.map((x) => (isTarget(x) ? { ...x, [field]: EVENT_DEFAULTS[field] } : x)) };
@@ -452,6 +497,21 @@ const Timeline = forwardRef(function Timeline({
 
   const onDrop = useCallback((e, target) => {
     e.preventDefault();
+    const transition = e.dataTransfer.getData(TRANSITION_MIME);
+    if (transition) {
+      const { project: p } = live.current;
+      const at = timeAt(e.clientX);
+      const track = p.tracks.find((tr) => tr.id === target);
+      if (!track || track.type !== 'video') {
+        onMessage('Las transiciones se colocan en pistas de video. En audio, los solapamientos ya son fundidos cruzados.');
+      } else if (!overlapAt(p, target, at)) {
+        onMessage('Para crear una transición, solapa el final de un evento con el principio de otro en la misma pista y suéltala sobre el solapamiento.');
+      } else {
+        setProject((cur) => setTransitionAt(cur, target, at, transition));
+        onMessage('');
+      }
+      return;
+    }
     let t = timeAt(e.clientX);
     const points = snapPoints();
     const threshold = 8 / live.current.pps;
@@ -464,7 +524,7 @@ const Timeline = forwardRef(function Timeline({
     } else if (e.dataTransfer.files.length) {
       onDropFiles([...e.dataTransfer.files], t, target);
     }
-  }, [onDropFiles, setProject, snapPoints, timeAt]);
+  }, [onDropFiles, onMessage, setProject, snapPoints, timeAt]);
 
   const onUpdateTrack = useCallback((trackId, changes, record) => {
     setProject((p) => ({ ...p, tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, ...changes } : t)) }), record);
@@ -555,6 +615,7 @@ const Timeline = forwardRef(function Timeline({
               color={trackColor(index)}
               inactive={!isTrackActive(track, project.tracks)}
               events={eventsByTrack.get(track.id)}
+              resolved={resolved}
               mediaById={mediaById}
               selectedSet={selectedSet}
               pps={pps}

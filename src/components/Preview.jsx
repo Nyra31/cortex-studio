@@ -1,32 +1,45 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import { mediaUrl, frameNumber, formatTimecode } from '../util/time.js';
-import { fadeFactor, formatFps, isTrackActive, volumeToGain } from '../state/project.js';
+import { fadeFactor, formatFps, isTrackActive, resolveTimeline, volumeToGain } from '../state/project.js';
+import { transitionInfo } from '../state/transitions.js';
+import { Compositor } from '../preview/compositor.js';
 
 const DRIFT = 0.3;
+const PRELOAD = 2; // segundos antes de que empiece un evento se prepara su <video>
+const KEEP = 1; // y después de que termine se conserva
 
-// Capas visibles en t, de arriba a abajo: en cada pista de video activa, el evento que empieza más tarde.
-// Se baja de pista mientras la capa de encima esté fundiéndose (opacidad < 1).
-function visibleLayers(project, mediaById, t) {
+// Capas de video en t, de abajo a arriba. En cada pista activa: la transición en curso o,
+// si no hay, el evento que empieza más tarde con la opacidad de sus fundidos.
+function videoLayers(project, mediaById, resolved, eventsById, t) {
+  const usable = (e) => {
+    const m = e && mediaById.get(e.mediaId);
+    return m && !m.missing ? m : null;
+  };
   const layers = [];
-  for (const track of project.tracks) {
-    if (track.type !== 'video' || !isTrackActive(track, project.tracks)) continue;
+  const tracks = project.tracks.filter((tr) => tr.type === 'video' && isTrackActive(tr, project.tracks)).reverse();
+  for (const track of tracks) {
+    const tr = resolved.transitions.find((x) => x.trackId === track.id && x.start <= t && t < x.start + x.duration);
+    if (tr) {
+      const from = eventsById.get(tr.from);
+      const to = eventsById.get(tr.to);
+      if (usable(from) && usable(to)) {
+        layers.push({ from, to, type: transitionInfo(tr.type).index, progress: 1 - (t - tr.start) / tr.duration });
+        continue;
+      }
+    }
     let best = null;
     for (const e of project.events) {
       if (e.trackId === track.id && e.start <= t && t < e.start + e.duration && (!best || e.start >= best.start)) best = e;
     }
-    const media = best && mediaById.get(best.mediaId);
-    if (!media || media.missing) continue;
-    // Un mismo archivo solo tiene un <video>: si ya está en una capa superior, no se repite.
-    if (!media.isImage && layers.some((l) => l.media.id === media.id)) continue;
-    const opacity = fadeFactor(best, t);
-    layers.push({ event: best, media, opacity });
-    if (opacity >= 1) break;
+    if (!usable(best)) continue;
+    const opacity = fadeFactor(best, t, resolved.fades.get(best.id));
+    if (opacity > 0) layers.push({ event: best, opacity });
   }
   return layers;
 }
 
-function audibleEvents(project, mediaById, t) {
+function audibleEvents(project, mediaById, resolved, t) {
   const gains = new Map(
     project.tracks
       .filter((tr) => tr.type === 'audio' && isTrackActive(tr, project.tracks))
@@ -37,7 +50,10 @@ function audibleEvents(project, mediaById, t) {
       const m = mediaById.get(e.mediaId);
       return gains.get(e.trackId) > 0 && m && m.hasAudio && !m.missing && e.start <= t && t < e.start + e.duration;
     })
-    .map((e) => ({ event: e, gain: gains.get(e.trackId) * volumeToGain(e.volume ?? 0) * fadeFactor(e, t) }));
+    .map((e) => ({
+      event: e,
+      gain: gains.get(e.trackId) * volumeToGain(e.volume ?? 0) * fadeFactor(e, t, resolved.fades.get(e.id)),
+    }));
 }
 
 function sync(el, target, playing) {
@@ -51,32 +67,98 @@ function sync(el, target, playing) {
 }
 
 export default function Preview({ project, time, playing, onOpenProperties }) {
-  const videoEls = useRef(new Map());
+  const canvasRef = useRef(null);
+  const sourcesRef = useRef(null);
+  const videoEls = useRef(new Map()); // id de evento → <video> (silenciado: el sonido sale de las pistas de audio)
+  const imageEls = useRef(new Map()); // id de medio → <img>
   const audioEls = useRef(new Map());
-  const screenRef = useRef(null);
+  const draw = useRef({ dirty: 0, playing: false, layers: [], frame: null });
   const [display, setDisplay] = useState({ width: 0, height: 0 });
+  const [backing, setBacking] = useState({ width: 0, height: 0 });
+  const [glError, setGlError] = useState(null);
   const { width, height, fps } = project.settings;
   const mediaById = useMemo(() => new Map(project.media.map((m) => [m.id, m])), [project.media]);
+  const eventsById = useMemo(() => new Map(project.events.map((e) => [e.id, e])), [project.events]);
+  const resolved = useMemo(() => resolveTimeline(project), [project.events, project.tracks]);
 
-  // Un elemento <video> por archivo usado en pistas de video (silenciado: el sonido sale de las pistas de audio).
-  const videoMedia = useMemo(() => {
-    const videoTracks = new Set(project.tracks.filter((t) => t.type === 'video').map((t) => t.id));
-    const used = new Set(project.events.filter((e) => videoTracks.has(e.trackId)).map((e) => e.mediaId));
-    return project.media.filter((m) => used.has(m.id) && m.hasVideo && !m.isImage && !m.missing);
-  }, [project.media, project.events, project.tracks]);
+  const layers = videoLayers(project, mediaById, resolved, eventsById, time);
 
-  const layers = visibleLayers(project, mediaById, time);
-  const layerOf = (mediaId) => layers.find((l) => l.media.id === mediaId);
-  const layerStyle = (layer) => ({ opacity: layer.opacity, zIndex: layers.length - layers.indexOf(layer) });
+  const invalidate = () => {
+    draw.current.dirty = Math.max(draw.current.dirty, 3);
+  };
+
+  // Elemento que da la imagen de un evento: un <video> propio por evento o un <img> compartido por medio.
+  const sourceFor = (e, create) => {
+    const media = mediaById.get(e.mediaId);
+    if (media.isImage) {
+      let img = imageEls.current.get(media.id);
+      if (!img && create) {
+        img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = invalidate;
+        img.src = mediaUrl(media.path);
+        imageEls.current.set(media.id, img);
+      }
+      return img;
+    }
+    let el = videoEls.current.get(e.id);
+    if (!el && create) {
+      el = document.createElement('video');
+      el.crossOrigin = 'anonymous';
+      el.muted = true;
+      el.preload = 'auto';
+      el.playsInline = true;
+      el.addEventListener('loadeddata', invalidate);
+      el.addEventListener('seeked', invalidate);
+      el.src = mediaUrl(media.path);
+      el.currentTime = e.inPoint;
+      sourcesRef.current.appendChild(el);
+      videoEls.current.set(e.id, el);
+    }
+    return el;
+  };
 
   useEffect(() => {
-    for (const [id, el] of videoEls.current) {
-      const layer = layerOf(id);
-      if (layer) sync(el, layer.event.inPoint + time - layer.event.start, playing);
-      else if (!el.paused) el.pause();
+    // Videos: se preparan los eventos cercanos al cursor, se sincronizan los visibles y se liberan los demás.
+    const visible = new Map();
+    for (const l of layers) {
+      for (const e of l.event ? [l.event] : [l.from, l.to]) visible.set(e.id, e);
     }
+    const videoTracks = new Set(project.tracks.filter((t) => t.type === 'video' && isTrackActive(t, project.tracks)).map((t) => t.id));
+    const needed = new Set();
+    for (const e of project.events) {
+      const m = mediaById.get(e.mediaId);
+      if (!videoTracks.has(e.trackId) || !m || m.missing || m.isImage) continue;
+      if (time < e.start - PRELOAD || time > e.start + e.duration + KEEP) continue;
+      needed.add(e.id);
+      const el = sourceFor(e, true);
+      if (visible.has(e.id)) sync(el, e.inPoint + time - e.start, playing);
+      else {
+        if (!el.paused) el.pause();
+        if (!el.seeking && time < e.start && Math.abs(el.currentTime - e.inPoint) > 0.05) el.currentTime = e.inPoint;
+      }
+    }
+    for (const [id, el] of videoEls.current) {
+      if (needed.has(id)) continue;
+      el.pause();
+      el.removeAttribute('src');
+      el.load();
+      el.remove();
+      videoEls.current.delete(id);
+    }
+    for (const l of layers) if (l.event && mediaById.get(l.event.mediaId).isImage) sourceFor(l.event, true);
 
-    const audible = audibleEvents(project, mediaById, time);
+    draw.current.layers = layers.map((l) =>
+      l.event
+        ? { a: sourceFor(l.event, false), opacity: l.opacity }
+        : { a: sourceFor(l.from, false), b: sourceFor(l.to, false), type: l.type, progress: l.progress },
+    );
+    draw.current.frame = { width, height };
+    draw.current.playing = playing;
+    invalidate();
+
+    // Audio: un elemento por evento, con el volumen de pista, de evento y de los fundidos.
+    const audible = audibleEvents(project, mediaById, resolved, time);
     const audibleIds = new Set(audible.map(({ event }) => event.id));
     for (const { event: e, gain } of audible) {
       const url = mediaUrl(mediaById.get(e.mediaId).path);
@@ -102,16 +184,54 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
     }
   });
 
-  useEffect(() => () => {
-    for (const el of audioEls.current.values()) el.pause();
+  // Bucle de dibujo: cada fotograma mientras se reproduce; en pausa, solo cuando algo cambia.
+  useEffect(() => {
+    let compositor;
+    try {
+      compositor = new Compositor(canvasRef.current);
+    } catch (err) {
+      setGlError(err.message);
+      return undefined;
+    }
+    let raf;
+    const loop = () => {
+      const d = draw.current;
+      if (d.frame && (d.playing || d.dirty > 0)) {
+        d.dirty = Math.max(0, d.dirty - 1);
+        compositor.render(d.frame, d.layers);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      for (const el of videoEls.current.values()) {
+        el.pause();
+        el.remove();
+      }
+      videoEls.current.clear();
+      for (const el of audioEls.current.values()) el.pause();
+    };
   }, []);
 
+  // Resolución interna del lienzo: la del proyecto, sin pasar de la que ocupa en pantalla.
   useEffect(() => {
-    const el = screenRef.current;
-    const ro = new ResizeObserver(() => setDisplay({ width: el.clientWidth, height: el.clientHeight }));
-    ro.observe(el);
+    const canvas = canvasRef.current;
+    const update = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.max(2, Math.min(width, Math.round(canvas.clientWidth * dpr)));
+      const h = Math.max(2, Math.round((w * height) / width));
+      canvas.width = w;
+      canvas.height = h;
+      setDisplay({ width: canvas.clientWidth, height: canvas.clientHeight });
+      setBacking({ width: w, height: h });
+      invalidate();
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(canvas);
     return () => ro.disconnect();
-  }, []);
+  }, [width, height]);
 
   return (
     <div className="preview-window">
@@ -122,27 +242,11 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
         <span className="dock-toolbar-label">Vista previa: completa</span>
       </div>
       <div className="preview">
-        <div className="screen" ref={screenRef} style={{ '--aspect': width / height }}>
-          {videoMedia.map((m) => {
-            const layer = layerOf(m.id);
-            return (
-              <video
-                key={m.id}
-                ref={(el) => (el ? videoEls.current.set(m.id, el) : videoEls.current.delete(m.id))}
-                src={mediaUrl(m.path)}
-                muted
-                preload="auto"
-                className={layer ? 'visible' : ''}
-                style={layer ? layerStyle(layer) : undefined}
-              />
-            );
-          })}
-          {layers
-            .filter((l) => l.media.isImage)
-            .map((l) => (
-              <img key={l.event.id} className="visible" style={layerStyle(l)} src={mediaUrl(l.media.path)} alt="" />
-            ))}
+        <div className="screen" style={{ '--aspect': width / height }}>
+          <canvas ref={canvasRef} />
+          {glError && <div className="preview-error">No se puede mostrar la vista previa: {glError}</div>}
         </div>
+        <div className="preview-sources" ref={sourcesRef} />
       </div>
       <div className="preview-info">
         <div>
@@ -152,7 +256,7 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
           Fotograma: <span>{frameNumber(time, fps)}</span>
         </div>
         <div>
-          Vista previa: <span>{width}×{height}, {formatFps(fps)}p</span>
+          Vista previa: <span>{backing.width}×{backing.height}, {formatFps(fps)}p</span>
         </div>
         <div>
           Pantalla: <span>{display.width}×{display.height}</span>

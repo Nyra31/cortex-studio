@@ -236,6 +236,12 @@ input[type='number'] {
   color: var(--text);
   border-color: var(--edge);
 }
+.dock-tab.clickable {
+  cursor: default;
+}
+.dock-tab.clickable:not(.active):hover {
+  color: var(--text);
+}
 .dock-toolbar {
   display: flex;
   align-items: center;
@@ -337,6 +343,78 @@ input[type='number'] {
   text-overflow: ellipsis;
 }
 
+/* ---- Transiciones ---- */
+
+.transitions-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-lo);
+}
+.transitions-panel .dock-toolbar-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.transitions-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.transition-groups {
+  flex: none;
+  width: 150px;
+  overflow: auto;
+  border-right: 1px solid var(--edge);
+  padding: 2px 0;
+}
+.transition-group {
+  padding: 2px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.transition-group:hover {
+  background: #2e2e2e;
+}
+.transition-group.active {
+  background: var(--accent-dim);
+  color: #fff;
+}
+.transition-grid {
+  flex: 1;
+  overflow: auto;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 6px;
+  align-content: start;
+}
+.transition-item {
+  padding: 3px;
+  border: 1px solid transparent;
+  cursor: grab;
+}
+.transition-item:hover {
+  background: #2e2e2e;
+  border-color: var(--line);
+}
+.transition-item canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border: 1px solid #000;
+}
+.transition-name {
+  margin-top: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- Vista previa ---- */
 
 .preview-window {
@@ -354,6 +432,7 @@ input[type='number'] {
   padding: 6px;
   background: #3a3a3a;
   container-type: size;
+  position: relative;
 }
 .screen {
   position: relative;
@@ -361,17 +440,36 @@ input[type='number'] {
   aspect-ratio: var(--aspect);
   width: min(100cqw, calc(100cqh * var(--aspect)));
 }
-.screen video,
-.screen img {
+.screen canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  visibility: hidden;
 }
-.screen .visible {
-  visibility: visible;
+.preview-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+  color: var(--text-dim);
+}
+/* Videos de los que el compositor toma los fotogramas: presentes en el documento pero invisibles. */
+.preview-sources {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.preview-sources video {
+  width: 2px;
+  height: 2px;
 }
 .preview-info {
   display: grid;
@@ -715,6 +813,35 @@ input[type='number'] {
 }
 .fade-handle.active {
   background: #6fc2ff;
+}
+/* Solapamiento con el evento anterior: aspa de la transición (o del fundido cruzado en audio). */
+.transition-zone {
+  position: absolute;
+  left: 0;
+  z-index: 1;
+  background: rgba(10, 10, 10, 0.35);
+  border-right: 1px dashed rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+}
+.transition-zone svg {
+  position: absolute;
+  inset: 0;
+}
+.transition-zone line {
+  stroke: #ffd27a;
+  stroke-width: 1.2;
+}
+.transition-zone span {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: 2px;
+  font-size: 10px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px #000;
 }
 /* Línea de volumen del evento: franja invisible que se arrastra en vertical. */
 .gain-handle {

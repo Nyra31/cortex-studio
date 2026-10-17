@@ -3,6 +3,7 @@ import MenuBar from './components/MenuBar.jsx';
 import Toolbar from './components/Toolbar.jsx';
 import Dock from './components/Dock.jsx';
 import MediaPool from './components/MediaPool.jsx';
+import TransitionsPanel from './components/TransitionsPanel.jsx';
 import Preview from './components/Preview.jsx';
 import Transport from './components/Transport.jsx';
 import Timeline, { MAX_PPS, MIN_PPS } from './components/Timeline.jsx';
@@ -35,6 +36,7 @@ export default function App() {
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
+  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions'
   const timelineRef = useRef(null);
 
   const duration = projectDuration(project);
@@ -296,6 +298,9 @@ export default function App() {
         { label: 'Alejar', shortcut: '↓', action: () => zoom(0.8) },
         { label: 'Ajustar el proyecto a la ventana', action: () => timelineRef.current?.zoomToFit() },
         'separator',
+        { label: 'Medios del proyecto', shortcut: 'Alt+4', action: () => setLeftTab('media'), checked: leftTab === 'media' },
+        { label: 'Transiciones', shortcut: 'Alt+8', action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
+        'separator',
         { label: 'Ir al inicio', shortcut: 'Inicio', action: () => seek(0) },
         { label: 'Ir al final', shortcut: 'Fin', action: () => seek(duration) },
       ],
@@ -342,7 +347,11 @@ export default function App() {
         q: () => insertTrack(e.shiftKey ? 'video' : 'audio'),
       }[key];
     } else if (e.altKey) {
-      if (key === 'enter') action = openProperties;
+      action = {
+        enter: openProperties,
+        4: () => setLeftTab('media'),
+        8: () => setLeftTab('transitions'),
+      }[key];
     } else {
       action = {
         ' ': () => (live.current.playing ? stop() : play()),
@@ -406,14 +415,26 @@ export default function App() {
         onToggleSnap={() => setSnap((v) => !v)}
       />
       <div className="upper" style={{ height: upperHeight }}>
-        <Dock title="Medios del proyecto" className="media-dock">
-          <MediaPool
-            media={project.media}
-            onImport={importDialog}
-            onDropFiles={dropFilesOnPool}
-            onRemove={removeMediaItem}
-            onAdd={addAtCursor}
-          />
+        <Dock
+          className="media-dock"
+          tabs={[
+            { id: 'media', title: 'Medios del proyecto' },
+            { id: 'transitions', title: 'Transiciones' },
+          ]}
+          active={leftTab}
+          onTab={setLeftTab}
+        >
+          {leftTab === 'media' ? (
+            <MediaPool
+              media={project.media}
+              onImport={importDialog}
+              onDropFiles={dropFilesOnPool}
+              onRemove={removeMediaItem}
+              onAdd={addAtCursor}
+            />
+          ) : (
+            <TransitionsPanel />
+          )}
         </Dock>
         <Dock title="Vista previa de video" className="preview-dock">
           <Preview project={project} time={time} playing={playing} onOpenProperties={openProperties} />
@@ -433,6 +454,7 @@ export default function App() {
         setPps={setPps}
         snap={snap}
         onDropFiles={dropFilesOnTimeline}
+        onMessage={setStatus}
         footer={
           <Transport
             playing={playing}

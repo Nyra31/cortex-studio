@@ -155,21 +155,55 @@ function buildRender(project, settings, outPath) {
   let last = 'base';
   let n = 0;
 
+  // Añade un fragmento de un medio como entrada y devuelve el inicio de su cadena de filtros
+  // (escalado con bandas negras a la resolución y velocidad del proyecto).
+  const addVideoInput = (m, inPoint, dur) => {
+    if (m.isImage) inputs.push('-loop', '1', '-framerate', fps, '-t', num(dur), '-i', m.path);
+    else inputs.push('-ss', num(inPoint), '-t', num(dur), '-i', m.path);
+    const i = n++;
+    const chain =
+      `[${i}:v]setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
+      `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps}`;
+    return { i, chain };
+  };
+  const overlayAt = (label, start, end) => {
+    const out = `o${n}_${filters.length}`;
+    filters.push(`[${last}][${label}]overlay=eof_action=pass:enable='between(t,${num(start)},${num(end)})'[${out}]`);
+    last = out;
+  };
+
+  // Transiciones de video: se dibujan encima del evento que entra, dentro de su misma pista.
+  const usableIds = new Set(usable.map((e) => e.id));
+  const eventsById = new Map(project.events.map((e) => [e.id, e]));
+  const transitionInto = new Map(
+    (project.transitions || [])
+      .filter((tr) => usableIds.has(tr.from) && usableIds.has(tr.to) && /^[a-z]+$/.test(tr.type))
+      .map((tr) => [tr.to, tr]),
+  );
+
   // Pistas de video: la pista de más arriba en la línea de tiempo se dibuja al final (queda encima).
   const videoEvents = usable
     .filter((e) => tracks.get(e.trackId).type === 'video')
     .sort((a, b) => tracks.get(b.trackId).index - tracks.get(a.trackId).index || a.start - b.start);
   for (const e of videoEvents) {
-    const m = media.get(e.mediaId);
-    if (m.isImage) inputs.push('-loop', '1', '-framerate', fps, '-t', num(e.duration), '-i', m.path);
-    else inputs.push('-ss', num(e.inPoint), '-t', num(e.duration), '-i', m.path);
-    const i = n++;
-    filters.push(
-      `[${i}:v]setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
-        `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps}${videoFades(e)},setpts=PTS+${num(e.start)}/TB[v${i}]`,
-      `[${last}][v${i}]overlay=eof_action=pass:enable='between(t,${num(e.start)},${num(e.start + e.duration)})'[o${i}]`,
-    );
-    last = `o${i}`;
+    const { i, chain } = addVideoInput(media.get(e.mediaId), e.inPoint, e.duration);
+    filters.push(`${chain}${videoFades(e)},setpts=PTS+${num(e.start)}/TB[v${i}]`);
+    overlayAt(`v${i}`, e.start, e.start + e.duration);
+
+    const tr = transitionInto.get(e.id);
+    if (tr) {
+      // Final del evento que sale y principio del que entra, mezclados con xfade.
+      const from = eventsById.get(tr.from);
+      const a = addVideoInput(media.get(from.mediaId), from.inPoint + (tr.start - from.start), tr.duration);
+      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.duration);
+      filters.push(
+        `${a.chain},format=yuv420p[ta${a.i}]`,
+        `${b.chain},format=yuv420p[tb${b.i}]`,
+        `[ta${a.i}][tb${b.i}]xfade=transition=${tr.type}:duration=${num(tr.duration)}:offset=0,` +
+          `setpts=PTS+${num(tr.start)}/TB[tr${b.i}]`,
+      );
+      overlayAt(`tr${b.i}`, tr.start, tr.start + tr.duration);
+    }
   }
   filters.push(`[${last}]format=yuv420p[vout]`);
 
