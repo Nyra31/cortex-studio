@@ -16,6 +16,7 @@ npm run icon     # regenera build/icon.png (scripts/make-icon.js)
 ```
 
 No hay tests ni linter. Para comprobar un cambio: `npm run build` (debe compilar sin errores) y probar la app con `npm start`.
+Pruebas automáticas (no están en el repo; se escriben en una carpeta temporal): un script de Electron que sustituye `dialog.showOpenDialog` para abrir un `.cortex` de prueba, hace `require('electron/main.js')` y maneja la app con `webContents.executeJavaScript` y `sendInputEvent`. Lanzar con `node_modules/electron/dist/electron.exe script.js` tras `vite build`, y pasar antes `node --check` al script (un error de sintaxis abre un diálogo de error en la pantalla del usuario). Para comparar la vista previa WebGL con el render, usar `capturePage(rect)` (leer el lienzo desde la página da negro).
 Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está definida en la terminal: hay que quitarla.
 
 ## Arquitectura
@@ -41,12 +42,13 @@ Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está defi
 - Tiempos en **segundos** (float). `MIN_EVENT` = duración mínima de un evento.
 - Pistas ordenadas de arriba a abajo: las de video siempre encima de las de audio (`addTrack` lo respeta).
 - Un video con sonido = dos eventos con el mismo `groupId`; se mueven, recortan y dividen juntos.
-- Volumen de pista en dB (`MIN_VOLUME_DB` = silencio, máximo 0 dB). Silencio/solo se resuelven con `isTrackActive`.
+- Volumen de pista en dB (`MIN_VOLUME_DB` = silencio, máximo `MAX_TRACK_VOLUME_DB` = +12 dB; el de evento, máximo 0 dB). Silencio/solo se resuelven con `isTrackActive`.
 - Cada evento tiene `volume` (dB, solo afecta al audio), `fadeIn`, `fadeOut` (segundos) y `transition` (id de la transición de entrada; `null` = disolución cruzada). En video el fundido es de transparencia (`fade ... alpha=1` en FFmpeg; opacidad de capas en el compositor).
 - Solapamientos: si un evento empieza dentro de otro de su pista y termina después, es una transición. `resolveTimeline(project)` calcula los solapamientos (`incoming`/`outgoing`), las transiciones de video y los **fundidos efectivos** (`fades`): en audio el solapamiento es un fundido cruzado; en video la transición anula los fundidos de esos bordes. Usar siempre esos fundidos (render, vista previa y línea de tiempo), no los guardados.
 - Render de una transición: entradas aparte con el final de A y el principio de B, `xfade` entre ellas y `overlay` encima del evento B, dentro del orden de su pista.
 - Render de video sobre la **rejilla de fotogramas**: cada fragmento ocupa los fotogramas cuyo instante cae en [inicio, fin) (`frameSpan`), se desplaza por fotogramas enteros y se superpone solo en ellos. No volver a desplazar por segundos: el redondeo dejaba un fotograma negro en los cortes.
 - Vista previa sin pausas en los cortes: eventos seguidos que continúan el mismo archivo comparten reproductor (`playerKeys` en `Preview.jsx`), y los reproductores de video y audio de los eventos que empiezan en los próximos 2 s se cargan por adelantado.
+- **Rendimiento**: durante la reproducción, `App` y casi todos los componentes se vuelven a dibujar en cada fotograma (cambia `time`). Nada caro (WebGL, audio offline, recalcular curvas, `postMessage` a worklets) puede ejecutarse en cada dibujado: usar dependencias estables en los `useEffect` (ids, no objetos creados en cada render) o cachés, y comprobar si los valores cambiaron de verdad (como `AudioChain.set` y `AudioEngine.setGain`). Las miniaturas de `EffectsPanel` se calculan una vez por sesión. En los shaders, los bucles deben recorrer solo las muestras que se usan (límite calculado), no un máximo fijo con `continue`.
 - Archivo `.cortex` = JSON de `serializeProject` (`format: 'cortex-studio'`, `version`). Miniaturas y formas de onda no se guardan; se regeneran al abrir. Si cambia el formato, `loadProject` debe seguir abriendo los archivos antiguos (rellenar campos por defecto).
 - IDs con `uid(prefijo)`: `t` pistas, `e` eventos, `g` grupos.
 
@@ -71,7 +73,11 @@ npm start
 
 v0.1.0 terminada: edición multipista, vista previa, renderizado a MP4, interfaz estilo editor clásico, propiedades del proyecto e instalador de Windows.
 v0.2.0: volumen por evento y fundidos de entrada/salida (formato `.cortex` versión 2; los de versión 1 se siguen abriendo).
-v0.3.0: transiciones (fase 1 de 3) con vista previa WebGL (formato `.cortex` versión 3), cortes sin pausas en la vista previa y sin fotogramas negros en el render, cortar/copiar/pegar, agrupar, menú contextual, cursor como en VEGAS (ajuste a bordes, fotogramas exactos, Ctrl+←/→, Re Pág/Av Pág) y selección por área. No hay trabajo a medias.
+v0.3.0: transiciones (fase 1 de 3) con vista previa WebGL (formato `.cortex` versión 3), cortes sin pausas en la vista previa y sin fotogramas negros en el render, cortar/copiar/pegar, agrupar, menú contextual, cursor como en VEGAS (ajuste a bordes, fotogramas exactos, Ctrl+←/→, Re Pág/Av Pág) y selección por área.
+
+En `main` después de v0.3.0 (subido a GitHub, **sin release todavía**): efectos de video (fase 2), efectos de audio (fase 3) y la corrección de tirones con las pestañas de efectos abiertas (las miniaturas se recalculaban en cada fotograma; con la de audio la reproducción bajaba a ~16 fps). No hay trabajo a medias.
+
+**Siguiente paso**: el usuario va a probar si el editor ya va fluido. Si aún va a tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos restantes: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma. Cuando confirme que va bien: publicar **v0.4.0** (efectos de video y audio) con los pasos de «Releases».
 
 ## Pendiente (siguientes pasos naturales)
 
