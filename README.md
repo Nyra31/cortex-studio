@@ -134,4 +134,4 @@ src/components/         Menús, línea de tiempo, vista previa, medios, transici
 
 ## Solución de problemas
 
-Si al ejecutar `npm start` aparece `Cannot find module 'electron'` o Electron se comporta como Node, revisa que la variable de entorno `ELECTRON_RUN_AS_NODE` no esté definida en tu terminal.
+`npm start` y `npm run dev` lanzan Electron con `scripts/electron.js`, que quita la variable `ELECTRON_RUN_AS_NODE` (la definen, por ejemplo, las terminales de VS Code; con ella Electron arranca como Node y la aplicación no se abre). Si lanzas `electron .` a mano y no se abre, quita esa variable.
