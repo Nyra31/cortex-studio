@@ -118,7 +118,6 @@ src/components/         Menús, línea de tiempo, vista previa, medios, transici
 ## Limitaciones conocidas
 
 - La vista previa usa el reproductor de Chromium. Algunos códecs (por ejemplo, ciertos HEVC/H.265, ProRes o archivos AVI antiguos) se importan y se renderizan bien, pero puede que no se vean en la vista previa.
-- Todavía no hay títulos. Es el siguiente paso natural.
 - Los efectos se aplican al evento entero (sin fotogramas clave para animar sus valores).
 - Las colas del eco y la reverberación se cortan al final del evento.
 - Las transiciones necesitan dos eventos solapados en la misma pista; no se pueden aplicar a un fundido hacia la pista de debajo (los fundidos de video son solo de transparencia).

@@ -74,24 +74,20 @@ Si `npm start` dice que `vite` no se reconoce, falta `npm install`. Si falta `no
 
 `dist/` y `release/` no están en el repo: se regeneran con `npm run build` / `npm run dist` (el instalador solo se puede generar en Windows).
 
-## Estado (17/10/2026, v0.3.0)
+## Estado (18/10/2026, v0.4.0)
 
 v0.1.0 terminada: edición multipista, vista previa, renderizado a MP4, interfaz estilo editor clásico, propiedades del proyecto e instalador de Windows.
 v0.2.0: volumen por evento y fundidos de entrada/salida (formato `.cortex` versión 2; los de versión 1 se siguen abriendo).
 v0.3.0: transiciones (fase 1 de 3) con vista previa WebGL (formato `.cortex` versión 3), cortes sin pausas en la vista previa y sin fotogramas negros en el render, cortar/copiar/pegar, agrupar, menú contextual, cursor como en VEGAS (ajuste a bordes, fotogramas exactos, Ctrl+←/→, Re Pág/Av Pág) y selección por área.
+v0.4.0: efectos de video (fase 2, formato versión 4) y de audio (fase 3), volumen de pista hasta +12 dB, corrección de tirones con los paneles de efectos abiertos, pregunta al cerrar con cambios sin guardar, velocidad de los eventos con Ctrl + arrastrar un borde (formato versión 5), selección de tiempo con bucle y render de la selección, medios de texto (colocados con el ratón en la vista previa), arranque maximizado y pantalla completa (F11). No hay trabajo a medias.
 
-En `main` después de v0.3.0 (subido a GitHub, **sin release todavía**): efectos de video (fase 2), efectos de audio (fase 3) y la corrección de tirones con las pestañas de efectos abiertas (las miniaturas se recalculaban en cada fotograma; con la de audio la reproducción bajaba a ~16 fps). Después (18/10/2026): pregunta al cerrar con cambios sin guardar, velocidad de los eventos con Ctrl + arrastrar un borde (formato `.cortex` versión 5, que también incluye los textos), selección de tiempo como en VEGAS con bucle y render de la selección, y medios de texto. El usuario quiere añadir más cosas antes de publicar la v0.4.0.
-
-**Siguiente paso**: el usuario va a probar si el editor ya va fluido. Si aún va a tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos restantes: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma. Cuando confirme que va bien: publicar **v0.4.0** (efectos de video y audio) con los pasos de «Releases».
+**Siguiente paso**: lo que pida el usuario. Si nota tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma.
 
 ## Pendiente (siguientes pasos naturales)
 
-El usuario pidió «transiciones y efectos de sonido y video, los mismos que tiene VEGAS integrados». Plan acordado en tres fases:
-1. Transiciones: **hecha** (v0.3.0).
-2. **Hecha** (sin publicar todavía; formato `.cortex` versión 4). Efectos de video por evento (cadena con parámetros): brillo y contraste, corrección de color, tono/saturación/luminosidad, blanco y negro, sepia, invertir, desenfoque gaussiano, enfoque, pixelado, espejo, viñeta, brillo difuso, croma. Vista previa con shaders en el compositor y render con filtros de FFmpeg.
-3. **Hecha** (sin publicar todavía). Efectos de audio: ecualizador gráfico, paso bajo/alto, compresor, puerta de ruido, normalizar, amplificar, eco, chorus, flanger, cambio de tono, distorsión, reverberación. Vista previa con Web Audio y render con FFmpeg. Volumen de pista hasta +12 dB.
+Hechas las tres fases de «transiciones y efectos de sonido y video como los de VEGAS» (v0.3.0 y v0.4.0).
 
-Otros: títulos, fotogramas clave para animar efectos, curvas de fundido, transiciones sobre un fundido hacia la pista de debajo (sin solapamiento). La vista previa usa el reproductor de Chromium, así que algunos códecs (HEVC, ProRes, AVI antiguos) se renderizan pero no se ven en la vista previa.
+Otros: animaciones de los textos, fotogramas clave para animar efectos y posición, rampas de velocidad, curvas de fundido, transiciones sobre un fundido hacia la pista de debajo (sin solapamiento), guardar la selección de tiempo en el proyecto, dividir con S en los dos extremos de la selección de tiempo (como VEGAS), vista previa del video a pantalla completa. La vista previa usa el reproductor de Chromium, así que algunos códecs (HEVC, ProRes, AVI antiguos) se renderizan pero no se ven en la vista previa.
 
 ## Al terminar una función
 
