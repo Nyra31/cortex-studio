@@ -15,15 +15,17 @@ import { quantize } from './util/time.js';
 import RenderDialog from './components/RenderDialog.jsx';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
+import RecordDialog from './components/RecordDialog.jsx';
 import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
-  IMAGE_DURATION, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
+  EVENT_DEFAULTS, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
   placeMedia, projectDuration, removeMedia, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
-  ungroupEvents, updateEvents,
+  moveTrack, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
 import { panActive, setPanValues } from './state/pan.js';
+import { Recorder, loadRecordSettings, micError } from './preview/recorder.js';
 
 const api = window.api;
 const AUTOSAVE_MS = 60 * 1000; // guardado automático (copia de recuperación) cada minuto si hay cambios
@@ -66,12 +68,17 @@ export default function App() {
   const [fullScreen, setFullScreen] = useState(false); // pantalla completa (F11), lo avisa el proceso principal
   const [clipboard, setClipboard] = useState(null); // eventos copiados (copyEvents)
   const [contextMenu, setContextMenu] = useState(null); // { x, y, items }
+  // Grabación de voz en off: pista preparada (armada) para grabar, grabación en curso y ventana de ajustes.
+  const [armedTrackId, setArmedTrackId] = useState(null);
+  const [recording, setRecording] = useState(null); // { trackId, start } mientras se graba
+  const [recordDialog, setRecordDialog] = useState(false);
+  const recorderRef = useRef(null);
   const timelineRef = useRef(null);
 
   const duration = projectDuration(project);
   const dirty = project !== savedProject;
   const live = useRef(null);
-  live.current = { project, time, playing, duration, dirty, selection, clipboard, pps, region, loop, ripple, projectPath };
+  live.current = { project, time, playing, duration, dirty, selection, clipboard, pps, region, loop, ripple, projectPath, recording, armedTrackId };
   const playStart = useRef(0);
 
   useEffect(() => {
@@ -80,18 +87,20 @@ export default function App() {
 
   // Reloj de reproducción: avanza desde playStart y se reinicia cuando el usuario busca otra posición.
   // Si empieza dentro de la selección de tiempo, se para al final de ella o, en bucle (Q), vuelve a su principio.
+  // Grabando, sigue después del final del proyecto (y sin bucle).
   useEffect(() => {
     if (!playing) return undefined;
     const from = playStart.current;
     const t0 = performance.now();
+    recorderRef.current?.begin(); // la grabación empieza a la vez que el reloj
     let raf;
     const tick = () => {
       const t = from + (performance.now() - t0) / 1000;
-      const { region: r, loop: looping, duration: d } = live.current;
+      const { region: r, loop: looping, duration: d, recording: rec } = live.current;
       const inRegion = r && from >= r.start - 1e-6 && from < r.end;
-      const end = inRegion ? r.end : d;
+      const end = inRegion ? r.end : rec ? Infinity : d;
       if (t >= end) {
-        if (inRegion && looping) {
+        if (inRegion && looping && !rec) {
           playStart.current = r.start;
           setTime(r.start);
           setPlayToken((n) => n + 1);
@@ -111,7 +120,9 @@ export default function App() {
   const seek = useCallback((t) => {
     const clamped = Math.max(0, t);
     setTime(clamped);
-    if (live.current.playing) {
+    if (live.current.recording) {
+      setPlaying(false); // ir a otro sitio termina la grabación
+    } else if (live.current.playing) {
       playStart.current = clamped;
       setPlayToken((n) => n + 1);
     }
@@ -302,6 +313,90 @@ export default function App() {
     setPanEventId(null);
     setTextMediaId(media.id);
   }, [setProject]);
+
+  // ---- Grabación de voz en off ----
+
+  // Graba desde el cursor (o desde el principio de la selección de tiempo, y hasta su final) en la pista
+  // armada mientras se reproduce el proyecto. Sin pista armada, crea una pista de audio abajo del todo.
+  // Se termina como la reproducción (Espacio, Intro, el botón de grabar o Ctrl+R).
+  const startRecording = useCallback(async () => {
+    if (recorderRef.current || live.current.recording) return;
+    setPlaying(false);
+    const recorder = new Recorder();
+    recorderRef.current = recorder;
+    setStatus('Abriendo el micrófono…');
+    try {
+      await recorder.prepare(loadRecordSettings(), live.current.projectPath);
+    } catch (err) {
+      recorder.close();
+      recorderRef.current = null;
+      setStatus(micError(err));
+      window.alert(micError(err));
+      return;
+    }
+    const { project: p, time: t, region: r, armedTrackId: armed } = live.current;
+    let trackId = p.tracks.some((tr) => tr.id === armed && tr.type === 'audio') ? armed : null;
+    if (!trackId) {
+      const res = addTrack(p, 'audio');
+      trackId = res.track.id;
+      setProject({ ...res.project, tracks: res.project.tracks.map((tr) => (tr.id === trackId ? { ...tr, name: 'Voz en off' } : tr)) });
+      setArmedTrackId(trackId);
+    }
+    const from = r && (t < r.start || t >= r.end - 1e-6) ? r.start : t;
+    playStart.current = from;
+    setTime(from);
+    setRecording({ trackId, start: from });
+    setPlaying(true);
+    setStatus(`● Grabando${recorder.label ? ` con «${recorder.label}»` : ''}… Espacio o Ctrl+R para terminar.`);
+  }, [setProject]);
+
+  // Al parar la reproducción (por cualquier vía) mientras se graba: se cierra el archivo, se importa y se
+  // coloca en la pista. Si la pista ya tiene algo en ese tramo, en una pista nueva justo debajo (no se pisa).
+  const finishRecording = useCallback(async () => {
+    const rec = live.current.recording;
+    const recorder = recorderRef.current;
+    setRecording(null);
+    recorderRef.current = null;
+    if (!recorder || !rec) return;
+    setStatus('Guardando la grabación…');
+    let result;
+    let media;
+    try {
+      result = await recorder.stop();
+      if (!result) {
+        setStatus('No se ha grabado nada.');
+        return;
+      }
+      media = { id: uid('m'), ...(await api.analyzeMedia(result.path)) };
+    } catch (err) {
+      setStatus(`No se pudo guardar la grabación: ${err.message}`);
+      return;
+    }
+    const skip = Math.min(result.latency, Math.max(0, media.duration - MIN_EVENT));
+    const length = media.duration - skip;
+    let next = { ...live.current.project, media: [...live.current.project.media, media] };
+    let trackId = next.tracks.some((tr) => tr.id === rec.trackId) ? rec.trackId : null;
+    const busy = !!trackId && next.events.some((e) => e.trackId === trackId && e.start < rec.start + length - 1e-6 && e.start + e.duration > rec.start + 1e-6);
+    if (!trackId || busy) {
+      const res = addTrack(next, 'audio');
+      next = res.project;
+      if (busy) next = moveTrack(next, res.track.id, next.tracks.findIndex((tr) => tr.id === trackId) + 1);
+      trackId = res.track.id;
+    }
+    const ev = { id: uid('e'), trackId, mediaId: media.id, start: rec.start, inPoint: skip, duration: length, groupId: null, ...EVENT_DEFAULTS };
+    setProject({ ...next, events: [...next.events, ev] });
+    setSelection([ev.id]);
+    setStatus(`Grabación guardada en ${result.path}${busy ? ' (en una pista nueva: la pista armada ya tenía eventos en ese tramo)' : ''}`);
+  }, [setProject]);
+  useEffect(() => {
+    if (!playing && live.current.recording) finishRecording();
+  }, [playing, finishRecording]);
+
+  const toggleRecording = useCallback(() => {
+    if (live.current.recording) setPlaying(false);
+    else startRecording();
+  }, [startRecording]);
+  const armTrack = useCallback((trackId) => setArmedTrackId((cur) => (cur === trackId ? null : trackId)), []);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
@@ -756,6 +851,9 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
     {
       label: 'Herramientas',
       items: [
+        { label: recording ? 'Terminar la grabación' : 'Grabar voz en off', shortcut: 'Ctrl+R', action: toggleRecording },
+        { label: 'Opciones de grabación…', action: () => setRecordDialog(true), disabled: !!recording },
+        'separator',
         { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
         { label: 'Herramientas de desarrollo', shortcut: 'F12', action: api.toggleDevTools },
       ],
@@ -768,7 +866,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
 
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
-  const modalOpen = renderOpen || projectDialog !== null || shortcutsOpen;
+  const modalOpen = renderOpen || projectDialog !== null || shortcutsOpen || recordDialog;
   const floatingOpen = !!fxEventId || !!textMediaId || !!panEventId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
@@ -787,6 +885,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         m: openRender,
         a: selectAll,
         l: toggleRipple,
+        r: toggleRecording,
         delete: deleteRegion,
         q: () => insertTrack(e.shiftKey ? 'video' : 'audio'),
         c: () => copyIds(selection),
@@ -949,9 +1048,16 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         onEditText={editTextOf}
         onOpenPan={openPan}
         onAddTrack={insertTrack}
+        armedTrackId={armedTrackId}
+        onArmTrack={armTrack}
+        recording={recording}
         footer={
           <Transport
             playing={playing}
+            recording={!!recording}
+            recorder={recorderRef}
+            onRecord={toggleRecording}
+            onRecordMenu={() => setRecordDialog(true)}
             loop={loop}
             onToggleLoop={() => setLoop((v) => !v)}
             onPlay={play}
@@ -991,6 +1097,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
+      {recordDialog && <RecordDialog projectPath={projectPath} onClose={() => setRecordDialog(false)} />}
       {contextMenu && <ContextMenu {...contextMenu} onClose={closeContextMenu} />}
       {fxEvent && (
         <EventFxDialog

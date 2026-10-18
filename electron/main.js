@@ -256,6 +256,67 @@ ipcMain.on('window:close', () => {
   if (mainWindow) mainWindow.close();
 });
 
+// Grabación de voz en off: la interfaz manda las muestras (PCM de 16 bits, mono) a trozos y aquí se escriben
+// en un WAV. Va a la carpeta «Grabaciones» junto al proyecto (o en Documentos si aún no está guardado).
+const recordings = new Map(); // id → { fd, path, bytes, rate }
+let recordingId = 0;
+function wavHeader(rate, bytes) {
+  const h = Buffer.alloc(44);
+  h.write('RIFF', 0);
+  h.writeUInt32LE(36 + bytes, 4);
+  h.write('WAVEfmt ', 8);
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20); // PCM
+  h.writeUInt16LE(1, 22); // mono
+  h.writeUInt32LE(rate, 24);
+  h.writeUInt32LE(rate * 2, 28);
+  h.writeUInt16LE(2, 32);
+  h.writeUInt16LE(16, 34);
+  h.write('data', 36);
+  h.writeUInt32LE(bytes, 40);
+  return h;
+}
+ipcMain.handle('record:start', async (_e, projectPath, rate) => {
+  const dir = projectPath
+    ? path.join(path.dirname(projectPath), 'Grabaciones')
+    : path.join(app.getPath('documents'), 'Cortex Studio', 'Grabaciones');
+  await fs.promises.mkdir(dir, { recursive: true });
+  let n = 1;
+  const name = (i) => path.join(dir, `Voz en off ${String(i).padStart(2, '0')}.wav`);
+  while (fs.existsSync(name(n))) n++;
+  const file = name(n);
+  const fd = fs.openSync(file, 'w');
+  fs.writeSync(fd, wavHeader(rate, 0));
+  const id = ++recordingId;
+  recordings.set(id, { fd, path: file, bytes: 0, rate });
+  return { id, path: file };
+});
+ipcMain.on('record:write', (_e, id, chunk) => {
+  const r = recordings.get(id);
+  if (!r) return;
+  const buf = Buffer.from(chunk);
+  fs.writeSync(r.fd, buf, 0, buf.length, 44 + r.bytes);
+  r.bytes += buf.length;
+  // Cabecera al día cada pocos segundos: si la aplicación se cierra de golpe, el archivo se puede abrir igual.
+  if (r.bytes - (r.headerAt || 0) > r.rate * 2 * 5) {
+    fs.writeSync(r.fd, wavHeader(r.rate, r.bytes), 0, 44, 0);
+    r.headerAt = r.bytes;
+  }
+});
+// Devuelve la ruta del archivo (null si no se grabó nada: se borra).
+ipcMain.handle('record:stop', async (_e, id) => {
+  const r = recordings.get(id);
+  if (!r) return null;
+  recordings.delete(id);
+  fs.writeSync(r.fd, wavHeader(r.rate, r.bytes), 0, 44, 0);
+  fs.closeSync(r.fd);
+  if (!r.bytes) {
+    fs.promises.unlink(r.path).catch(() => {});
+    return null;
+  }
+  return r.path;
+});
+
 ipcMain.handle('shell:reveal', (_e, filePath) => shell.showItemInFolder(filePath));
 ipcMain.handle('devtools:toggle', () => mainWindow && mainWindow.webContents.toggleDevTools());
 

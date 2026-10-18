@@ -39,6 +39,7 @@ const SHORTCUTS = [
   ['Ctrl+N / Ctrl+O / Ctrl+S', 'Nuevo / abrir / guardar'],
   ['Ctrl+I', 'Importar medios'],
   ['Ctrl+M', 'Renderizar como…'],
+  ['Ctrl+R', 'Grabar voz en off en la pista armada / terminar'],
   ['Alt+Intro', 'Propiedades del proyecto'],
   ['F11', 'Pantalla completa'],
   ['Alt+4 / Alt+7 / Alt+8', 'Ventana de medios / de transiciones / de efectos de video'],

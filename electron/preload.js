@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('render:progress', handler);
     return () => ipcRenderer.removeListener('render:progress', handler);
   },
+  recordStart: (projectPath, sampleRate) => ipcRenderer.invoke('record:start', projectPath, sampleRate),
+  recordWrite: (id, chunk) => ipcRenderer.send('record:write', id, chunk),
+  recordStop: (id) => ipcRenderer.invoke('record:stop', id),
   revealFile: (filePath) => ipcRenderer.invoke('shell:reveal', filePath),
   toggleDevTools: () => ipcRenderer.invoke('devtools:toggle'),
   setDirty: (dirty) => ipcRenderer.send('project:dirty', dirty),

@@ -1738,3 +1738,82 @@ kbd {
 .render-summary .note {
   font-size: 11px;
 }
+
+/* Grabación de voz en off: botón de grabar, pista armada, medidor y recuadro de lo que se está grabando. */
+.transport-btn.record {
+  color: #d9534a;
+}
+.transport-btn.record.active {
+  background: linear-gradient(#c0392b, #962d22);
+  color: #fff;
+  animation: record-blink 1s steps(2, start) infinite;
+}
+@keyframes record-blink {
+  to { color: #ffb3ad; }
+}
+.track-btn.arm {
+  color: #c9706a;
+}
+.track-btn.arm.active {
+  background: #a33a32;
+  border-color: #e0574b;
+  color: #fff;
+}
+.level-meter {
+  width: 90px;
+  height: 8px;
+  margin: 0 6px;
+  align-self: center;
+  background: #151515;
+  border: 1px solid #444;
+  overflow: hidden;
+}
+.level-fill {
+  height: 100%;
+  width: 0;
+  background: #4caf50;
+}
+.level-fill.hot {
+  background: #d8b23a;
+}
+.level-fill.clip {
+  background: #e0574b;
+}
+.recording-box {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  background: rgba(192, 57, 43, 0.35);
+  border: 1px solid #e0574b;
+  color: #ffd2ce;
+  font-size: 11px;
+  padding: 2px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+.record-dialog {
+  width: 460px;
+}
+.record-level {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.record-level .level-meter {
+  flex: 1;
+  height: 10px;
+  margin: 0;
+}
+.record-dialog label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.error-text {
+  color: #ff9a92;
+  font-size: 11px;
+}

@@ -58,6 +58,7 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 - **Forma de onda** en los eventos de audio y **miniaturas** en los de video.
 - **Proyectos** guardados como archivos `.cortex` (JSON con las rutas de los medios y los ajustes).
 - **Guardado automático y copias de seguridad:** cada minuto, si hay cambios sin guardar, se guarda una copia de recuperación (en la carpeta de datos de la aplicación, sin tocar el archivo del proyecto). Si la aplicación se cierra de golpe, al volver a abrirla ofrece recuperar esa copia. Al guardar encima de un proyecto, la versión anterior queda como `Proyecto.cortex.bak`, como en VEGAS.
+- **Grabar voz en off** desde el micrófono, como en VEGAS: el botón de grabar (círculo rojo) de cada pista de audio la arma; luego el botón de grabar del transporte (o Ctrl+R) reproduce el proyecto desde el cursor y graba a la vez. Se termina con Espacio, Intro, Ctrl+R o el mismo botón; con una selección de tiempo, graba solo ese tramo y se para sola al final. Sin pista armada se crea una pista «Voz en off». Mientras se graba se ve un medidor de nivel y el tramo en rojo en la pista; al terminar, la grabación queda como un evento más (y en *Medios del proyecto*). Si la pista armada ya tiene algo en ese tramo, se graba en una pista nueva debajo. Los archivos son WAV (mono, 16 bits) en la carpeta `Grabaciones` junto al proyecto (o en `Documentos\Cortex Studio\Grabaciones` si aún no se ha guardado). En *Herramientas → Opciones de grabación…* (o clic derecho en el botón de grabar) se elige el micrófono, se prueba su nivel y se puede activar la cancelación de eco y la reducción de ruido.
 - **Renderizado** con plantillas como en VEGAS (proyecto, YouTube 1080p y 4K, vertical 1080 × 1920 para TikTok/Reels/Shorts, cuadrado para Instagram, archivo pequeño H.265, web 720p, ProRes, GIF y solo audio) o con ajustes propios: formato (MP4 H.264 o H.265, WebM VP9, MOV ProRes 422 HQ, GIF animado, MP3 o WAV), tamaño (del proyecto escalado, tamaños habituales o personalizado; si la proporción es otra, el proyecto va con bandas negras), velocidad de fotogramas, calidad constante o tasa de bits fija y calidad del audio. Muestra el tamaño aproximado del archivo y recuerda los últimos ajustes.
 
 ## Atajos de teclado
@@ -69,6 +70,7 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 | S | Dividir en el cursor (los eventos seleccionados o, si no hay selección, todos) |
 | Supr | Eliminar los eventos seleccionados (en cascada, cierra el hueco) |
 | Ctrl+L | Activar o desactivar la edición en cascada |
+| Ctrl+R | Grabar voz en off en la pista armada / terminar la grabación |
 | Ctrl+Supr | Eliminar el tramo de la selección de tiempo en todas las pistas y cerrar el hueco |
 | Ctrl+A | Seleccionar todos los eventos |
 | Ctrl+X / Ctrl+C / Ctrl+V | Cortar / copiar / pegar eventos (se pega en el cursor) |
@@ -128,6 +130,7 @@ src/preview/effects-gl.js Efectos en la vista previa (shaders con las mismas fó
 src/state/audio-effects.js Catálogo de efectos de audio (parámetros y filtro de FFmpeg)
 src/preview/audio-engine.js Audio de la vista previa con Web Audio (efectos y volumen por reproductor)
 src/preview/audio-fx.js   Efectos de audio en Web Audio (y procesadores propios en un AudioWorklet)
+src/preview/recorder.js   Grabación de voz en off desde el micrófono (AudioWorklet → WAV)
 src/components/         Menús, línea de tiempo, vista previa, medios, transiciones, transporte y diálogos
 ```
 
@@ -144,6 +147,7 @@ src/components/         Menús, línea de tiempo, vista previa, medios, transici
 - Los textos no tienen animaciones propias (para que aparezcan o desaparezcan, fundidos o transiciones). Una transición entre dos textos se dibuja opaca, sobre negro (como todas las transiciones).
 - La selección de tiempo no se guarda en el proyecto (los marcadores y las regiones, sí).
 - En cascada, recortar el principio de un evento no desplaza lo de detrás (sí el final, mover, borrar y pegar).
+- Al grabar voz en off conviene usar auriculares: con altavoces, el micrófono recoge también el sonido del proyecto (la cancelación de eco de las opciones lo reduce, pero cambia el timbre). Se graba en mono y desde un solo micrófono a la vez. El retardo del micrófono y los altavoces se compensa con lo que informa el sistema; si se nota desplazada, se puede mover el evento.
 - La velocidad es constante en todo el evento (no hay rampas de velocidad) y el audio siempre conserva el tono.
 
 ## Solución de problemas

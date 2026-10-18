@@ -458,7 +458,7 @@ function VolumeSlider({ value, onChange }) {
 
 const TrackRow = memo(function TrackRow({
   track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef, region, dragging,
-  onTrackDown, onTrackMenu, onEnvPointDown, onEnvLineDouble, onEnvPointMenu, onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onOpenPan, onEventDouble, onDrop, onUpdateTrack, onDelete,
+  armed, recordingBox, onArm, onTrackDown, onTrackMenu, onEnvPointDown, onEnvLineDouble, onEnvPointMenu, onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onOpenPan, onEventDouble, onDrop, onUpdateTrack, onDelete,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
   return (
@@ -478,6 +478,15 @@ const TrackRow = memo(function TrackRow({
           <div className="track-top">
             <Icon name={track.type === 'video' ? 'film' : 'speaker'} size={13} />
             <TrackName name={track.name} onRename={(name) => update({ name })} />
+            {track.type === 'audio' && (
+              <button
+                className={`track-btn arm${armed ? ' active' : ''}`}
+                title={armed ? 'Pista armada: aquí se graba la voz en off (Ctrl+R)' : 'Armar para grabar (voz en off desde el micrófono)'}
+                onClick={() => onArm(track.id)}
+              >
+                <Icon name="record" size={11} />
+              </button>
+            )}
             <button
               className={`track-btn mute${track.muted ? ' active' : ''}`}
               title={track.type === 'video' ? 'Ocultar pista' : 'Silenciar pista'}
@@ -539,6 +548,14 @@ const TrackRow = memo(function TrackRow({
             />
           );
         })}
+        {recordingBox && (
+          <div
+            className="recording-box"
+            style={{ left: recordingBox.start * pps, width: Math.max(1, (recordingBox.end - recordingBox.start) * pps) }}
+          >
+            ● Grabando
+          </div>
+        )}
         {track.type === 'audio' && track.envelopes && (
           <EnvelopeLines
             track={track}
@@ -558,6 +575,7 @@ const TrackRow = memo(function TrackRow({
 const Timeline = forwardRef(function Timeline({
   project, setProject, selection, setSelection, time, seek, playing, region, setRegion, ripple,
   pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, onEditText, onOpenPan, onAddTrack, footer,
+  armedTrackId, onArmTrack, recording,
 }, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -1283,6 +1301,9 @@ const Timeline = forwardRef(function Timeline({
               rowRef={rowRefFor(track.id)}
               region={region}
               dragging={trackDrag?.id === track.id}
+              armed={armedTrackId === track.id}
+              recordingBox={recording?.trackId === track.id ? { start: recording.start, end: Math.max(recording.start, time) } : null}
+              onArm={onArmTrack}
               onTrackDown={onTrackDown}
               onTrackMenu={onTrackMenu}
               onEnvPointDown={onEnvPointDown}
