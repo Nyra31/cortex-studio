@@ -1,0 +1,938 @@
+[
+ {
+  "family": "Roboto",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Roboto-1a091b03.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Roboto-1a091b03.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Roboto-cb43c055.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Roboto-cb43c055.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Open Sans",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "OpenSans-a14e6a65.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "OpenSans-a14e6a65.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "OpenSans-52962c5d.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "OpenSans-52962c5d.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Montserrat",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Montserrat-99842df2.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Montserrat-99842df2.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Montserrat-e56e84e5.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Montserrat-e56e84e5.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Poppins",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Poppins-4bb312f1.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Poppins-aca4b24e.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Poppins-5a641377.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Poppins-ddd02247.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Lato",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Lato-53cc0f9a.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Lato-51b6e90f.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Lato-1ceff43a.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Lato-1e749525.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Raleway",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Raleway-fdeade18.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Raleway-fdeade18.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Raleway-faccb37f.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Raleway-faccb37f.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Nunito",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Nunito-73712f81.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Nunito-73712f81.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Nunito-798ec6b6.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Nunito-798ec6b6.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Inter",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Inter-f0eb0bec.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Inter-f0eb0bec.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Inter-56724408.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Inter-56724408.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Work Sans",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "WorkSans-8a28b7a5.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "WorkSans-8a28b7a5.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "WorkSans-f7b83de3.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "WorkSans-f7b83de3.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Rubik",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Rubik-3c17da98.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Rubik-3c17da98.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Rubik-f673d854.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Rubik-f673d854.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Barlow",
+  "category": "Sin serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Barlow-ba027341.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Barlow-916f83d5.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Barlow-3cfec04e.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Barlow-5cfda61d.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Oswald",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Oswald-ed56cbd3.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Oswald-ed56cbd3.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Bebas Neue",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "BebasNeue-3c5f3ae6.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Anton",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Anton-a6f395c1.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Archivo Black",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "ArchivoBlack-4eecb62d.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Righteous",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Righteous-fb50f910.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Russo One",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "RussoOne-b8b6dae2.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Black Ops One",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "BlackOpsOne-a5ed3b7a.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Bangers",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Bangers-aee327ae.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Bungee",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Bungee-70057bd8.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Alfa Slab One",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "AlfaSlabOne-d78474ff.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Lilita One",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "LilitaOne-ed4978ea.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Luckiest Guy",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "LuckiestGuy-8b6e91a9.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Teko",
+  "category": "Titulares",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Teko-57d1ea4b.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Teko-57d1ea4b.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Playfair Display",
+  "category": "Con serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "PlayfairDisplay-9385b655.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "PlayfairDisplay-9385b655.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "PlayfairDisplay-48d1e9cd.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "PlayfairDisplay-48d1e9cd.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Merriweather",
+  "category": "Con serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Merriweather-ed5592b8.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Merriweather-ed5592b8.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Merriweather-920604ae.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Merriweather-920604ae.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Lora",
+  "category": "Con serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "Lora-6d4ac4a9.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "Lora-6d4ac4a9.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Lora-ecda3beb.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Lora-ecda3beb.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Abril Fatface",
+  "category": "Con serifa",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "AbrilFatface-915109f0.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Cinzel",
+  "category": "Con serifa",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Cinzel-63551c15.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Cinzel-63551c15.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Roboto Slab",
+  "category": "Con serifa",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "RobotoSlab-62d26da9.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "RobotoSlab-62d26da9.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Libre Baskerville",
+  "category": "Con serifa",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "LibreBaskerville-565f3493.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "LibreBaskerville-565f3493.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "LibreBaskerville-eeb78021.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "LibreBaskerville-eeb78021.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Pacifico",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Pacifico-296fd221.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Lobster",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Lobster-9205197f.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Dancing Script",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "DancingScript-958aab68.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "DancingScript-958aab68.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Great Vibes",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "GreatVibes-1402a25d.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Caveat",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Caveat-14ecf1bb.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Caveat-14ecf1bb.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Satisfy",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Satisfy-b4c9305d.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Permanent Marker",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "PermanentMarker-db42b45f.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Kaushan Script",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "KaushanScript-28800ab3.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Shadows Into Light",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "ShadowsIntoLight-29ad7f4b.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Amatic SC",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "AmaticSC-7b45f6eb.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "AmaticSC-cc4b5513.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Indie Flower",
+  "category": "Manuscritas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "IndieFlower-a0e6262e.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Roboto Mono",
+  "category": "Retro y técnicas",
+  "faces": [
+   {
+    "style": "italic",
+    "weight": 400,
+    "file": "RobotoMono-b04737f1.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "italic",
+    "weight": 700,
+    "file": "RobotoMono-b04737f1.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "RobotoMono-d0ebf031.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "RobotoMono-d0ebf031.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Press Start 2P",
+  "category": "Retro y técnicas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "PressStart2P-3d97f0f7.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "VT323",
+  "category": "Retro y técnicas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "VT323-bf1924ed.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Orbitron",
+  "category": "Retro y técnicas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Orbitron-5710d401.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   },
+   {
+    "style": "normal",
+    "weight": 700,
+    "file": "Orbitron-5710d401.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Monoton",
+  "category": "Retro y técnicas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Monoton-3a1d1442.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Audiowide",
+  "category": "Retro y técnicas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Audiowide-6ea6a4bd.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Creepster",
+  "category": "Retro y técnicas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "Creepster-4367fdda.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ },
+ {
+  "family": "Special Elite",
+  "category": "Retro y técnicas",
+  "faces": [
+   {
+    "style": "normal",
+    "weight": 400,
+    "file": "SpecialElite-2c1c3278.woff2",
+    "range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+   }
+  ]
+ }
+]

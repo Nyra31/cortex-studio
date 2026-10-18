@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
-import { TEXT_DEFAULTS, TEXT_FONTS } from '../state/text.js';
+import FontPicker from './FontPicker.jsx';
+import { TEXT_DEFAULTS } from '../state/text.js';
 
 const pct = (v) => `${Math.round(v * 100)} %`;
 
@@ -100,17 +101,7 @@ export default function TextDialog({ media, height, onChange, onClose }) {
         />
 
         <div className="text-row">
-          <input
-            className="text-font"
-            list="cortex-fonts"
-            value={t.font}
-            title="Fuente (puedes escribir el nombre de cualquier fuente instalada)"
-            {...live('font')}
-            onKeyDown={(e) => e.stopPropagation()}
-          />
-          <datalist id="cortex-fonts">
-            {TEXT_FONTS.map((f) => <option key={f} value={f} />)}
-          </datalist>
+          <FontPicker value={t.font} onChange={(font) => set({ font })} />
           <button className={`text-toggle${t.bold ? ' active' : ''}`} title="Negrita" onClick={() => set({ bold: !t.bold })}>
             <b>N</b>
           </button>

@@ -1817,3 +1817,66 @@ kbd {
   color: #ff9a92;
   font-size: 11px;
 }
+
+/* Selector de fuente de los textos: cada nombre con su fuente. */
+.font-picker-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 14px;
+  padding: 2px 6px;
+  text-align: left;
+}
+.font-picker-btn span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.font-picker-arrow {
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.font-picker {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+.font-picker-search {
+  margin: 6px;
+}
+.font-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+.font-picker-group {
+  padding: 6px 10px 2px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.font-picker-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 17px;
+  padding: 3px 10px;
+  background: none;
+  border: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.font-picker-item:hover {
+  background: var(--panel-hi);
+}
+.font-picker-item.active {
+  background: var(--accent-dim);
+}
