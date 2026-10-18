@@ -58,7 +58,7 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 - **Forma de onda** en los eventos de audio y **miniaturas** en los de video.
 - **Proyectos** guardados como archivos `.cortex` (JSON con las rutas de los medios y los ajustes).
 - **Guardado automático y copias de seguridad:** cada minuto, si hay cambios sin guardar, se guarda una copia de recuperación (en la carpeta de datos de la aplicación, sin tocar el archivo del proyecto). Si la aplicación se cierra de golpe, al volver a abrirla ofrece recuperar esa copia. Al guardar encima de un proyecto, la versión anterior queda como `Proyecto.cortex.bak`, como en VEGAS.
-- **Renderizado** a MP4 (H.264 + AAC) con la resolución y velocidad del proyecto, al 100 %, 75 % o 50 % del tamaño.
+- **Renderizado** con plantillas como en VEGAS (proyecto, YouTube 1080p y 4K, vertical 1080 × 1920 para TikTok/Reels/Shorts, cuadrado para Instagram, archivo pequeño H.265, web 720p, ProRes, GIF y solo audio) o con ajustes propios: formato (MP4 H.264 o H.265, WebM VP9, MOV ProRes 422 HQ, GIF animado, MP3 o WAV), tamaño (del proyecto escalado, tamaños habituales o personalizado; si la proporción es otra, el proyecto va con bandas negras), velocidad de fotogramas, calidad constante o tasa de bits fija y calidad del audio. Muestra el tamaño aproximado del archivo y recuerda los últimos ajustes.
 
 ## Atajos de teclado
 

@@ -159,9 +159,45 @@ function audioFades(e) {
   return out;
 }
 
+// Formatos de salida (los mismos ids que src/state/render-formats.js, que tiene sus nombres y opciones).
+// quality = { mode: 'crf', level: 'high' | 'normal' | 'light' } o { mode: 'bitrate', mbps }; audioKbps.
+const CRF = {
+  h264: { high: 18, normal: 22, light: 28 },
+  h265: { high: 20, normal: 24, light: 30 },
+  vp9: { high: 24, normal: 32, light: 40 },
+};
+function videoArgs(codec, quality = { mode: 'crf', level: 'normal' }) {
+  const crf = CRF[codec][quality.level] ?? CRF[codec].normal;
+  const kbps = Math.round((quality.mbps || 8) * 1000);
+  const rate = quality.mode === 'bitrate'
+    ? ['-b:v', `${kbps}k`, ...(codec === 'vp9' ? [] : ['-maxrate', `${Math.round(kbps * 1.5)}k`, '-bufsize', `${kbps * 2}k`])]
+    : codec === 'vp9' ? ['-crf', String(crf), '-b:v', '0'] : ['-crf', String(crf)];
+  if (codec === 'h264') return ['-c:v', 'libx264', '-preset', 'medium', ...rate, '-pix_fmt', 'yuv420p'];
+  if (codec === 'h265') return ['-c:v', 'libx265', '-preset', 'medium', '-x265-params', 'log-level=error', '-tag:v', 'hvc1', ...rate, '-pix_fmt', 'yuv420p'];
+  return ['-c:v', 'libvpx-vp9', '-deadline', 'good', '-cpu-used', '2', '-row-mt', '1', ...rate, '-pix_fmt', 'yuv420p'];
+}
+const OUTPUT_FORMATS = {
+  'mp4-h264': { video: (q) => videoArgs('h264', q), audio: (k) => ['-c:a', 'aac', '-b:a', `${k}k`], extra: ['-movflags', '+faststart'] },
+  'mp4-h265': { video: (q) => videoArgs('h265', q), audio: (k) => ['-c:a', 'aac', '-b:a', `${k}k`], extra: ['-movflags', '+faststart'] },
+  webm: { video: (q) => videoArgs('vp9', q), audio: (k) => ['-c:a', 'libopus', '-b:a', `${k}k`], extra: [] },
+  'mov-prores': {
+    video: () => ['-c:v', 'prores_ks', '-profile:v', '3', '-pix_fmt', 'yuv422p10le', '-vendor', 'apl0'],
+    audio: () => ['-c:a', 'pcm_s16le'],
+    extra: [],
+  },
+  gif: { gif: true, extra: ['-loop', '0'] },
+  mp3: { audioOnly: true, audio: (k) => ['-c:a', 'libmp3lame', '-b:a', `${k}k`], extra: [] },
+  wav: { audioOnly: true, audio: () => ['-c:a', 'pcm_s16le'], extra: [] },
+};
+
 // Construye los argumentos de FFmpeg y el grafo de filtros para renderizar la línea de tiempo.
+// settings: { width, height (tamaño al que se monta el proyecto), outWidth, outHeight (tamaño del archivo:
+// si la proporción es otra, el proyecto se encaja con bandas negras), fps, format, quality, audioKbps }.
 function buildRender(project, settings, outPath) {
-  const { width: W, height: H, crf } = settings;
+  const { width: W, height: H } = settings;
+  const format = OUTPUT_FORMATS[settings.format] || OUTPUT_FORMATS['mp4-h264'];
+  const outW = settings.outWidth || W;
+  const outH = settings.outHeight || H;
   const fps = frameRate(settings.fps);
   const media = new Map(project.media.map((m) => [m.id, m]));
   const tracks = new Map(project.tracks.map((t, i) => [t.id, { ...t, index: i }]));
@@ -186,7 +222,9 @@ function buildRender(project, settings, outPath) {
   const duration = range ? Math.max(1, Math.ceil(end * rate - 1e-6) - firstFrame) / rate : end;
 
   const inputs = [];
-  const filters = [`color=c=black:s=${W}x${H}:r=${fps}:d=${num(duration)}${firstFrame ? `,setpts=PTS+${firstFrame}` : ''}[base]`];
+  const filters = format.audioOnly
+    ? []
+    : [`color=c=black:s=${W}x${H}:r=${fps}:d=${num(duration)}${firstFrame ? `,setpts=PTS+${firstFrame}` : ''}[base]`];
   let last = 'base';
   let n = 0;
 
@@ -286,7 +324,7 @@ function buildRender(project, settings, outPath) {
   );
 
   // Pistas de video: la pista de más arriba en la línea de tiempo se dibuja al final (queda encima).
-  const videoEvents = usable
+  const videoEvents = format.audioOnly ? [] : usable
     .filter((e) => tracks.get(e.trackId).type === 'video')
     .sort((a, b) => tracks.get(b.trackId).index - tracks.get(a.trackId).index || a.start - b.start);
   for (const e of videoEvents) {
@@ -313,7 +351,15 @@ function buildRender(project, settings, outPath) {
       overlayAt(`tr${b.i}`, b.first, b.count);
     }
   }
-  filters.push(`[${last}]format=yuv420p${firstFrame ? ',setpts=PTS-STARTPTS' : ''}[vout]`);
+  if (!format.audioOnly) {
+    // Bandas negras si el archivo tiene otra proporción que el proyecto; GIF: paleta propia en dos pasadas.
+    const pad = outW !== W || outH !== H ? `,pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2:color=black` : '';
+    const vfinal = format.gif ? 'vgif' : 'vout';
+    filters.push(`[${last}]format=yuv420p${firstFrame ? ',setpts=PTS-STARTPTS' : ''}${pad}[${vfinal}]`);
+    if (format.gif) {
+      filters.push('[vgif]split[g1][g2]', '[g1]palettegen=stats_mode=diff[gpal]', '[g2][gpal]paletteuse=dither=bayer:bayer_scale=4[vout]');
+    }
+  }
 
   // Pistas de audio: cada evento se recorta, se retrasa a su posición y se mezcla.
   filters.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${num(rangeStart + duration)}[abase]`);
@@ -353,15 +399,17 @@ function buildRender(project, settings, outPath) {
       ? `[abase]anull${cut}[aout]`
       : `${mix.join('')}amix=inputs=${mix.length}:duration=first:normalize=0${cut}[aout]`,
   );
+  if (format.gif) filters.push('[aout]anullsink'); // el GIF no lleva sonido
 
   const args = [
     '-y', '-nostdin', '-v', 'error', '-progress', 'pipe:1', '-nostats',
     ...inputs,
     '-filter_complex_script', null, // se completa con la ruta del archivo temporal
-    '-map', '[vout]', '-map', '[aout]',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-r', fps,
-    '-c:a', 'aac', '-b:a', '192k',
-    '-t', num(duration), '-movflags', '+faststart',
+    ...(format.audioOnly ? [] : ['-map', '[vout]']),
+    ...(format.gif ? [] : ['-map', '[aout]']),
+    ...(format.video ? [...format.video(settings.quality), '-r', fps] : format.gif ? ['-r', fps] : []),
+    ...(format.audio ? format.audio(settings.audioKbps || 192) : []),
+    '-t', num(duration), ...format.extra,
     outPath,
   ];
   return { args, filterGraph: filters.join(';\n'), duration };

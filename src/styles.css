@@ -1707,3 +1707,34 @@ kbd {
 .track-envelope.volume .env-point { fill: #8cc6ff; }
 .track-envelope.pan .env-line { stroke: #ff5a5a; }
 .track-envelope.pan .env-point { fill: #ff9a9a; }
+
+/* Ventana de render: plantilla, formato y ajustes en dos columnas. */
+.modal.render-dialog {
+  width: 600px;
+}
+.render-dialog .modal-content {
+  overflow-y: auto;
+}
+.render-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 12px;
+}
+.render-grid .wide {
+  grid-column: 1 / -1;
+}
+.render-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.render-custom .field-label {
+  margin-right: 6px;
+}
+.render-custom input {
+  width: 90px;
+}
+.render-summary .note {
+  font-size: 11px;
+}

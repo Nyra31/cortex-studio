@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   getPathForFile: (file) => webUtils.getPathForFile(file),
   saveProject: (data, filePath) => ipcRenderer.invoke('project:save', data, filePath),
   openProject: () => ipcRenderer.invoke('project:open'),
-  pickRenderPath: (defaultName) => ipcRenderer.invoke('render:pickPath', defaultName),
+  pickRenderPath: (defaultName, type) => ipcRenderer.invoke('render:pickPath', defaultName, type),
   startRender: (project, settings, outPath) => ipcRenderer.invoke('render:start', project, settings, outPath),
   cancelRender: () => ipcRenderer.invoke('render:cancel'),
   onRenderProgress: (callback) => {

@@ -204,11 +204,12 @@ ipcMain.handle('project:open', async () => {
   return { path: filePath, data: JSON.parse(await fs.promises.readFile(filePath, 'utf8')) };
 });
 
-ipcMain.handle('render:pickPath', async (_e, defaultName) => {
+// type = { name, ext } del formato elegido en la ventana de render.
+ipcMain.handle('render:pickPath', async (_e, defaultName, type) => {
   const res = await dialog.showSaveDialog(mainWindow, {
     title: 'Renderizar como',
     defaultPath: defaultName || 'Video.mp4',
-    filters: [{ name: 'Video MP4 (H.264/AAC)', extensions: ['mp4'] }],
+    filters: [type?.ext ? { name: type.name, extensions: [type.ext] } : { name: 'Video MP4 (H.264/AAC)', extensions: ['mp4'] }],
   });
   return res.canceled ? null : res.filePath;
 });
