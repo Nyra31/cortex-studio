@@ -92,6 +92,10 @@ v0.5.0 (18/10/2026): panorámica/recorte del evento con fotogramas clave (format
 
 **Siguiente paso**: preguntar al usuario qué añadir (ideas en «Pendiente»). Si nota tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma.
 
+## Al llegar a la v1.0: repositorio público y firma del instalador
+
+El usuario quiere seguir trabajando hasta la v1.0 y entonces hacer público el repositorio y firmar el instalador (para el aviso de SmartScreen). Decidido: licencia **GPL-3.0** (el instalador incluye FFmpeg, GPL) y pedir la firma gratuita de **SignPath Foundation** (alternativa: certificado Open Source de Certum). Pasos entonces: archivo `LICENSE` con el texto oficial de la GPL-3.0 y `"license": "GPL-3.0-only"` en `package.json`; sección «Política de firma de código» en el README (texto que exige SignPath: «Free code signing provided by SignPath.io, certificate by SignPath Foundation», roles de committers/approvers y la frase de privacidad: la app no envía nada por red); compilar el instalador con GitHub Actions (`windows-latest`, `npm ci` + `npm run dist`) y subirlo como artefacto para que SignPath lo firme; verificación en dos pasos en GitHub. Con SignPath, el editor que muestra Windows es «SignPath Foundation». La cuenta dueña del repo es `Nyra31` y los commits salen como `illangt79`: preguntar cuál poner en la solicitud.
+
 ## Pendiente (siguientes pasos naturales)
 
 Hechas las tres fases de «transiciones y efectos de sonido y video como los de VEGAS» (v0.3.0 y v0.4.0).
