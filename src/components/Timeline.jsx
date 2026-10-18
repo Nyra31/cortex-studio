@@ -8,6 +8,7 @@ import {
   overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain,
 } from '../state/project.js';
 import { panActive } from '../state/pan.js';
+import { ENVELOPE_KINDS, ENVELOPE_MAX_DB, addEnvelopePoint, envelopeValueAt } from '../state/envelopes.js';
 import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
 import { isText } from '../state/text.js';
 import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
@@ -15,7 +16,7 @@ import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
 export const MEDIA_MIME = 'application/x-cortex-media';
 const EMPTY = [];
 const HEADER_W = 230;
-const TRACK_H = { video: 64, audio: 72 };
+const TRACK_H = { video: 64, audio: 90 };
 const TITLE_H = 16;
 const bodyHeight = (type) => TRACK_H[type] - TITLE_H - 6;
 const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
@@ -323,6 +324,81 @@ function RegionShade({ region, pps }) {
   return <div className="region-shade" style={{ left: region.start * pps, width: (region.end - region.start) * pps }} />;
 }
 
+// Envolventes de la pista (volumen en azul, panorámica en rojo) dibujadas sobre todo el alto de la pista.
+// Volumen: 0 dB a un 70 % de la altura desde abajo, +6 dB arriba y −∞ abajo (escala de raíz cuadrada de la
+// ganancia, como un fader). Panorámica: izquierda arriba, centro en medio y derecha abajo, como en VEGAS.
+const ENV_PAD = 4;
+const maxGain = 10 ** (ENVELOPE_MAX_DB / 20);
+export function envelopeY(kind, v, h) {
+  const inner = h - ENV_PAD * 2;
+  const f = kind === 'volume' ? Math.sqrt(Math.min(maxGain, volumeToGain(v)) / maxGain) : (1 - v) / 2;
+  return ENV_PAD + (1 - f) * inner;
+}
+export function envelopeValue(kind, y, h) {
+  const f = Math.min(1, Math.max(0, 1 - (y - ENV_PAD) / (h - ENV_PAD * 2)));
+  if (kind === 'pan') return Math.round((1 - 2 * f) * 100) / 100;
+  const g = f * f * maxGain;
+  return g <= volumeToGain(MIN_VOLUME_DB) ? MIN_VOLUME_DB : Math.round(20 * Math.log10(g) * 10) / 10;
+}
+export const formatPan = (v) => (Math.abs(v) < 0.005 ? 'Centro' : `${Math.round(Math.abs(v) * 100)} % ${v < 0 ? 'I' : 'D'}`);
+const formatEnv = (kind, v) => (kind === 'volume' ? formatVolume(v) : formatPan(v));
+
+function EnvelopeLines({ track, pps, laneWidth, height, onPointDown, onLineDouble, onPointMenu }) {
+  const env = track.envelopes || {};
+  return ['volume', 'pan'].filter((kind) => env[kind]?.length).map((kind) => {
+    const pts = env[kind];
+    const coords = pts.map((p) => [p.t * pps, envelopeY(kind, p.v, height)]);
+    const line = [[0, coords[0][1]], ...coords, [laneWidth, coords[coords.length - 1][1]]];
+    const d = line.map((c) => c.join(',')).join(' ');
+    return (
+      <svg key={kind} className={`track-envelope ${kind}`} width={laneWidth} height={height}>
+        <polyline className="env-hit" points={d} onDoubleClick={(e) => onLineDouble(e, track.id, kind)}>
+          <title>{`Envolvente de ${ENVELOPE_KINDS[kind].name.toLowerCase()} (doble clic: añadir un punto)`}</title>
+        </polyline>
+        <polyline className="env-line" points={d} />
+        {coords.map(([x, y], i) => (
+          <rect
+            key={i}
+            className="env-point"
+            x={x - 4}
+            y={y - 4}
+            width={8}
+            height={8}
+            onPointerDown={(e) => onPointDown(e, track.id, kind, i)}
+            onContextMenu={(e) => onPointMenu(e, track.id, kind, i)}
+          >
+            <title>{`${formatEnv(kind, pts[i].v)} (arrastra para moverlo; clic derecho: eliminar)`}</title>
+          </rect>
+        ))}
+      </svg>
+    );
+  });
+}
+
+function PanSlider({ value, onChange }) {
+  const first = useRef(true);
+  return (
+    <div className="track-slider" title="Panorámica de la pista (doble clic: centro)">
+      <span className="slider-label">Pan:</span>
+      <input
+        type="range"
+        min={-1}
+        max={1}
+        step={0.01}
+        value={value}
+        onPointerDown={() => (first.current = true)}
+        onKeyDown={() => (first.current = true)}
+        onChange={(e) => {
+          onChange(Number(e.target.value), first.current);
+          first.current = false;
+        }}
+        onDoubleClick={() => onChange(0, true)}
+      />
+      <span className="slider-value">{formatPan(value)}</span>
+    </div>
+  );
+}
+
 function TrackName({ name, onRename }) {
   const [editing, setEditing] = useState(false);
   if (editing) {
@@ -382,7 +458,7 @@ function VolumeSlider({ value, onChange }) {
 
 const TrackRow = memo(function TrackRow({
   track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef, region, dragging,
-  onTrackDown, onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onOpenPan, onEventDouble, onDrop, onUpdateTrack, onDelete,
+  onTrackDown, onTrackMenu, onEnvPointDown, onEnvLineDouble, onEnvPointMenu, onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onOpenPan, onEventDouble, onDrop, onUpdateTrack, onDelete,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
   return (
@@ -391,7 +467,12 @@ const TrackRow = memo(function TrackRow({
       ref={rowRef}
       style={{ height: TRACK_H[track.type], '--track-color': color }}
     >
-      <div className="track-header" onPointerDown={(e) => onTrackDown(e, track.id)} title="Arrastra para mover la pista">
+      <div
+        className="track-header"
+        onPointerDown={(e) => onTrackDown(e, track.id)}
+        onContextMenu={(e) => onTrackMenu(e, track.id)}
+        title="Arrastra para mover la pista; clic derecho: envolventes y más"
+      >
         <div className="track-strip">{number}</div>
         <div className="track-main">
           <div className="track-top">
@@ -416,7 +497,10 @@ const TrackRow = memo(function TrackRow({
             </button>
           </div>
           {track.type === 'audio' && (
-            <VolumeSlider value={track.volume ?? 0} onChange={(volume, record) => update({ volume }, record)} />
+            <>
+              <VolumeSlider value={track.volume ?? 0} onChange={(volume, record) => update({ volume }, record)} />
+              <PanSlider value={track.pan ?? 0} onChange={(pan, record) => update({ pan }, record)} />
+            </>
           )}
         </div>
       </div>
@@ -455,6 +539,17 @@ const TrackRow = memo(function TrackRow({
             />
           );
         })}
+        {track.type === 'audio' && track.envelopes && (
+          <EnvelopeLines
+            track={track}
+            pps={pps}
+            laneWidth={laneWidth}
+            height={TRACK_H.audio}
+            onPointDown={onEnvPointDown}
+            onLineDouble={onEnvLineDouble}
+            onPointMenu={onEnvPointMenu}
+          />
+        )}
       </div>
     </div>
   );
@@ -979,6 +1074,101 @@ const Timeline = forwardRef(function Timeline({
     window.addEventListener('pointerup', up);
   }, [setProject]);
 
+  // ---- Envolventes de pista ----
+  const setEnvelope = useCallback((trackId, kind, fn, record = true) => {
+    setProject((p) => ({
+      ...p,
+      tracks: p.tracks.map((t) => {
+        if (t.id !== trackId) return t;
+        const points = fn(t.envelopes?.[kind] || null);
+        const envelopes = { ...(t.envelopes || {}), [kind]: points };
+        if (!points) delete envelopes[kind];
+        return { ...t, envelopes: Object.keys(envelopes).length ? envelopes : undefined };
+      }),
+    }), record);
+  }, [setProject]);
+
+  // Arrastrar un punto: en horizontal sin pasar a sus vecinos (se ajusta como el cursor; Mayús: sin ajuste),
+  // en vertical cambia su valor.
+  const onEnvPointDown = useCallback((e, trackId, kind, index) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const row = rowRefs.current.get(trackId).querySelector('.track-lane').getBoundingClientRect();
+    const points = live.current.project.tracks.find((t) => t.id === trackId).envelopes[kind];
+    const lo = index > 0 ? points[index - 1].t + 1e-3 : 0;
+    const hi = index < points.length - 1 ? points[index + 1].t - 1e-3 : Infinity;
+    let first = true;
+    const move = (me) => {
+      const t = Math.min(hi, Math.max(lo, snapTime(timeAt(me.clientX), me.shiftKey)));
+      const v = envelopeValue(kind, me.clientY - row.top, row.height);
+      setEnvelope(trackId, kind, (pts) => pts.map((p, i) => (i === index ? { t, v } : p)), first);
+      first = false;
+      onMessage(`${ENVELOPE_KINDS[kind].name}: ${formatEnv(kind, v)} en ${formatTimecode(t, live.current.project.settings.fps)}`);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [onMessage, setEnvelope, snapTime, timeAt]);
+
+  // Doble clic en la línea: un punto nuevo ahí, con el valor que ya tiene la línea en ese momento.
+  const onEnvLineDouble = useCallback((e, trackId, kind) => {
+    e.stopPropagation();
+    const t = snapTime(timeAt(e.clientX), e.shiftKey);
+    setEnvelope(trackId, kind, (pts) => addEnvelopePoint(pts, t, envelopeValueAt(pts, kind, t)));
+  }, [setEnvelope, snapTime, timeAt]);
+
+  const onEnvPointMenu = useCallback((e, trackId, kind, index) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const points = live.current.project.tracks.find((t) => t.id === trackId).envelopes[kind];
+    onContextMenu({
+      kind: 'custom',
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        {
+          label: 'Eliminar el punto',
+          action: () => setEnvelope(trackId, kind, (pts) => pts.filter((_, i) => i !== index)),
+          disabled: points.length < 2,
+        },
+        {
+          label: kind === 'volume' ? 'Poner a 0 dB' : 'Poner en el centro',
+          action: () => setEnvelope(trackId, kind, (pts) => pts.map((p, i) => (i === index ? { ...p, v: 0 } : p))),
+        },
+        'separator',
+        { label: `Quitar la envolvente de ${ENVELOPE_KINDS[kind].name.toLowerCase()}`, action: () => setEnvelope(trackId, kind, () => null) },
+      ],
+    });
+  }, [onContextMenu, setEnvelope]);
+
+  // Clic derecho en la cabecera de una pista: envolventes (en las de audio) y eliminar la pista.
+  const onTrackMenu = useCallback((e, trackId) => {
+    e.preventDefault();
+    const track = live.current.project.tracks.find((t) => t.id === trackId);
+    const env = track.envelopes || {};
+    const toggle = (kind) => setEnvelope(trackId, kind, (pts) => (pts ? null : [{ t: 0, v: ENVELOPE_KINDS[kind].initial }]));
+    onContextMenu({
+      kind: 'custom',
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        ...(track.type === 'audio'
+          ? [
+            { label: 'Envolvente de volumen', checked: !!env.volume, action: () => toggle('volume') },
+            { label: 'Envolvente de panorámica', checked: !!env.pan, action: () => toggle('pan') },
+            'separator',
+          ]
+          : []),
+        { label: 'Eliminar la pista', action: () => onDeleteTrackRef.current(trackId) },
+      ],
+    });
+  }, [onContextMenu, setEnvelope]);
+  const onDeleteTrackRef = useRef(null);
+
   const onUpdateTrack = useCallback((trackId, changes, record) => {
     setProject((p) => ({ ...p, tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, ...changes } : t)) }), record);
   }, [setProject]);
@@ -988,6 +1178,7 @@ const Timeline = forwardRef(function Timeline({
     if (hasEvents && !window.confirm('La pista contiene eventos. ¿Eliminarla de todos modos?')) return;
     setProject((p) => deleteTrack(p, trackId));
   }, [setProject]);
+  onDeleteTrackRef.current = onDeleteTrack;
 
   // Zoom con Ctrl + rueda, manteniendo fijo el punto bajo el puntero.
   useEffect(() => {
@@ -1093,6 +1284,10 @@ const Timeline = forwardRef(function Timeline({
               region={region}
               dragging={trackDrag?.id === track.id}
               onTrackDown={onTrackDown}
+              onTrackMenu={onTrackMenu}
+              onEnvPointDown={onEnvPointDown}
+              onEnvLineDouble={onEnvLineDouble}
+              onEnvPointMenu={onEnvPointMenu}
               onLaneDown={onLaneDown}
               onEventDown={onEventDown}
               onEventReset={onEventReset}

@@ -415,7 +415,9 @@ export default function App() {
   const openContextMenu = useCallback((info) => {
     const { project: p, time: t, clipboard: clip } = live.current;
     let items;
-    if (info.kind === 'marker' || info.kind === 'region') {
+    if (info.kind === 'custom') {
+      items = info.items; // menús que monta la propia línea de tiempo (envolventes, cabecera de pista)
+    } else if (info.kind === 'marker' || info.kind === 'region') {
       const { mark } = info;
       const isRegion = info.kind === 'region';
       items = [

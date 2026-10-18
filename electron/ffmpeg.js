@@ -337,8 +337,13 @@ function buildRender(project, settings, outPath) {
       );
       head = `[afxout${i}]${format},atrim=duration=${num(e.duration)},asetpts=PTS-STARTPTS`;
     }
+    // Envolventes y panorámica de la pista: ganancia de cada canal en el tiempo de la línea de tiempo,
+    // muestra a muestra (antes de adelay, así que el tiempo es t + el principio del evento).
+    const trackMix = tracks.get(e.trackId).mix;
+    const at = (expr) => expr.replaceAll('@T@', `(t+${num(e.start)})`);
+    const env = trackMix ? `,aeval=exprs='val(0)*(${at(trackMix.left)})|val(1)*(${at(trackMix.right)})'` : '';
     filters.push(
-      `${head}${audioFades(e)},adelay=delays=${delay}:all=1${gain === 1 ? '' : `,volume=${gain.toFixed(4)}`}[a${i}]`,
+      `${head}${audioFades(e)}${env},adelay=delays=${delay}:all=1${gain === 1 ? '' : `,volume=${gain.toFixed(4)}`}[a${i}]`,
     );
     mix.push(`[a${i}]`);
   }

@@ -11,6 +11,7 @@ import { EFFECTS, activeEffects } from '../state/effects.js';
 import { Compositor } from '../preview/compositor.js';
 import { drawText, isText } from '../state/text.js';
 import { NO_CROP, panActive, panAt } from '../state/pan.js';
+import { trackMixAt } from '../state/envelopes.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
 
 // Para las pruebas automáticas: procesar un sonido con la misma cadena de efectos que la vista previa.
@@ -56,20 +57,23 @@ function videoLayers(project, mediaById, resolved, eventsById, t) {
   return layers;
 }
 
+// Volumen (pista con su envolvente × evento × fundidos) y panorámica de cada evento que suena en t.
 function audibleEvents(project, mediaById, resolved, t) {
-  const gains = new Map(
+  const mixes = new Map(
     project.tracks
       .filter((tr) => tr.type === 'audio' && isTrackActive(tr, project.tracks))
-      .map((tr) => [tr.id, volumeToGain(tr.volume ?? 0)]),
+      .map((tr) => [tr.id, trackMixAt(tr, t)]),
   );
+  const gains = new Map([...mixes].map(([id, m]) => [id, m.gain]));
   return project.events
     .filter((e) => {
       const m = mediaById.get(e.mediaId);
-      return gains.get(e.trackId) > 0 && m && m.hasAudio && !m.missing && e.start <= t && t < e.start + e.duration;
+      return mixes.has(e.trackId) && m && m.hasAudio && !m.missing && e.start <= t && t < e.start + e.duration;
     })
     .map((e) => ({
       event: e,
       gain: gains.get(e.trackId) * volumeToGain(e.volume ?? 0) * fadeFactor(e, t, resolved.fades.get(e.id)),
+      pan: mixes.get(e.trackId).pan,
     }));
 }
 
@@ -280,9 +284,10 @@ export default function Preview({
     };
     const audible = audibleEvents(project, mediaById, resolved, time);
     const neededAudio = new Set(audible.map(({ event }) => players.get(event.id)));
-    for (const { event: e, gain } of audible) {
+    for (const { event: e, gain, pan } of audible) {
       const p = audioFor(e);
       engine.setGain(p, gain);
+      engine.setPan(p, pan);
       if (playing) sync(p.el, sourceTime(e, time), true, e.rate || 1);
       else if (!p.el.paused) p.el.pause();
     }

@@ -1675,3 +1675,35 @@ kbd {
 .mark-line.region {
   border-left-color: rgba(94, 224, 126, 0.6);
 }
+
+/* Envolventes de pista: volumen (azul) y panorámica (rojo), sobre los eventos. */
+.track-envelope {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+.env-line {
+  fill: none;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.env-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 9;
+  pointer-events: stroke;
+  cursor: copy;
+}
+.env-point {
+  stroke: #111;
+  stroke-width: 1;
+  pointer-events: all;
+  cursor: move;
+}
+.track-envelope.volume .env-line { stroke: #4da3ff; }
+.track-envelope.volume .env-point { fill: #8cc6ff; }
+.track-envelope.pan .env-line { stroke: #ff5a5a; }
+.track-envelope.pan .env-point { fill: #ff9a9a; }

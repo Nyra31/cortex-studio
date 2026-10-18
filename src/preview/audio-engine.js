@@ -72,9 +72,23 @@ export class AudioEngine {
     const input = this.ctx.createGain();
     const output = this.ctx.createGain();
     output.gain.value = 0;
+    // Panorámica de la pista (ley «balance», igual que el render): una ganancia por canal. El audio se pasa
+    // siempre a estéreo, para que un archivo mono suene por los dos lados.
+    output.channelCount = 2;
+    output.channelCountMode = 'explicit';
+    output.channelInterpretation = 'speakers';
+    const splitter = this.ctx.createChannelSplitter(2);
+    const merger = this.ctx.createChannelMerger(2);
+    const left = this.ctx.createGain();
+    const right = this.ctx.createGain();
     source.connect(input);
-    output.connect(this.ctx.destination);
-    p = { el, url, source, input, output, chain: new AudioChain(this.ctx, input, output) };
+    output.connect(splitter);
+    splitter.connect(left, 0);
+    splitter.connect(right, 1);
+    left.connect(merger, 0, 0);
+    right.connect(merger, 0, 1);
+    merger.connect(this.ctx.destination);
+    p = { el, url, source, input, output, left, right, merger, pan: 0, chain: new AudioChain(this.ctx, input, output) };
     this.players.set(key, p);
     return p;
   }
@@ -90,6 +104,15 @@ export class AudioEngine {
     p.output.gain.setTargetAtTime(value, this.ctx.currentTime, 0.008);
   }
 
+  // Panorámica de −1 (izquierda) a 1 (derecha), suavizada como el volumen.
+  setPan(p, value) {
+    if (p.pan === value) return;
+    p.pan = value;
+    const now = this.ctx.currentTime;
+    p.left.gain.setTargetAtTime(Math.min(1, 1 - value), now, 0.008);
+    p.right.gain.setTargetAtTime(Math.min(1, 1 + value), now, 0.008);
+  }
+
   remove(key) {
     const p = this.players.get(key);
     if (!p) return;
@@ -99,6 +122,7 @@ export class AudioEngine {
     p.chain.dispose();
     p.source.disconnect();
     p.output.disconnect();
+    p.merger.disconnect();
     this.players.delete(key);
   }
 

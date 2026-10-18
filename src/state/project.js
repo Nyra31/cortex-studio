@@ -3,6 +3,7 @@ import { DEFAULT_TRANSITION } from './transitions.js';
 import { effectsGraph } from './effects.js';
 import { isText, textPng } from './text.js';
 import { panActive, panExpr, scalePanTime, shiftPan } from './pan.js';
+import { trackMixExpr } from './envelopes.js';
 
 //
 // project = {
@@ -11,7 +12,8 @@ import { panActive, panExpr, scalePanTime, shiftPan } from './pan.js';
 //           o medios de texto generados: { id, kind: 'text', name, text, ... } (ver text.js; sin archivo)
 //   markers: [{ id, time, name, number }],         // marcadores (M), como en VEGAS
 //   regions: [{ id, start, end, name, number }],   // regiones con nombre (R)
-//   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume }],  // ordenadas de arriba a abajo; volume en dB
+//   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume, pan, envelopes }],  // ordenadas de arriba a abajo
+//           volume en dB; pan de −1 (izquierda) a 1 (derecha); envelopes: envolventes de volumen y panorámica (envelopes.js)
 //   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition, effects, rate, pan }],
 // }
 // pan: panorámica/recorte con fotogramas clave (ver pan.js), solo en eventos de video; null o ausente = ninguna.
@@ -44,6 +46,7 @@ const newTrack = (type, number) => ({
   muted: false,
   solo: false,
   volume: 0,
+  pan: 0,
 });
 
 export function emptyProject(settings = DEFAULT_SETTINGS) {
@@ -91,11 +94,15 @@ export function deleteMark(project, kind, id) {
   return { ...project, [key]: (project[key] || []).filter((x) => x.id !== id) };
 }
 
-// Desplaza marcadores y regiones (la cascada en todas las pistas los mueve, como en VEGAS).
-// shiftOf(t) → cuánto se mueve algo que está en t.
+// Desplaza marcadores, regiones y los puntos de las envolventes de pista (la cascada en todas las pistas
+// los mueve, como en VEGAS). shiftOf(t) → cuánto se mueve algo que está en t.
 function shiftMarks(project, shiftOf) {
+  const moveEnv = (points) => points?.map((p) => ({ ...p, t: Math.max(0, p.t + shiftOf(p.t)) }));
   return {
     ...project,
+    tracks: project.tracks.map((t) => (t.envelopes
+      ? { ...t, envelopes: { volume: moveEnv(t.envelopes.volume), pan: moveEnv(t.envelopes.pan) } }
+      : t)),
     markers: (project.markers || []).map((m) => ({ ...m, time: Math.max(0, m.time + shiftOf(m.time)) })),
     regions: (project.regions || []).map((r) => {
       const d = shiftOf(r.start);
@@ -547,7 +554,7 @@ export function loadProject(data, media) {
   return {
     settings: { ...DEFAULT_SETTINGS, ...data.settings },
     media,
-    tracks: data.tracks.map((t) => ({ muted: false, solo: false, volume: 0, ...t })),
+    tracks: data.tracks.map((t) => ({ muted: false, solo: false, volume: 0, pan: 0, ...t })),
     events: data.events.map((e) => ({ ...EVENT_DEFAULTS, ...e })),
     markers: data.markers || [],
     regions: data.regions || [],
@@ -600,6 +607,7 @@ export function renderPayload(project, size = project.settings, range = null) {
       type: t.type,
       muted: !isTrackActive(t, project.tracks),
       gain: volumeToGain(t.volume ?? 0),
+      mix: t.type === 'audio' ? trackMixExpr(t) : null, // envolventes y panorámica (ganancia de cada canal)
     })),
     events: events.map(({ effects, ...e }) => ({
       ...e,
