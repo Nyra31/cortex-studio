@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import TextOverlay from './TextOverlay.jsx';
 import PanOverlay from './PanOverlay.jsx';
@@ -125,9 +125,13 @@ function sync(el, target, playing, rate = 1) {
 // panEventId, onPanChange: evento con la ventana de panorámica abierta, que se coloca con el ratón (PanOverlay).
 export default function Preview({
   project, time, playing, selection, editTextId, onSelectEvent, onTextChange, onEditText, panEventId, onPanChange,
-  onOpenProperties,
+  onOpenProperties, commands, onMessage,
 }) {
   const canvasRef = useRef(null);
+  const previewRef = useRef(null);
+  const externalWin = useRef(null);
+  const [full, setFull] = useState(false); // la vista previa ocupa toda la pantalla (en esta ventana)
+  const [external, setExternal] = useState(false); // vista previa en otra pantalla
   const sourcesRef = useRef(null);
   const videoEls = useRef(new Map()); // reproductor (ver playerKeys) → <video> (silenciado: el sonido sale de las pistas de audio)
   const imageEls = useRef(new Map()); // id de medio → <img>
@@ -346,12 +350,13 @@ export default function Preview({
     };
   }, []);
 
-  // Resolución interna del lienzo: la del proyecto, sin pasar de la que ocupa en pantalla.
+  // Resolución interna del lienzo: la del proyecto, sin pasar de la que ocupa en pantalla (con la vista previa
+  // en otra pantalla, la del proyecto: es lo que se ve allí).
   useEffect(() => {
     const canvas = canvasRef.current;
     const update = () => {
       const dpr = window.devicePixelRatio || 1;
-      const w = Math.max(2, Math.min(width, Math.round(canvas.clientWidth * dpr)));
+      const w = external ? width : Math.max(2, Math.min(width, Math.round(canvas.clientWidth * dpr)));
       const h = Math.max(2, Math.round((w * height) / width));
       canvas.width = w;
       canvas.height = h;
@@ -363,7 +368,69 @@ export default function Preview({
     const ro = new ResizeObserver(update);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [width, height]);
+  }, [width, height, external]);
+
+  // Pantalla completa, como la vista previa externa de VEGAS (Alt+Mayús+4 o doble clic en la imagen). Con
+  // otra pantalla conectada, la imagen va a esa pantalla y esta sigue libre para editar; con una sola, la
+  // vista previa ocupa toda la pantalla. Se sale igual, o con Esc.
+  useEffect(() => {
+    const onChange = () => setFull(document.fullscreenElement === previewRef.current);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  const openExternal = useCallback(() => {
+    const win = window.open('', 'cortex-externa');
+    if (!win) return false;
+    externalWin.current = win;
+    const doc = win.document;
+    doc.title = 'Cortex Studio: vista previa';
+    doc.body.style.cssText = 'margin:0;background:#000;overflow:hidden;cursor:none';
+    const video = doc.createElement('video');
+    video.style.cssText = 'width:100vw;height:100vh;object-fit:contain;display:block';
+    video.muted = true;
+    video.autoplay = true;
+    // La imagen del lienzo de la vista previa, tal cual (lleva cada fotograma que dibuja el compositor).
+    const stream = canvasRef.current.captureStream();
+    video.srcObject = stream;
+    doc.body.appendChild(video);
+    // Las teclas pulsadas con esa ventana activa funcionan igual que en el editor (Esc la cierra).
+    doc.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      if (e.key === 'Escape') {
+        win.close();
+        return;
+      }
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        key: e.key, code: e.code, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey,
+      }));
+    });
+    doc.addEventListener('dblclick', () => win.close());
+    win.addEventListener('pagehide', () => {
+      stream.getTracks().forEach((t) => t.stop());
+      externalWin.current = null;
+      setExternal(false);
+    });
+    setExternal(true);
+    invalidate();
+    return true;
+  }, []);
+  const toggleFullScreen = useCallback(async () => {
+    if (externalWin.current && !externalWin.current.closed) {
+      externalWin.current.close();
+      return;
+    }
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+      return;
+    }
+    if ((await window.api.displayCount()) > 1 && openExternal()) {
+      onMessage?.('Vista previa en la otra pantalla. Para quitarla: Alt+Mayús+4, Esc o doble clic en ella.');
+      return;
+    }
+    previewRef.current.requestFullscreen().catch(() => {});
+  }, [openExternal, onMessage]);
+  if (commands) commands.current = { toggleFullScreen };
+  useEffect(() => () => externalWin.current?.close(), []);
 
   return (
     <div className="preview-window">
@@ -372,10 +439,24 @@ export default function Preview({
           <Icon name="properties" />
         </button>
         <span className="dock-toolbar-label">Vista previa: completa</span>
+        <span className="footer-spacer" />
+        <button
+          className={`tool${external ? ' active' : ''}`}
+          title="Vista previa a pantalla completa (Alt+Mayús+4 o doble clic en la imagen; con dos pantallas, en la otra)"
+          onClick={toggleFullScreen}
+        >
+          <Icon name="fullscreen" />
+        </button>
       </div>
-      <div className="preview">
-        <div className="screen" style={{ '--aspect': width / height }}>
+      <div className="preview" ref={previewRef}>
+        <div
+          className="screen"
+          style={{ '--aspect': width / height }}
+          onDoubleClick={(e) => !e.target.closest('.pan-overlay') && toggleFullScreen()}
+          title={full ? 'Doble clic o Esc: salir de la pantalla completa' : undefined}
+        >
           <canvas ref={canvasRef} />
+          {!full && (
           <TextOverlay
             items={textItems}
             target={textTarget}
@@ -385,7 +466,8 @@ export default function Preview({
             onChange={onTextChange}
             onEdit={onEditText}
           />
-          {panEvent && panFit && (
+          )}
+          {!full && panEvent && panFit && (
             <PanOverlay
               values={panAt(panEvent.pan, time - panEvent.start)}
               crop={panEvent.pan?.crop || NO_CROP}

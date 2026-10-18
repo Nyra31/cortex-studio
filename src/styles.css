@@ -1880,3 +1880,12 @@ kbd {
 .font-picker-item.active {
   background: var(--accent-dim);
 }
+
+/* Vista previa a pantalla completa (en esta pantalla): solo la imagen, sobre negro. */
+.preview:fullscreen {
+  background: #000;
+  padding: 0;
+}
+.preview:fullscreen .screen {
+  cursor: none;
+}

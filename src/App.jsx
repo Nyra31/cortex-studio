@@ -73,6 +73,8 @@ export default function App() {
   const [recording, setRecording] = useState(null); // { trackId, start } mientras se graba
   const [recordDialog, setRecordDialog] = useState(false);
   const recorderRef = useRef(null);
+  const previewCommands = useRef(null); // { toggleFullScreen } (los pone la vista previa)
+  const togglePreviewFull = useCallback(() => previewCommands.current?.toggleFullScreen(), []);
   const timelineRef = useRef(null);
 
   const duration = projectDuration(project);
@@ -849,6 +851,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: 'Ajustar el proyecto a la ventana', action: () => timelineRef.current?.zoomToFit() },
         'separator',
         { label: 'Pantalla completa', shortcut: 'F11', action: api.toggleFullScreen, checked: fullScreen },
+        { label: 'Vista previa a pantalla completa', shortcut: 'Alt+Mayús+4', action: togglePreviewFull },
         'separator',
         { label: 'Medios del proyecto', shortcut: 'Alt+4', action: () => setLeftTab('media'), checked: leftTab === 'media' },
         { label: 'Transiciones', shortcut: 'Alt+7', action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
@@ -901,7 +904,9 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
     const key = e.key.toLowerCase();
     const ctrl = e.ctrlKey || e.metaKey;
     let action;
-    if (ctrl) {
+    if (e.altKey && e.shiftKey && e.code === 'Digit4') {
+      action = togglePreviewFull; // como la vista previa externa de VEGAS
+    } else if (ctrl) {
       action = {
         z: e.shiftKey ? history.redo : history.undo,
         y: history.redo,
@@ -1045,6 +1050,8 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             panEventId={panEventId}
             onPanChange={changePanAtCursor}
             onOpenProperties={openProperties}
+            commands={previewCommands}
+            onMessage={setStatus}
           />
         </Dock>
       </div>

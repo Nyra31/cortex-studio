@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, shell, Menu, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Readable } = require('stream');
@@ -132,7 +132,20 @@ function createWindow() {
       mainWindow.close();
     }
   });
+  // Vista previa en otra pantalla (window.open de la interfaz con el nombre «cortex-externa»): ventana sin
+  // marco a pantalla completa en una pantalla distinta de la del editor (o en la misma si solo hay una).
+  mainWindow.webContents.setWindowOpenHandler(({ frameName }) => (frameName === 'cortex-externa'
+    ? { action: 'allow', overrideBrowserWindowOptions: { frame: false, show: false, backgroundColor: '#000000', title: 'Cortex Studio: vista previa' } }
+    : { action: 'deny' }));
+  mainWindow.webContents.on('did-create-window', (child) => {
+    const here = screen.getDisplayMatching(mainWindow.getBounds());
+    const other = screen.getAllDisplays().find((d) => d.id !== here.id) || here;
+    child.setBounds(other.bounds);
+    child.show();
+    child.setFullScreen(true);
+  });
   mainWindow.on('closed', () => {
+    for (const w of BrowserWindow.getAllWindows()) w.close(); // la vista previa externa
     mainWindow = null;
     clearRecovery(); // cierre normal: guardado, sin cambios o «No guardar»
   });
@@ -316,6 +329,8 @@ ipcMain.handle('record:stop', async (_e, id) => {
   }
   return r.path;
 });
+
+ipcMain.handle('screen:count', () => screen.getAllDisplays().length);
 
 ipcMain.handle('shell:reveal', (_e, filePath) => shell.showItemInFolder(filePath));
 ipcMain.handle('devtools:toggle', () => mainWindow && mainWindow.webContents.toggleDevTools());

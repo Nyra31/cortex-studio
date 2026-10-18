@@ -42,6 +42,7 @@ const SHORTCUTS = [
   ['Ctrl+R', 'Grabar voz en off en la pista armada / terminar'],
   ['Alt+Intro', 'Propiedades del proyecto'],
   ['F11', 'Pantalla completa'],
+  ['Alt+Mayús+4 / doble clic en la vista previa', 'Vista previa a pantalla completa (en la otra pantalla si hay dos)'],
   ['Alt+4 / Alt+7 / Alt+8', 'Ventana de medios / de transiciones / de efectos de video'],
   ['Doble clic en un solapamiento', 'Volver a disolución cruzada'],
   ['Doble clic en una pista', 'Cambiar el nombre de la pista'],

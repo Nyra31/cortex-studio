@@ -79,7 +79,10 @@ export default function TextOverlay({ items, target, width, height, onSelect, on
         const fx = (e.clientX - rect.left) / rect.width;
         const fy = (e.clientY - rect.top) / rect.height;
         const hit = items.find((it) => inside(boxOf(it), fx, fy));
-        if (hit) onEdit(hit.media.id);
+        if (hit) {
+          e.stopPropagation(); // en un texto, el doble clic lo edita (fuera, pone la vista previa a pantalla completa)
+          onEdit(hit.media.id);
+        }
       }}
     >
       {box && (
