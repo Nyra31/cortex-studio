@@ -33,7 +33,7 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 - **Proyecto nuevo:** al empezar se elige la orientación (horizontal o vertical), la resolución (de SD a 4K, o personalizada) y la velocidad de fotogramas (23,976 a 60 fps). Se puede cambiar en cualquier momento en *Archivo → Propiedades del proyecto* (Alt+Intro).
 - **Medios del proyecto:** importa videos, audios e imágenes con *Importar medios* o arrastrándolos desde el Explorador. Muestra una miniatura, la duración y la resolución de cada archivo.
 - **Línea de tiempo multipista:** pistas de video arriba y de audio abajo. Un video con sonido se coloca como dos eventos agrupados (video y audio) que se mueven y recortan juntos.
-- **Pistas:** silencio, solo, volumen (pistas de audio, de -∞ a +12 dB) y cambio de nombre con doble clic.
+- **Pistas:** silencio, solo, volumen (pistas de audio, de -∞ a +12 dB) y cambio de nombre con doble clic. Como en VEGAS, una pista de video nueva aparece arriba del todo y una de audio abajo del todo; se añaden desde el menú *Insertar*, con Ctrl+Mayús+Q / Ctrl+Q o con los botones de la zona vacía de abajo, y se cambian de orden arrastrando su cabecera.
 - **Edición:** arrastrar para mover (también a otra pista), recortar por los bordes, dividir en el cursor y eliminar. Incluye ajuste magnético a bordes y al cursor, y deshacer/rehacer.
 - **Velocidad de los eventos** como en VEGAS: con Ctrl pulsado, arrastrar un borde del evento lo estira o lo encoge sin cambiar el trozo de video que usa, así que se reproduce más lento o más rápido (del 25 % al 400 %). El audio cambia de velocidad sin cambiar el tono. La velocidad aparece en el título del evento junto a una línea en zigzag; *Velocidad normal (100 %)* en el menú contextual la quita.
 - **Panorámica/recorte del evento** como en VEGAS (botón con el icono de recorte de cada evento de video o su menú contextual): posición, zoom, rotación y recorte de los bordes, con **fotogramas clave** para animarlo (efecto Ken Burns, zooms, imagen sobre imagen que se mueve, textos que entran deslizándose…). En la vista previa, con la ventana abierta, la imagen se arrastra para moverla, las esquinas cambian el zoom y el círculo de arriba la gira (Mayús: de 15 en 15°). Con varios fotogramas clave, cambiar un valor donde no hay ninguno crea uno nuevo; cada tramo puede ser suave (acelera y frena) o uniforme. Los fotogramas clave se ven como rombos en el evento y siguen a la imagen al recortarlo, dividirlo o cambiar su velocidad. *Llenar el cuadro* quita las bandas negras (por ejemplo, un video vertical en un proyecto horizontal). Lo que queda fuera de la imagen es transparente: se ve la pista de debajo.
@@ -87,7 +87,8 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 | Doble clic en un tirador de fundido | Quitar el fundido |
 | Doble clic en la línea de volumen del evento | Volver a 0 dB |
 | F8 | Activar o desactivar el ajuste |
-| Ctrl+Q / Ctrl+Mayús+Q | Insertar pista de audio / de video |
+| Ctrl+Q / Ctrl+Mayús+Q | Insertar pista de audio (abajo del todo) / de video (arriba del todo) |
+| Arrastrar la cabecera de una pista | Cambiarla de orden |
 | Ctrl+N / Ctrl+O / Ctrl+S | Nuevo / abrir / guardar |
 | Ctrl+I | Importar medios |
 | Ctrl+M | Renderizar |

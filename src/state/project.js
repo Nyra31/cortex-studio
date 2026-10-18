@@ -167,20 +167,32 @@ export function mediaLength(media) {
   return media.isImage ? IMAGE_DURATION : media.duration;
 }
 
-// Las pistas de video van siempre arriba y las de audio abajo. atTop: la de video nueva va la primera
-// (encima de todas, por ejemplo para un texto sobre el video).
-export function addTrack(project, type, atTop = false) {
+// Como en VEGAS, una pista de video nueva va arriba del todo (encima de las demás) y una de audio, abajo
+// del todo. where: 'top', 'bottom' o 'afterType' (detrás de la última de su tipo, la usa pegar para que las
+// pistas creadas queden en el mismo orden que las copiadas). Luego las pistas se pueden reordenar (moveTrack).
+export function addTrack(project, type, where = type === 'video' ? 'top' : 'bottom') {
   const track = newTrack(type, project.tracks.filter((t) => t.type === type).length + 1);
   const tracks = [...project.tracks];
-  if (type === 'video' && atTop) {
+  if (where === 'top') {
     tracks.unshift(track);
-  } else if (type === 'video') {
-    const lastVideo = tracks.map((t) => t.type).lastIndexOf('video');
-    tracks.splice(lastVideo + 1, 0, track);
+  } else if (where === 'afterType') {
+    const last = tracks.map((t) => t.type).lastIndexOf(type);
+    tracks.splice(last >= 0 ? last + 1 : type === 'video' ? 0 : tracks.length, 0, track);
   } else {
     tracks.push(track);
   }
   return { project: { ...project, tracks }, track };
+}
+
+// Mueve una pista a la posición index (0 = arriba del todo) de la lista final.
+export function moveTrack(project, trackId, index) {
+  const from = project.tracks.findIndex((t) => t.id === trackId);
+  if (from < 0) return project;
+  const tracks = project.tracks.filter((t) => t.id !== trackId);
+  const to = Math.max(0, Math.min(tracks.length, index));
+  if (to === from) return project;
+  tracks.splice(to, 0, project.tracks[from]);
+  return { ...project, tracks };
 }
 
 // Coloca un medio en la línea de tiempo. Un video con sonido genera dos eventos agrupados (video + audio).
@@ -326,7 +338,7 @@ export function pasteEvents(project, clip, t, targetTrackId = null) {
     let i = Math.max(0, list.findIndex((tr) => tr.id === e.trackId)); // si la pista ya no existe, la primera de su tipo
     if (target && e.trackType === target.type) i += shift;
     while (list.length <= i) {
-      p = addTrack(p, e.trackType).project;
+      p = addTrack(p, e.trackType, 'afterType').project;
       list = sameType(e.trackType);
     }
     return list[i].id;

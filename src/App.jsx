@@ -247,7 +247,7 @@ export default function App() {
     const free = top && !next.events.some((e) => e.trackId === top.id && e.start < t + IMAGE_DURATION && e.start + e.duration > t);
     let trackId = top?.id;
     if (!free) {
-      const res = addTrack(next, 'video', true);
+      const res = addTrack(next, 'video');
       next = res.project;
       trackId = res.track.id;
     }
@@ -821,6 +821,7 @@ export default function App() {
         }}
         onEditText={editTextOf}
         onOpenPan={openPan}
+        onAddTrack={insertTrack}
         footer={
           <Transport
             playing={playing}

@@ -3,7 +3,7 @@ import Waveform from './Waveform.jsx';
 import Icon from './Icon.jsx';
 import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
-  EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, gainToVolume, isTrackActive,
+  EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, moveTrack, gainToVolume, isTrackActive,
   overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain,
 } from '../state/project.js';
 import { panActive } from '../state/pan.js';
@@ -316,13 +316,17 @@ function VolumeSlider({ value, onChange }) {
 }
 
 const TrackRow = memo(function TrackRow({
-  track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef, region,
-  onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onOpenPan, onEventDouble, onDrop, onUpdateTrack, onDelete,
+  track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef, region, dragging,
+  onTrackDown, onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onOpenPan, onEventDouble, onDrop, onUpdateTrack, onDelete,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
   return (
-    <div className={`track-row ${track.type}`} ref={rowRef} style={{ height: TRACK_H[track.type], '--track-color': color }}>
-      <div className="track-header">
+    <div
+      className={`track-row ${track.type}${dragging ? ' dragging' : ''}`}
+      ref={rowRef}
+      style={{ height: TRACK_H[track.type], '--track-color': color }}
+    >
+      <div className="track-header" onPointerDown={(e) => onTrackDown(e, track.id)} title="Arrastra para mover la pista">
         <div className="track-strip">{number}</div>
         <div className="track-main">
           <div className="track-top">
@@ -393,7 +397,7 @@ const TrackRow = memo(function TrackRow({
 
 const Timeline = forwardRef(function Timeline({
   project, setProject, selection, setSelection, time, seek, playing, region, setRegion,
-  pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, onEditText, onOpenPan, footer,
+  pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, onEditText, onOpenPan, onAddTrack, footer,
 }, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -403,6 +407,7 @@ const Timeline = forwardRef(function Timeline({
   const prevPps = useRef(pps);
   const [view, setView] = useState({ left: 0, width: 1200 });
   const [marquee, setMarquee] = useState(null); // rectángulo de selección { left, right, top, bottom } en px del contenido
+  const [trackDrag, setTrackDrag] = useState(null); // pista que se arrastra: { id, line } (line: y de la línea de destino)
   const fps = project.settings.fps;
 
   // Valores actuales para manejadores estables (evita re-renderizar todas las pistas a cada fotograma).
@@ -799,6 +804,36 @@ const Timeline = forwardRef(function Timeline({
     }
   }, [onDropFiles, onMessage, onOpenFx, setProject, snapPoints, timeAt]);
 
+  // Arrastrar la cabecera de una pista la cambia de sitio (como en VEGAS). Una línea marca dónde quedará.
+  const onTrackDown = useCallback((e, trackId) => {
+    if (e.button !== 0 || e.target.closest('button, input, .track-slider')) return;
+    const startY = e.clientY;
+    let dragging = false;
+    let target = null; // posición de inserción en la lista actual (0..n)
+    const tracks = live.current.project.tracks;
+    const from = tracks.findIndex((t) => t.id === trackId);
+    const move = (me) => {
+      if (!dragging && Math.abs(me.clientY - startY) < 4) return;
+      dragging = true;
+      const contentTop = contentRef.current.getBoundingClientRect().top;
+      const rects = tracks.map((t) => rowRefs.current.get(t.id)?.getBoundingClientRect()).filter(Boolean);
+      if (rects.length !== tracks.length) return;
+      target = rects.filter((r) => r.top + r.height / 2 < me.clientY).length;
+      const line = (target < rects.length ? rects[target].top : rects[rects.length - 1].bottom) - contentTop;
+      setTrackDrag({ id: trackId, line });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setTrackDrag(null);
+      if (!dragging || target === null) return;
+      const index = target > from ? target - 1 : target;
+      if (index !== from) setProject((p) => moveTrack(p, trackId, index));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [setProject]);
+
   const onUpdateTrack = useCallback((trackId, changes, record) => {
     setProject((p) => ({ ...p, tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, ...changes } : t)) }), record);
   }, [setProject]);
@@ -908,6 +943,8 @@ const Timeline = forwardRef(function Timeline({
               laneWidth={laneWidth}
               rowRef={rowRefFor(track.id)}
               region={region}
+              dragging={trackDrag?.id === track.id}
+              onTrackDown={onTrackDown}
               onLaneDown={onLaneDown}
               onEventDown={onEventDown}
               onEventReset={onEventReset}
@@ -923,12 +960,23 @@ const Timeline = forwardRef(function Timeline({
             />
           ))}
           <div className="track-row empty" onDragOver={allowDrop} onDrop={(e) => onDrop(e, 'new')}>
-            <div className="track-header">Suelta aquí para crear pistas nuevas</div>
+            <div className="track-header">
+              <span>Suelta aquí para crear pistas nuevas</span>
+              <div className="add-track-buttons">
+                <button onClick={() => onAddTrack('video')} title="Insertar pista de video, arriba del todo (Ctrl+Mayús+Q)">
+                  <Icon name="film" size={12} /> Pista de video
+                </button>
+                <button onClick={() => onAddTrack('audio')} title="Insertar pista de audio, abajo del todo (Ctrl+Q)">
+                  <Icon name="speaker" size={12} /> Pista de audio
+                </button>
+              </div>
+            </div>
             <div className="track-lane" style={{ width: laneWidth }} onPointerDown={onLaneDown}>
               <RegionShade region={region} pps={pps} />
             </div>
           </div>
           <div className="cursor-line" style={{ left: HEADER_W + time * pps }} />
+          {trackDrag && <div className="track-drop-line" style={{ top: trackDrag.line - 1 }} />}
           {marquee && (
             <div
               className="marquee"

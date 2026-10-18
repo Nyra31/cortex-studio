@@ -1555,3 +1555,41 @@ kbd {
   background: #ffd84d;
   cursor: grab;
 }
+
+/* Mover pistas arrastrando su cabecera; botones para añadir pistas en la zona vacía de abajo. */
+.track-header {
+  cursor: grab;
+}
+.track-header input,
+.track-header button {
+  cursor: default;
+}
+.track-row.dragging {
+  opacity: 0.5;
+}
+.track-drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 4px var(--accent);
+  z-index: 8;
+  pointer-events: none;
+}
+.track-row.empty .track-header {
+  flex-direction: column;
+  gap: 8px;
+  cursor: default;
+}
+.add-track-buttons {
+  display: flex;
+  gap: 6px;
+}
+.add-track-buttons button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+}

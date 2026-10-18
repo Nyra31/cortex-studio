@@ -43,7 +43,7 @@ Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está defi
 ## Convenciones del modelo
 
 - Tiempos en **segundos** (float). `MIN_EVENT` = duración mínima de un evento.
-- Pistas ordenadas de arriba a abajo: las de video siempre encima de las de audio (`addTrack` lo respeta).
+- Pistas ordenadas de arriba a abajo (la de video de más arriba se dibuja encima). Como en VEGAS, una pista de video nueva va arriba del todo y una de audio abajo del todo (`addTrack`; pegar usa `'afterType'`), y se pueden reordenar arrastrando su cabecera (`moveTrack`), también mezclando video y audio.
 - Un video con sonido = dos eventos con el mismo `groupId`; se mueven, recortan y dividen juntos.
 - Volumen de pista en dB (`MIN_VOLUME_DB` = silencio, máximo `MAX_TRACK_VOLUME_DB` = +12 dB; el de evento, máximo 0 dB). Silencio/solo se resuelven con `isTrackActive`.
 - Velocidad: cada evento tiene `rate` (1 = normal, de `MIN_RATE` 0,25 a `MAX_RATE` 4; Ctrl + arrastrar un borde). `duration` es lo que ocupa en la línea de tiempo y del medio se usan `duration × rate` s desde `inPoint`: para pasar a tiempo del medio usar siempre `sourceTime(e, t)` (dividir, recortar, `playerKeys`, sincronizar reproductores con `playbackRate`, forma de onda, `eventPeak`). En el render: `setpts=(PTS-STARTPTS)/rate` antes de `fps` y `atempo` (encadenado por debajo de 0,5) en el audio, que conserva el tono como el navegador.
