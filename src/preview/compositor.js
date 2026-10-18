@@ -73,12 +73,17 @@ void main() {
   gl_Position = vec4(aPos, 0.0, 1.0);
 }`;
 
-const transitionCases = [...TRANSITIONS.values()]
-  .filter((t) => GLSL[t.id])
-  .map((t) => `  if (uType == ${t.index}) { ${GLSL[t.id]} }`)
-  .join('\n');
+// Código GLSL de cada transición por su índice (las que no tienen traducción propia, disolución cruzada).
+const DEFAULT_GLSL = 'return mixx(A(uv), B(uv), P);';
+const transitionCode = (index) => {
+  const t = [...TRANSITIONS.values()].find((x) => x.index === index);
+  return (t && GLSL[t.id]) || DEFAULT_GLSL;
+};
 
-const FRAGMENT = `#version 300 es
+// Shader de composición. Hay uno para las capas normales y otro por cada transición, que se compila la
+// primera vez que se usa: con todas las transiciones en un mismo shader, Direct3D tardaba de 10 a 30 s en
+// compilarlo al abrir la aplicación sin caché (y la ventana no se pintaba hasta entonces).
+const fragmentSource = (transition) => `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 outColor;
@@ -89,36 +94,27 @@ uniform vec2 uScaleB;
 uniform bool uHasA;
 uniform bool uHasB;
 uniform vec2 uFrame;    // resolución del proyecto
-uniform bool uTransition;
-uniform int uType;
 uniform float uP;
 uniform float uOpacity;
-uniform bool uPanOnA;   // panorámica/recorte del evento (ver state/pan.js)
-uniform bool uPanOnB;
-uniform vec4 uPanA;     // centro x, y (fracción del cuadro), escala, giro (radianes, sentido horario)
+uniform vec4 uPanA;     // panorámica (ver state/pan.js): centro x, y (fracción del cuadro), cos/escala, sen/escala
 uniform vec4 uPanB;
 uniform vec4 uCropA;    // recorte izquierda, arriba, derecha, abajo (fracciones de la imagen)
 uniform vec4 uCropB;
+uniform float uOutA;    // alfa de lo que queda fuera de la imagen: 1 (bandas negras) o 0 con panorámica
+uniform float uOutB;
 const float PI = 3.14159265358979;
 
-// Imagen encajada en el cuadro; fuera de ella (bandas) negro opaco. Dentro conserva el alfa (croma).
-// Con panorámica: el punto q de la imagen (px del cuadro, desde su centro) se dibuja en P + S·R·q, así que
-// se deshace esa transformación; lo que queda fuera de la imagen (o recortado) es transparente, como en el render.
-vec4 fit(sampler2D t, vec2 s, bool has, vec2 uv, bool panOn, vec4 pan, vec4 crop) {
-  if (panOn) {
-    vec2 d = (uv - pan.xy) * uFrame;
-    float c = cos(pan.w), sn = sin(pan.w);
-    vec2 q = vec2(c * d.x + sn * d.y, -sn * d.x + c * d.y) / pan.z;
-    vec2 qi = (q / uFrame) / s + 0.5;
-    if (!has || qi.x < crop.x || qi.y < crop.y || qi.x > 1.0 - crop.z || qi.y > 1.0 - crop.w) return vec4(0.0);
-    return texture(t, qi);
-  }
-  vec2 q = (uv - 0.5) / s + 0.5;
-  if (!has || q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) return vec4(0.0, 0.0, 0.0, 1.0);
+// Imagen encajada en el cuadro; fuera de ella, negro opaco (bandas) o transparente (con panorámica).
+// Dentro conserva el alfa (croma). Panorámica: el punto q de la imagen (px del cuadro, desde su centro) se
+// dibuja en P + S·R·q, así que aquí se deshace; sin panorámica es la identidad (centro 0,5, escala 1).
+vec4 fit(sampler2D t, vec2 s, bool has, vec2 uv, vec4 pan, vec4 crop, float outA) {
+  vec2 d = (uv - pan.xy) * uFrame;
+  vec2 q = (vec2(pan.z * d.x + pan.w * d.y, pan.z * d.y - pan.w * d.x) / uFrame) / s + 0.5;
+  if (!has || q.x < crop.x || q.y < crop.y || q.x > 1.0 - crop.z || q.y > 1.0 - crop.w) return vec4(0.0, 0.0, 0.0, outA);
   return texture(t, q);
 }
-vec4 fitA(vec2 uv) { return fit(uA, uScaleA, uHasA, uv, uPanOnA, uPanA, uCropA); }
-vec4 fitB(vec2 uv) { return fit(uB, uScaleB, uHasB, uv, uPanOnB, uPanB, uCropB); }
+vec4 fitA(vec2 uv) { return fit(uA, uScaleA, uHasA, uv, uPanA, uCropA, uOutA); }
+vec4 fitB(vec2 uv) { return fit(uB, uScaleB, uHasB, uv, uPanB, uCropB, uOutB); }
 // En las transiciones (opacas, como xfade en yuv420p) se pierde el alfa: fuera de la imagen panorámica, negro.
 vec3 A(vec2 uv) { return fitA(uv).rgb; }
 vec3 B(vec2 uv) { return fitB(uv).rgb; }
@@ -127,24 +123,28 @@ vec3 Bp(vec2 p) { return B(p / uFrame); }
 vec3 mixx(vec3 a, vec3 b, float m) { return a * m + b * (1.0 - m); }
 float frand(vec2 p) { return fract(sin(p.x * 12.9898 + p.y * 78.233) * 43758.545); }
 
+${transition === null ? `
+void main() {
+  vec4 c = fitA(vUv);
+  float a = c.a * uOpacity;
+  outColor = vec4(c.rgb * a, a);
+}` : `
 vec3 transition(vec2 uv) {
   float P = uP;
   vec2 F = uFrame;
   vec2 px = uv * F;
   float x = px.x, y = px.y, W = F.x, H = F.y;
-${transitionCases}
-  return mixx(A(uv), B(uv), P);
+  ${transition}
 }
 
 void main() {
-  if (uTransition) {
-    outColor = vec4(transition(vUv), 1.0); // como xfade en yuv420p: la transición es opaca
-  } else {
-    vec4 c = fitA(vUv);
-    float a = c.a * uOpacity;
-    outColor = vec4(c.rgb * a, a);
-  }
-}`;
+  outColor = vec4(transition(vUv), 1.0); // como xfade en yuv420p: la transición es opaca
+}`}`;
+
+const UNIFORMS = [
+  'uA', 'uB', 'uScaleA', 'uScaleB', 'uHasA', 'uHasB', 'uFrame', 'uP', 'uOpacity',
+  'uPanA', 'uPanB', 'uCropA', 'uCropB', 'uOutA', 'uOutB',
+];
 
 // Pasadas de efectos: dibujan en un búfer del tamaño de la imagen encajada, con la fila 0 arriba
 // (igual que las texturas de video), para que todas las texturas tengan la misma orientación.
@@ -208,17 +208,8 @@ export class Compositor {
     this.fxPrograms = new Map(); // código de la pasada → { program, loc }
     this.pool = []; // búferes intermedios de los efectos: { fbo, tex, w, h, busy }
 
-    this.program = link(gl, VERTEX, FRAGMENT);
-    gl.useProgram(this.program);
-    this.u = {};
-    for (const name of [
-      'uA', 'uB', 'uScaleA', 'uScaleB', 'uHasA', 'uHasB', 'uFrame', 'uTransition', 'uType', 'uP', 'uOpacity',
-      'uPanOnA', 'uPanOnB', 'uPanA', 'uPanB', 'uCropA', 'uCropB',
-    ]) {
-      this.u[name] = gl.getUniformLocation(this.program, name);
-    }
-    gl.uniform1i(this.u.uA, 0);
-    gl.uniform1i(this.u.uB, 1);
+    this.programs = new Map(); // null (capas normales) o índice de transición → { program, u }
+    this.programFor(null);
 
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -257,13 +248,32 @@ export class Compositor {
     return { tex: entry.tex, w, h };
   }
 
-  setPan(which, pan) {
+  // Programa de composición para las capas normales (null) o para una transición (su índice).
+  programFor(type) {
+    let entry = this.programs.get(type);
+    if (!entry) {
+      const gl = this.gl;
+      const program = link(gl, VERTEX, fragmentSource(type === null ? null : transitionCode(type)));
+      const u = {};
+      for (const name of UNIFORMS) u[name] = gl.getUniformLocation(program, name);
+      gl.useProgram(program);
+      gl.uniform1i(u.uA, 0);
+      gl.uniform1i(u.uB, 1);
+      entry = { program, u };
+      this.programs.set(type, entry);
+    }
+    return entry;
+  }
+
+  // Sin panorámica: identidad, sin recorte y bandas negras opacas.
+  setPan(u, which, pan) {
     const gl = this.gl;
-    gl.uniform1i(this.u[`uPanOn${which}`], pan ? 1 : 0);
-    if (!pan) return;
-    gl.uniform4f(this.u[`uPan${which}`], pan.x, pan.y, pan.scale, (pan.rotation * Math.PI) / 180);
-    const c = pan.crop;
-    gl.uniform4f(this.u[`uCrop${which}`], c.left, c.top, c.right, c.bottom);
+    const r = pan ? (pan.rotation * Math.PI) / 180 : 0;
+    const k = pan ? 1 / pan.scale : 1;
+    gl.uniform4f(u[`uPan${which}`], pan ? pan.x : 0.5, pan ? pan.y : 0.5, Math.cos(r) * k, Math.sin(r) * k);
+    const c = pan?.crop;
+    gl.uniform4f(u[`uCrop${which}`], c?.left ?? 0, c?.top ?? 0, c?.right ?? 0, c?.bottom ?? 0);
+    gl.uniform1f(u[`uOut${which}`], pan ? 0 : 1);
   }
 
   // Búfer intermedio libre de w×h (se reutilizan de un fotograma a otro).
@@ -342,7 +352,6 @@ void main() { outColor = fx(vUv); }`;
       }
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.useProgram(this.program);
     return current;
   }
 
@@ -372,28 +381,27 @@ void main() { outColor = fx(vUv); }`;
     }));
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.useProgram(this.program);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.enable(gl.BLEND);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.uniform2f(this.u.uFrame, frame.width, frame.height);
     for (const { layer, a, b } of prepared) {
       const transition = layer.b !== undefined;
+      const { program, u } = this.programFor(transition ? layer.type : null);
+      gl.useProgram(program);
+      gl.uniform2f(u.uFrame, frame.width, frame.height);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, a ? a.tex : null);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, b ? b.tex : null);
-      gl.uniform1i(this.u.uHasA, a ? 1 : 0);
-      gl.uniform1i(this.u.uHasB, b ? 1 : 0);
-      if (a) gl.uniform2f(this.u.uScaleA, ...a.scale);
-      if (b) gl.uniform2f(this.u.uScaleB, ...b.scale);
-      gl.uniform1i(this.u.uTransition, transition ? 1 : 0);
-      gl.uniform1i(this.u.uType, transition ? layer.type : 0);
-      gl.uniform1f(this.u.uP, transition ? layer.progress : 1);
-      gl.uniform1f(this.u.uOpacity, transition ? 1 : layer.opacity);
-      this.setPan('A', layer.panA);
-      this.setPan('B', layer.panB);
+      gl.uniform1i(u.uHasA, a ? 1 : 0);
+      gl.uniform1i(u.uHasB, b ? 1 : 0);
+      if (a) gl.uniform2f(u.uScaleA, ...a.scale);
+      if (b) gl.uniform2f(u.uScaleB, ...b.scale);
+      gl.uniform1f(u.uP, transition ? layer.progress : 1);
+      gl.uniform1f(u.uOpacity, transition ? 1 : layer.opacity);
+      this.setPan(u, 'A', layer.panA);
+      this.setPan(u, 'B', layer.panB);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 

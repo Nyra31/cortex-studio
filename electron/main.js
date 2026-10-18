@@ -71,8 +71,8 @@ async function serveMedia(request) {
 }
 
 function createWindow() {
-  // Arranca maximizada (en ventana, ocupando la pantalla, como otros editores). Se muestra cuando ya
-  // está maximizada y pintada, para que no se vea primero pequeña.
+  // Arranca maximizada (en ventana, ocupando la pantalla, como otros editores). Se crea oculta y se
+  // maximiza antes de mostrarla, para que no se vea primero pequeña.
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -89,10 +89,11 @@ function createWindow() {
       sandbox: false,
     },
   });
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.maximize();
-    mainWindow.show();
-  });
+  // Se maximiza y se muestra enseguida, sin esperar a 'ready-to-show': en Windows ese evento a veces no
+  // llega con la ventana oculta (pasaba con la carpeta de datos de la aplicación) y la ventana no aparecía.
+  // Mientras carga se ve el color de fondo, el mismo de la interfaz.
+  mainWindow.maximize();
+  mainWindow.show();
   // La interfaz marca «Pantalla completa» en el menú Ver según el estado real (también si cambia por otra vía).
   const sendFullScreen = () => mainWindow.webContents.send('window:fullscreen', mainWindow.isFullScreen());
   mainWindow.on('enter-full-screen', sendFullScreen);
