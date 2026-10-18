@@ -1,17 +1,21 @@
 // Modelo del proyecto y operaciones de edición (funciones puras).
 import { DEFAULT_TRANSITION } from './transitions.js';
 import { effectsGraph } from './effects.js';
+import { isText, textPng } from './text.js';
 
 //
 // project = {
 //   settings: { width, height, fps },
 //   media:  [{ id, path, name, duration, width, height, fps, hasVideo, hasAudio, isImage, thumb, peaks, peaksPerSecond, missing }],
+//           o medios de texto generados: { id, kind: 'text', name, text, ... } (ver text.js; sin archivo)
 //   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume }],  // ordenadas de arriba a abajo; volume en dB
-//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition, effects }],
+//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition, effects, rate }],
 // }
 // effects: cadena [{ id, type, enabled, params }] aplicada en orden; efectos de video en los eventos de video
 // y de audio en los de audio (ver effects.js y audio-effects.js).
 // Tiempos en segundos. volume del evento en dB (solo afecta al audio); fadeIn/fadeOut = duración de los fundidos.
+// rate = velocidad de reproducción (1 = normal, 2 = el doble de rápido). duration es lo que ocupa en la línea
+// de tiempo; del medio se usan duration × rate segundos a partir de inPoint (ver sourceTime).
 // Si un evento empieza encima del final de otro de su misma pista, el solapamiento es una transición:
 // en video, la de `transition` del evento que entra (null = disolución cruzada); en audio, un fundido cruzado.
 
@@ -20,6 +24,8 @@ export const IMAGE_DURATION = 5;
 export const DEFAULT_SETTINGS = { width: 1920, height: 1080, fps: 30 };
 export const FRAME_RATES = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
 export const MIN_VOLUME_DB = -48; // en el mínimo la pista queda en silencio (-∞)
+export const MIN_RATE = 0.25; // velocidad de los eventos: de 4 veces más lento a 4 veces más rápido, como en VEGAS
+export const MAX_RATE = 4;
 export const MAX_TRACK_VOLUME_DB = 12; // las pistas amplifican hasta +12 dB, como en VEGAS (los eventos, hasta 0 dB)
 export const TRACK_COLORS = ['#5b80d6', '#9b66cf', '#cf5f80', '#d58a48', '#c4ad45', '#5aa86a', '#47a5b3'];
 export const trackColor = (index) => TRACK_COLORS[index % TRACK_COLORS.length];
@@ -61,13 +67,17 @@ export function eventPeak(media, e) {
   if (!media?.peaks?.length) return 0;
   const pps = media.peaksPerSecond;
   const from = Math.max(0, Math.floor(e.inPoint * pps));
-  const to = Math.min(media.peaks.length, Math.ceil((e.inPoint + e.duration) * pps));
+  const to = Math.min(media.peaks.length, Math.ceil((e.inPoint + e.duration * (e.rate || 1)) * pps));
   let max = 0;
   for (let i = from; i < to; i++) if (media.peaks[i] > max) max = media.peaks[i];
   return max / 255;
 }
 
-export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0, transition: null, effects: [] };
+export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0, transition: null, effects: [], rate: 1 };
+
+// Instante del medio que se ve o se oye en el instante t de la línea de tiempo.
+export const sourceTime = (e, t) => e.inPoint + (t - e.start) * (e.rate || 1);
+export const formatRate = (rate) => `${Math.round(rate * 100)} %`;
 
 // Tamaño de una imagen de mw×mh encajada (sin recortar) en un cuadro de W×H, en píxeles pares.
 // Es el mismo encaje que hace la vista previa y el render (bandas negras alrededor).
@@ -153,11 +163,14 @@ export function mediaLength(media) {
   return media.isImage ? IMAGE_DURATION : media.duration;
 }
 
-// Las pistas de video van siempre arriba y las de audio abajo.
-export function addTrack(project, type) {
+// Las pistas de video van siempre arriba y las de audio abajo. atTop: la de video nueva va la primera
+// (encima de todas, por ejemplo para un texto sobre el video).
+export function addTrack(project, type, atTop = false) {
   const track = newTrack(type, project.tracks.filter((t) => t.type === type).length + 1);
   const tracks = [...project.tracks];
-  if (type === 'video') {
+  if (type === 'video' && atTop) {
+    tracks.unshift(track);
+  } else if (type === 'video') {
     const lastVideo = tracks.map((t) => t.type).lastIndexOf('video');
     tracks.splice(lastVideo + 1, 0, track);
   } else {
@@ -217,7 +230,7 @@ export function splitEvents(project, t, selection) {
       groupId = newGroups.get(e.groupId);
     }
     // El fundido de entrada se queda en la parte izquierda y el de salida pasa a la derecha.
-    added.push({ ...e, id: uid('e'), start: t, inPoint: e.inPoint + left, duration: e.duration - left, groupId, fadeIn: 0, transition: null });
+    added.push({ ...e, id: uid('e'), start: t, inPoint: sourceTime(e, t), duration: e.duration - left, groupId, fadeIn: 0, transition: null });
     return { ...e, duration: left, fadeOut: 0 };
   });
   return { ...project, events: [...events, ...added] };
@@ -273,9 +286,11 @@ export function copyEvents(project, ids) {
   if (!events.length) return null;
   const origin = Math.min(...events.map((e) => e.start));
   const types = new Map(project.tracks.map((t) => [t.id, t.type]));
+  const textIds = new Set(events.map((e) => e.mediaId));
   return {
     events: events.map((e) => ({ ...e, start: e.start - origin, trackType: types.get(e.trackId) })),
     duration: Math.max(...events.map((e) => e.start + e.duration)) - origin,
+    texts: project.media.filter((m) => isText(m) && textIds.has(m.id)), // los textos se pegan como copias independientes
   };
 }
 
@@ -284,9 +299,12 @@ export function copyEvents(project, ids) {
 // Devuelve { project, ids, end }: ids de los eventos nuevos y el final de lo pegado.
 export function pasteEvents(project, clip, t, targetTrackId = null) {
   let p = project;
-  const mediaIds = new Set(p.media.map((m) => m.id));
+  // Cada texto pegado es un medio nuevo, para poder cambiarlo sin cambiar el original.
+  const textCopies = new Map((clip?.texts || []).map((m) => [m.id, { ...m, id: uid('m') }]));
+  const mediaIds = new Set([...p.media.map((m) => m.id), ...textCopies.keys()]);
   const items = clip ? clip.events.filter((e) => mediaIds.has(e.mediaId)) : [];
   if (!items.length) return { project, ids: [], end: t };
+  if (textCopies.size) p = { ...p, media: [...p.media, ...textCopies.values()] };
 
   const sameType = (type) => p.tracks.filter((tr) => tr.type === type);
   const target = p.tracks.find((tr) => tr.id === targetTrackId);
@@ -314,7 +332,8 @@ export function pasteEvents(project, clip, t, targetTrackId = null) {
       if (!groups.has(e.groupId)) groups.set(e.groupId, uid('g'));
       groupId = groups.get(e.groupId);
     }
-    return { ...e, id: uid('e'), trackId: trackFor({ ...e, trackType }), start: t + e.start, groupId };
+    const mediaId = textCopies.get(e.mediaId)?.id ?? e.mediaId;
+    return { ...e, id: uid('e'), mediaId, trackId: trackFor({ ...e, trackType }), start: t + e.start, groupId };
   });
   return { project: { ...p, events: [...p.events, ...added] }, ids: added.map((e) => e.id), end: t + clip.duration };
 }
@@ -344,9 +363,9 @@ export function deleteTrack(project, trackId) {
 export function serializeProject(project) {
   return {
     format: 'cortex-studio',
-    version: 4,
+    version: 5,
     settings: project.settings,
-    media: project.media.map(({ id, path, name }) => ({ id, path, name })),
+    media: project.media.map(({ id, path, name, kind, text }) => (kind === 'text' ? { id, kind, name, text } : { id, path, name })),
     tracks: project.tracks,
     events: project.events,
   };
@@ -365,10 +384,15 @@ export function loadProject(data, media) {
 // Lo mínimo que necesita el proceso principal para renderizar (con el silencio/solo, los fundidos,
 // las transiciones y los efectos ya resueltos). size = { width, height } del video que se va a generar.
 // Los eventos de video con efectos llevan fx = { w, h, graph, alpha }: el tamaño encajado y el
-// subgrafo de FFmpeg de su cadena de efectos (ver effects.js).
-export function renderPayload(project, size = project.settings) {
+// subgrafo de FFmpeg de su cadena de efectos (ver effects.js). Los textos van dibujados como PNG (png).
+// range = { start, end }: renderizar solo ese tramo (la selección de tiempo); los eventos de fuera se quitan.
+export function renderPayload(project, size = project.settings, range = null) {
   const { fades, transitions } = resolveTimeline(project);
-  const mediaById = new Map(project.media.map((m) => [m.id, m]));
+  const inRange = (e) => !range || (e.start < range.end && e.start + e.duration > range.start);
+  const events = project.events.filter(inRange);
+  const kept = new Set(events.map((e) => e.id));
+  const used = new Set(events.map((e) => e.mediaId));
+  const mediaById = new Map(project.media.map((m) => [m.id, isText(m) ? { ...m, width: size.width, height: size.height } : m]));
   const trackType = new Map(project.tracks.map((t) => [t.id, t.type]));
   const afxOf = (e) => {
     if (trackType.get(e.trackId) !== 'audio' || !e.effects?.length) return null;
@@ -378,24 +402,30 @@ export function renderPayload(project, size = project.settings) {
     if (trackType.get(e.trackId) !== 'video' || !e.effects?.length) return null;
     const m = mediaById.get(e.mediaId);
     const fit = m && fitSize(m.width, m.height, size.width, size.height);
-    const g = fit && effectsGraph(e.effects, fit);
-    return g ? { ...fit, ...g } : null;
+    const alpha = !!m && (isText(m) || !!m.hasAlpha); // imagen con transparencia: los efectos la conservan
+    const g = fit && effectsGraph(e.effects, { ...fit, alpha });
+    return g ? { ...fit, ...g, alpha: g.alpha || alpha } : null;
   };
   return {
-    media: project.media.map(({ id, path, isImage, hasVideo, hasAudio, missing }) => ({ id, path, isImage, hasVideo, hasAudio, missing })),
+    media: project.media
+      .filter((m) => used.has(m.id))
+      .map(({ id, path, isImage, hasVideo, hasAudio, missing, kind, text }) => ({
+        id, path, isImage, hasVideo, hasAudio, missing, png: kind === 'text' ? textPng(text, size.width, size.height) : undefined,
+      })),
     tracks: project.tracks.map((t) => ({
       id: t.id,
       type: t.type,
       muted: !isTrackActive(t, project.tracks),
       gain: volumeToGain(t.volume ?? 0),
     })),
-    events: project.events.map(({ effects, ...e }) => ({
+    events: events.map(({ effects, ...e }) => ({
       ...e,
       ...fades.get(e.id),
       gain: volumeToGain(e.volume ?? 0),
       fx: fxOf({ ...e, effects }),
       afx: afxOf({ ...e, effects }),
     })),
-    transitions,
+    transitions: transitions.filter((tr) => kept.has(tr.from) && kept.has(tr.to)),
+    range,
   };
 }

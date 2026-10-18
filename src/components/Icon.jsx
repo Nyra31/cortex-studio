@@ -32,6 +32,8 @@ const PATHS = {
   solo: <path d="M12 4v10M12 18.5v.5" strokeWidth="3" />,
   landscape: <path d="M3 7h18v10H3z" />,
   portrait: <path d="M7 3h10v18H7z" />,
+  loop: <path d="M17 3l3 3-3 3M20 6H8a4 4 0 0 0-4 4v1M7 21l-3-3 3-3M4 18h12a4 4 0 0 0 4-4v-1" />,
+  text: <path d="M5 5h14M12 5v14M9 19h6" />,
   keyboard: <path d="M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10" />,
 };
 

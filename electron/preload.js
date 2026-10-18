@@ -16,4 +16,17 @@ contextBridge.exposeInMainWorld('api', {
   },
   revealFile: (filePath) => ipcRenderer.invoke('shell:reveal', filePath),
   toggleDevTools: () => ipcRenderer.invoke('devtools:toggle'),
+  setDirty: (dirty) => ipcRenderer.send('project:dirty', dirty),
+  closeWindow: () => ipcRenderer.send('window:close'),
+  toggleFullScreen: () => ipcRenderer.invoke('window:toggleFullScreen'),
+  onFullScreenChange: (callback) => {
+    const handler = (_e, value) => callback(value);
+    ipcRenderer.on('window:fullscreen', handler);
+    return () => ipcRenderer.removeListener('window:fullscreen', handler);
+  },
+  onSaveBeforeClose: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('project:saveBeforeClose', handler);
+    return () => ipcRenderer.removeListener('project:saveBeforeClose', handler);
+  },
 });

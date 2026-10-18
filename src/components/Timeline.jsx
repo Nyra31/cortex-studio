@@ -3,10 +3,11 @@ import Waveform from './Waveform.jsx';
 import Icon from './Icon.jsx';
 import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
-  EVENT_DEFAULTS, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_VOLUME_DB, deleteTrack, eventFades, formatVolume, gainToVolume, isTrackActive,
+  EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, gainToVolume, isTrackActive,
   overlapAt, placeMedia, resolveTimeline, setTransitionAt, trackColor, volumeToGain,
 } from '../state/project.js';
 import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
+import { isText } from '../state/text.js';
 import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
 
 export const MEDIA_MIME = 'application/x-cortex-media';
@@ -40,7 +41,24 @@ const majorStep = (pps) => TICK_STEPS.find((s) => s * pps >= 90) ?? 3600;
 // Separación de las marcas pequeñas de la regla (la "rejilla"): Re Pág / Av Pág mueven el cursor esto.
 export const gridStep = (pps) => majorStep(pps) / 5;
 
-const Ruler = memo(function Ruler({ pps, time, scrollLeft, viewWidth, laneWidth, onPointerDown }) {
+// Selección de tiempo en la barra de arriba de la regla, como la región de bucle de VEGAS: la línea azul
+// (con su duración) se arrastra para moverla y los triángulos amarillos, para cambiar sus extremos.
+function RegionBar({ region, pps, fps, onDown }) {
+  if (!region) return null;
+  const left = region.start * pps;
+  const width = Math.max(1, (region.end - region.start) * pps);
+  return (
+    <>
+      <div className="region-line" style={{ left, width }} onPointerDown={(e) => onDown(e, 'move')} title="Arrastra para mover la selección">
+        <span className="region-length">+{formatTimecode(region.end - region.start, fps)}</span>
+      </div>
+      <div className="region-handle" style={{ left }} onPointerDown={(e) => onDown(e, 'start')} title="Principio de la selección" />
+      <div className="region-handle" style={{ left: left + width }} onPointerDown={(e) => onDown(e, 'end')} title="Final de la selección" />
+    </>
+  );
+}
+
+const Ruler = memo(function Ruler({ pps, fps, time, scrollLeft, viewWidth, laneWidth, region, onPointerDown, onRegionDown }) {
   const step = majorStep(pps);
   const minor = step / 5;
   const ticks = [];
@@ -57,7 +75,14 @@ const Ruler = memo(function Ruler({ pps, time, scrollLeft, viewWidth, laneWidth,
   }
   return (
     <div className="ruler" style={{ width: laneWidth }} onPointerDown={onPointerDown}>
-      <div className="marker-bar" />
+      {region && <div className="region-shade" style={{ left: region.start * pps, width: (region.end - region.start) * pps }} />}
+      <div
+        className="marker-bar"
+        title="Arrastra para seleccionar un tramo de tiempo (clic: quitar la selección)"
+        onPointerDown={(e) => onRegionDown(e, 'new')}
+      >
+        <RegionBar region={region} pps={pps} fps={fps} onDown={onRegionDown} />
+      </div>
       {ticks}
       <div className="cursor-head" style={{ left: time * pps }} title="Arrastra para ajustar el cursor (Mayús: sin ajuste)" />
     </div>
@@ -76,6 +101,8 @@ function Envelope({ width, height, gainY, fadeIn, fadeOut }) {
     </svg>
   );
 }
+
+const HANDLE_TITLE = 'Arrastra para recortar (Ctrl: cambiar la velocidad, como en VEGAS)';
 
 // Zona de solapamiento al principio del evento que entra: aspa de la transición y su nombre.
 function TransitionZone({ width, height, label, onReset }) {
@@ -98,7 +125,7 @@ function TransitionZone({ width, height, label, onReset }) {
 // fadeIn/fadeOut: fundidos efectivos (en audio incluyen los fundidos cruzados de los solapamientos).
 // overlapIn/overlapOut: segundos solapados con el evento anterior/siguiente de la pista.
 const EventView = memo(function EventView({
-  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx,
+  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onDouble,
 }) {
   const width = Math.max(3, ev.duration * pps);
   const height = bodyHeight(type);
@@ -108,20 +135,33 @@ const EventView = memo(function EventView({
   const showEnvelope = fadeIn > 0 || fadeOut > 0 || gain < 1;
   const bodyStyle = type === 'video' && media?.thumb ? { backgroundImage: `url(${media.thumb})` } : undefined;
   const name = media ? media.name : '?';
+  const rate = ev.rate || 1;
   const fadeHandleX = (x) => Math.min(width - 8, Math.max(0, x - 4));
   return (
     <div
-      className={`event ${type}${selected ? ' selected' : ''}${media?.missing ? ' missing' : ''}`}
+      className={`event ${type}${selected ? ' selected' : ''}${media?.missing ? ' missing' : ''}${rate !== 1 ? ' stretched' : ''}`}
       style={{ left: ev.start * pps, width }}
       onPointerDown={(e) => onDown(e, ev, 'move')}
       onContextMenu={(e) => onMenu(e, ev)}
+      onDoubleClick={(e) => !e.target.closest('.fade-handle, .gain-handle, .transition-zone, button') && onDouble(ev)}
       data-event={ev.id}
       title={media?.missing ? `Archivo no encontrado: ${media.path}` : media?.name}
     >
       <div className="event-title">
         {name}
+        {rate !== 1 && <span className="event-rate"> · {formatRate(rate)}</span>}
         {type === 'audio' && volume !== 0 && <span className="event-gain"> · {formatVolume(volume)}</span>}
       </div>
+      {isText(media) && width > 70 && (
+        <button
+          className="event-fx event-text"
+          title="Editar el texto"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onText(ev.id)}
+        >
+          T
+        </button>
+      )}
       {width > 46 && (
         <button
           className={`event-fx${ev.effects?.length ? ' active' : ''}`}
@@ -143,6 +183,7 @@ const EventView = memo(function EventView({
             peaksPerSecond={media.peaksPerSecond}
             inPoint={ev.inPoint}
             duration={ev.duration}
+            rate={rate}
             width={width}
             height={height}
             gain={gain}
@@ -160,8 +201,8 @@ const EventView = memo(function EventView({
           onReset={type === 'video' && transition ? () => onReset(ev, 'transition') : undefined}
         />
       )}
-      <div className="handle left" onPointerDown={(e) => onDown(e, ev, 'trimL')} />
-      <div className="handle right" onPointerDown={(e) => onDown(e, ev, 'trimR')} />
+      <div className="handle left" title={HANDLE_TITLE} onPointerDown={(e) => onDown(e, ev, 'trimL')} />
+      <div className="handle right" title={HANDLE_TITLE} onPointerDown={(e) => onDown(e, ev, 'trimR')} />
       {type === 'audio' && (
         <div
           className="gain-handle"
@@ -192,6 +233,12 @@ const EventView = memo(function EventView({
     </div>
   );
 });
+
+// Fondo azul de la selección de tiempo en las pistas (debajo de los eventos, como en VEGAS).
+function RegionShade({ region, pps }) {
+  if (!region) return null;
+  return <div className="region-shade" style={{ left: region.start * pps, width: (region.end - region.start) * pps }} />;
+}
 
 function TrackName({ name, onRename }) {
   const [editing, setEditing] = useState(false);
@@ -251,8 +298,8 @@ function VolumeSlider({ value, onChange }) {
 }
 
 const TrackRow = memo(function TrackRow({
-  track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef,
-  onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onDrop, onUpdateTrack, onDelete,
+  track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef, region,
+  onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onEventDouble, onDrop, onUpdateTrack, onDelete,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
   return (
@@ -294,6 +341,7 @@ const TrackRow = memo(function TrackRow({
         onDragOver={allowDrop}
         onDrop={(e) => onDrop(e, track.id)}
       >
+        <RegionShade region={region} pps={pps} />
         {events.map((ev) => {
           const fades = resolved.fades.get(ev.id);
           const inc = resolved.incoming.get(ev.id);
@@ -314,6 +362,8 @@ const TrackRow = memo(function TrackRow({
               onReset={onEventReset}
               onMenu={onEventMenu}
               onFx={onOpenFx}
+              onText={onEditText}
+              onDouble={onEventDouble}
             />
           );
         })}
@@ -323,8 +373,8 @@ const TrackRow = memo(function TrackRow({
 });
 
 const Timeline = forwardRef(function Timeline({
-  project, setProject, selection, setSelection, time, seek, playing,
-  pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, footer,
+  project, setProject, selection, setSelection, time, seek, playing, region, setRegion,
+  pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, onEditText, footer,
 }, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -338,7 +388,7 @@ const Timeline = forwardRef(function Timeline({
 
   // Valores actuales para manejadores estables (evita re-renderizar todas las pistas a cada fotograma).
   const live = useRef(null);
-  live.current = { project, selection, time, pps, snap, playing };
+  live.current = { project, selection, time, pps, snap, playing, region };
 
   const mediaById = useMemo(() => new Map(project.media.map((m) => [m.id, m])), [project.media]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
@@ -392,9 +442,9 @@ const Timeline = forwardRef(function Timeline({
   // Dónde queda el cursor al colocarlo con el ratón, como en VEGAS: con el ajuste activado se pega al
   // principio o al final de los eventos cercanos (8 px); si no, cae en el fotograma más próximo.
   // free (Mayús pulsada) desactiva el ajuste en ese momento. offset desplaza respecto al puntero.
-  const cursorTime = useCallback((clientX, free = false, offset = 0) => {
+  const snapTime = useCallback((time, free = false) => {
     const { project: p, snap: enabled, pps: scale } = live.current;
-    const t = Math.max(0, timeAt(clientX) + offset);
+    const t = Math.max(0, time);
     if (enabled && !free) {
       let best = null;
       for (const x of [0, ...p.events.flatMap((e) => [e.start, e.start + e.duration])]) {
@@ -403,7 +453,51 @@ const Timeline = forwardRef(function Timeline({
       if (best !== null) return best;
     }
     return quantize(t, p.settings.fps);
-  }, [timeAt]);
+  }, []);
+  const cursorTime = useCallback((clientX, free = false, offset = 0) => snapTime(timeAt(clientX) + offset, free), [snapTime, timeAt]);
+
+  // Selección de tiempo (barra de arriba de la regla). part: 'new' (arrastrar en la barra vacía),
+  // 'move' (la línea azul), 'start' o 'end' (los triángulos). Se ajusta igual que el cursor (Mayús: sin ajuste).
+  const onRegionDown = useCallback((e, part) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const orig = live.current.region;
+    const startX = e.clientX;
+    const anchor = cursorTime(e.clientX, e.shiftKey);
+    const frame = 1 / live.current.project.settings.fps;
+    let moved = false;
+    const move = (me) => {
+      if (!moved && Math.abs(me.clientX - startX) < 3) return;
+      moved = true;
+      const t = cursorTime(me.clientX, me.shiftKey);
+      if (part === 'new') {
+        setRegion(t === anchor ? null : { start: Math.min(anchor, t), end: Math.max(anchor, t) });
+      } else if (part === 'move') {
+        // Se mueve entera; se ajusta el extremo que quede más cerca de un punto de ajuste.
+        const len = orig.end - orig.start;
+        const raw = Math.max(0, orig.start + timeAt(me.clientX) - timeAt(startX));
+        const a = snapTime(raw, me.shiftKey);
+        const b = snapTime(raw + len, me.shiftKey) - len;
+        const start = Math.max(0, Math.abs(b - raw) < Math.abs(a - raw) ? b : a);
+        setRegion({ start, end: start + len });
+      } else {
+        const other = part === 'start' ? orig.end : orig.start;
+        const a = Math.min(t, other);
+        const b = Math.max(t, other);
+        setRegion({ start: a, end: Math.max(b, a + frame) });
+      }
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (!moved && part === 'new') setRegion(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [cursorTime, setRegion, snapTime, timeAt]);
+
+  // Doble clic en un evento: la selección de tiempo pasa a ser el tramo del evento (como en VEGAS).
+  const onEventDouble = useCallback((ev) => setRegion({ start: ev.start, end: ev.start + ev.duration }), [setRegion]);
 
   // Arrastrar el cursor. Desde el triángulo de arriba (keepOffset) no salta a la posición del puntero:
   // se desplaza lo que se mueva el ratón, para hacer ajustes pequeños.
@@ -481,7 +575,8 @@ const Timeline = forwardRef(function Timeline({
     const { project: p, selection: sel, pps: scale } = live.current;
     const group = ev.groupId ? p.events.filter((x) => x.groupId === ev.groupId).map((x) => x.id) : [ev.id];
 
-    if (e.ctrlKey) {
+    const stretch = e.ctrlKey && (mode === 'trimL' || mode === 'trimR');
+    if (e.ctrlKey && !stretch) {
       setSelection(sel.includes(ev.id) ? sel.filter((id) => !group.includes(id)) : [...new Set([...sel, ...group])]);
       return;
     }
@@ -531,16 +626,38 @@ const Timeline = forwardRef(function Timeline({
           start: o.start + dt,
           trackId: shift && trackType.get(o.trackId) === primaryType ? sameType[sameType.indexOf(o.trackId) + shift] : o.trackId,
         });
+      } else if (stretch) {
+        // Ctrl + borde: el evento se estira o se encoge sin cambiar el trozo de medio que usa, así que
+        // cambia la velocidad (más largo = más lento). Las imágenes solo cambian de duración.
+        const left = mode === 'trimL';
+        dt = snapDelta(dt, [left ? primary.start : primary.start + primary.duration], me.shiftKey ? [] : points, threshold);
+        const sign = left ? -1 : 1; // cuánto crece la duración por cada segundo que se mueve el borde
+        for (const o of origin.values()) {
+          let lo = MIN_EVENT - o.duration;
+          let hi = Infinity;
+          if (!mediaOf(o)?.isImage) {
+            const length = o.duration * (o.rate || 1); // segundos de medio que usa el evento
+            lo = Math.max(lo, length / MAX_RATE - o.duration);
+            hi = length / MIN_RATE - o.duration;
+          }
+          if (left) hi = Math.min(hi, o.start);
+          dt = sign * Math.min(hi, Math.max(lo, sign * dt));
+        }
+        update = (o) => {
+          const duration = o.duration + sign * dt;
+          const rate = mediaOf(o)?.isImage ? 1 : (o.duration * (o.rate || 1)) / duration;
+          return { start: left ? o.start + dt : o.start, duration, rate };
+        };
       } else if (mode === 'trimL') {
         dt = snapDelta(dt, [primary.start], me.shiftKey ? [] : points, threshold);
         for (const o of origin.values()) {
-          if (!mediaOf(o)?.isImage) dt = Math.max(dt, -o.inPoint);
+          if (!mediaOf(o)?.isImage) dt = Math.max(dt, -o.inPoint / (o.rate || 1));
           dt = Math.max(dt, -o.start);
           dt = Math.min(dt, o.duration - MIN_EVENT);
         }
         update = (o) => ({
           start: o.start + dt,
-          inPoint: mediaOf(o)?.isImage ? 0 : o.inPoint + dt,
+          inPoint: mediaOf(o)?.isImage ? 0 : o.inPoint + dt * (o.rate || 1),
           duration: o.duration - dt,
         });
       } else if (mode === 'fadeIn' || mode === 'fadeOut') {
@@ -558,7 +675,7 @@ const Timeline = forwardRef(function Timeline({
         for (const o of origin.values()) {
           const m = mediaOf(o);
           dt = Math.max(dt, MIN_EVENT - o.duration);
-          if (m && !m.isImage && m.duration) dt = Math.min(dt, m.duration - o.inPoint - o.duration);
+          if (m && !m.isImage && m.duration) dt = Math.min(dt, (m.duration - o.inPoint) / (o.rate || 1) - o.duration);
         }
         update = (o) => ({ duration: o.duration + dt });
       }
@@ -745,6 +862,9 @@ const Timeline = forwardRef(function Timeline({
             </div>
             <Ruler
               pps={pps}
+              fps={fps}
+              region={region}
+              onRegionDown={onRegionDown}
               time={time}
               scrollLeft={view.left}
               viewWidth={view.width}
@@ -766,12 +886,15 @@ const Timeline = forwardRef(function Timeline({
               pps={pps}
               laneWidth={laneWidth}
               rowRef={rowRefFor(track.id)}
+              region={region}
               onLaneDown={onLaneDown}
               onEventDown={onEventDown}
               onEventReset={onEventReset}
               onEventMenu={onEventMenu}
               onLaneMenu={onLaneMenu}
               onOpenFx={onOpenFx}
+              onEditText={onEditText}
+              onEventDouble={onEventDouble}
               onDrop={onDrop}
               onUpdateTrack={onUpdateTrack}
               onDelete={onDeleteTrack}
@@ -779,7 +902,9 @@ const Timeline = forwardRef(function Timeline({
           ))}
           <div className="track-row empty" onDragOver={allowDrop} onDrop={(e) => onDrop(e, 'new')}>
             <div className="track-header">Suelta aquí para crear pistas nuevas</div>
-            <div className="track-lane" style={{ width: laneWidth }} onPointerDown={onLaneDown} />
+            <div className="track-lane" style={{ width: laneWidth }} onPointerDown={onLaneDown}>
+              <RegionShade region={region} pps={pps} />
+            </div>
           </div>
           <div className="cursor-line" style={{ left: HEADER_W + time * pps }} />
           {marquee && (
@@ -798,6 +923,12 @@ const Timeline = forwardRef(function Timeline({
       <div className="timeline-footer">
         {footer}
         <span className="footer-spacer" />
+        {region && (
+          <span className="footer-info">
+            Selección: <strong>{formatTimecode(region.start, fps)}</strong> – <strong>{formatTimecode(region.end, fps)}</strong>
+            {' '}({formatTimecode(region.end - region.start, fps)})
+          </span>
+        )}
         <span className="footer-info">
           Duración: <strong>{formatTimecode(duration, fps)}</strong>
         </span>

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
+import TextOverlay from './TextOverlay.jsx';
 import { mediaUrl, frameNumber, formatTimecode } from '../util/time.js';
-import { eventPeak, fadeFactor, formatFps, isTrackActive, resolveTimeline, volumeToGain } from '../state/project.js';
+import { eventPeak, fadeFactor, formatFps, isTrackActive, resolveTimeline, sourceTime, volumeToGain } from '../state/project.js';
 import { transitionInfo } from '../state/transitions.js';
 import { EFFECTS, activeEffects } from '../state/effects.js';
 import { Compositor } from '../preview/compositor.js';
+import { drawText, isText } from '../state/text.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
 
 // Para las pruebas automáticas: procesar un sonido con la misma cadena de efectos que la vista previa.
@@ -78,8 +80,9 @@ function playerKeys(events) {
       const continues =
         prev &&
         prev.mediaId === e.mediaId &&
+        (prev.rate || 1) === (e.rate || 1) &&
         Math.abs(prev.start + prev.duration - e.start) < 0.002 &&
-        Math.abs(prev.inPoint + prev.duration - e.inPoint) < 0.002;
+        Math.abs(sourceTime(prev, prev.start + prev.duration) - e.inPoint) < 0.002;
       keys.set(e.id, continues ? keys.get(prev.id) : e.id);
     });
   }
@@ -92,7 +95,9 @@ function prepare(el, e, time) {
   if (!el.seeking && time < e.start && Math.abs(el.currentTime - e.inPoint) > 0.05) el.currentTime = e.inPoint;
 }
 
-function sync(el, target, playing) {
+// target: instante del medio; rate: velocidad del evento (el navegador conserva el tono, igual que atempo).
+function sync(el, target, playing, rate = 1) {
+  if (el.playbackRate !== rate) el.playbackRate = rate;
   if (playing) {
     if (!el.seeking && Math.abs(el.currentTime - target) > DRIFT) el.currentTime = target;
     if (el.paused) el.play().catch(() => {});
@@ -102,11 +107,15 @@ function sync(el, target, playing) {
   }
 }
 
-export default function Preview({ project, time, playing, onOpenProperties }) {
+// selection, editTextId, onSelectEvent, onTextChange, onEditText: para colocar los textos con el ratón (TextOverlay).
+export default function Preview({
+  project, time, playing, selection, editTextId, onSelectEvent, onTextChange, onEditText, onOpenProperties,
+}) {
   const canvasRef = useRef(null);
   const sourcesRef = useRef(null);
   const videoEls = useRef(new Map()); // reproductor (ver playerKeys) → <video> (silenciado: el sonido sale de las pistas de audio)
   const imageEls = useRef(new Map()); // id de medio → <img>
+  const textEls = useRef(new Map()); // id de medio de texto → <canvas> (se redibuja si cambia el texto)
   const audio = useRef(null); // AudioEngine
   const draw = useRef({ dirty: 0, playing: false, layers: [], frame: null });
   const [display, setDisplay] = useState({ width: 0, height: 0 });
@@ -120,6 +129,16 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
 
   const layers = videoLayers(project, mediaById, resolved, eventsById, time);
 
+  // Textos que se ven ahora (del de más arriba al de más abajo); en pausa se pueden mover con el ratón.
+  const textItems = playing
+    ? []
+    : layers
+      .filter((l) => l.event && isText(mediaById.get(l.event.mediaId)))
+      .map((l) => ({ event: l.event, media: mediaById.get(l.event.mediaId) }))
+      .reverse();
+  const textTarget =
+    textItems.find((it) => it.media.id === editTextId) || textItems.find((it) => selection.includes(it.event.id)) || null;
+
   const invalidate = () => {
     draw.current.dirty = Math.max(draw.current.dirty, 3);
   };
@@ -127,6 +146,24 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
   // Elemento que da la imagen de un evento: un <video> propio por evento o un <img> compartido por medio.
   const sourceFor = (e, create) => {
     const media = mediaById.get(e.mediaId);
+    if (isText(media)) {
+      // Canvas a la resolución del proyecto, el mismo dibujo que el PNG del render.
+      let canvas = textEls.current.get(media.id);
+      const key = `${width}x${height}:${JSON.stringify(media.text)}`;
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.cortexVersion = 0;
+        textEls.current.set(media.id, canvas);
+      }
+      if (canvas.cortexKey !== key) {
+        canvas.width = width;
+        canvas.height = height;
+        drawText(canvas.getContext('2d'), media.text, width, height);
+        canvas.cortexKey = key;
+        canvas.cortexVersion++;
+      }
+      return canvas;
+    }
     if (media.isImage) {
       let img = imageEls.current.get(media.id);
       if (!img && create) {
@@ -176,7 +213,7 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
       if (!videoTracks.has(e.trackId) || !m || m.missing || m.isImage || !isNear(e)) continue;
       const key = players.get(e.id);
       const el = sourceFor(e, true);
-      if (visible.has(e.id)) sync(el, e.inPoint + time - e.start, playing);
+      if (visible.has(e.id)) sync(el, sourceTime(e, time), playing, e.rate || 1);
       else if (!busy.has(key) && !needed.has(key)) prepare(el, e, time);
       needed.add(key);
     }
@@ -189,6 +226,7 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
       videoEls.current.delete(id);
     }
     for (const l of layers) if (l.event && mediaById.get(l.event.mediaId).isImage) sourceFor(l.event, true);
+    for (const id of textEls.current.keys()) if (!mediaById.has(id)) textEls.current.delete(id);
 
     draw.current.layers = layers.map((l) =>
       l.event
@@ -223,7 +261,7 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
     for (const { event: e, gain } of audible) {
       const p = audioFor(e);
       engine.setGain(p, gain);
-      if (playing) sync(p.el, e.inPoint + time - e.start, true);
+      if (playing) sync(p.el, sourceTime(e, time), true, e.rate || 1);
       else if (!p.el.paused) p.el.pause();
     }
     const audioTracks = new Set(project.tracks.filter((t) => t.type === 'audio' && isTrackActive(t, project.tracks)).map((t) => t.id));
@@ -311,6 +349,15 @@ export default function Preview({ project, time, playing, onOpenProperties }) {
       <div className="preview">
         <div className="screen" style={{ '--aspect': width / height }}>
           <canvas ref={canvasRef} />
+          <TextOverlay
+            items={textItems}
+            target={textTarget}
+            width={width}
+            height={height}
+            onSelect={onSelectEvent}
+            onChange={onTextChange}
+            onEdit={onEditText}
+          />
           {glError && <div className="preview-error">No se puede mostrar la vista previa: {glError}</div>}
         </div>
         <div className="preview-sources" ref={sourcesRef} />

@@ -6,6 +6,7 @@ import MediaPool from './components/MediaPool.jsx';
 import TransitionsPanel from './components/TransitionsPanel.jsx';
 import EffectsPanel from './components/EffectsPanel.jsx';
 import EventFxDialog from './components/EventFxDialog.jsx';
+import TextDialog from './components/TextDialog.jsx';
 import Preview from './components/Preview.jsx';
 import Transport from './components/Transport.jsx';
 import Timeline, { MAX_PPS, MIN_PPS, gridStep } from './components/Timeline.jsx';
@@ -16,9 +17,10 @@ import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
-  addTrack, copyEvents, deleteEvents, emptyProject, groupEvents, loadProject, mediaLength, pasteEvents, placeMedia,
-  projectDuration, removeMedia, renderPayload, serializeProject, splitEvents, uid, ungroupEvents, updateEvents,
+  IMAGE_DURATION, addTrack, copyEvents, deleteEvents, emptyProject, groupEvents, loadProject, mediaLength, pasteEvents,
+  placeMedia, projectDuration, removeMedia, renderPayload, serializeProject, splitEvents, uid, ungroupEvents, updateEvents,
 } from './state/project.js';
+import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
 
 const api = window.api;
 const baseName = (p) => (p ? p.split(/[\\/]/).pop().replace(/\.cortex$/i, '') : 'Sin título');
@@ -42,6 +44,10 @@ export default function App() {
   const [status, setStatus] = useState('');
   const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects'
   const [fxEventId, setFxEventId] = useState(null); // evento cuya ventana de efectos está abierta
+  const [textMediaId, setTextMediaId] = useState(null); // medio de texto cuya ventana de edición está abierta
+  const [region, setRegion] = useState(null); // selección de tiempo { start, end } (la región de bucle de VEGAS)
+  const [loop, setLoop] = useState(false); // reproducción en bucle de la selección de tiempo (Q)
+  const [fullScreen, setFullScreen] = useState(false); // pantalla completa (F11), lo avisa el proceso principal
   const [clipboard, setClipboard] = useState(null); // eventos copiados (copyEvents)
   const [contextMenu, setContextMenu] = useState(null); // { x, y, items }
   const timelineRef = useRef(null);
@@ -49,7 +55,7 @@ export default function App() {
   const duration = projectDuration(project);
   const dirty = project !== savedProject;
   const live = useRef(null);
-  live.current = { project, time, playing, duration, dirty, selection, clipboard, pps };
+  live.current = { project, time, playing, duration, dirty, selection, clipboard, pps, region, loop };
   const playStart = useRef(0);
 
   useEffect(() => {
@@ -57,6 +63,7 @@ export default function App() {
   }, [projectPath, dirty]);
 
   // Reloj de reproducción: avanza desde playStart y se reinicia cuando el usuario busca otra posición.
+  // Si empieza dentro de la selección de tiempo, se para al final de ella o, en bucle (Q), vuelve a su principio.
   useEffect(() => {
     if (!playing) return undefined;
     const from = playStart.current;
@@ -64,8 +71,17 @@ export default function App() {
     let raf;
     const tick = () => {
       const t = from + (performance.now() - t0) / 1000;
-      if (t >= live.current.duration) {
-        setTime(live.current.duration);
+      const { region: r, loop: looping, duration: d } = live.current;
+      const inRegion = r && from >= r.start - 1e-6 && from < r.end;
+      const end = inRegion ? r.end : d;
+      if (t >= end) {
+        if (inRegion && looping) {
+          playStart.current = r.start;
+          setTime(r.start);
+          setPlayToken((n) => n + 1);
+          return;
+        }
+        setTime(end);
         setPlaying(false);
         return;
       }
@@ -85,10 +101,12 @@ export default function App() {
     }
   }, []);
 
+  // Con selección de tiempo, si el cursor está fuera de ella, se reproduce desde su principio (como en VEGAS).
   const play = useCallback(() => {
-    const { playing: isPlaying, time: t, duration: d } = live.current;
-    if (isPlaying || d <= 0) return;
-    const from = t >= d - 0.01 ? 0 : t;
+    const { playing: isPlaying, time: t, duration: d, region: r } = live.current;
+    if (isPlaying || (d <= 0 && !r)) return;
+    let from = t >= d - 0.01 ? 0 : t;
+    if (r && (t < r.start || t >= r.end - 1e-6)) from = r.start;
     playStart.current = from;
     setTime(from);
     setPlaying(true);
@@ -208,6 +226,27 @@ export default function App() {
 
   const insertTrack = useCallback((type) => setProject((p) => addTrack(p, type).project), [setProject]);
 
+  // Insertar → Medio de texto: un texto nuevo de 5 s en el cursor, en la pista de video de más arriba si
+  // está libre o en una pista nueva encima de todas (para que se vea sobre el video), y se abre su ventana.
+  const insertText = useCallback(() => {
+    const { project: p, time: t } = live.current;
+    const media = withTextThumb(newTextMedia(), p.settings.width / p.settings.height);
+    let next = { ...p, media: [...p.media, media] };
+    const top = next.tracks.find((tr) => tr.type === 'video');
+    const free = top && !next.events.some((e) => e.trackId === top.id && e.start < t + IMAGE_DURATION && e.start + e.duration > t);
+    let trackId = top?.id;
+    if (!free) {
+      const res = addTrack(next, 'video', true);
+      next = res.project;
+      trackId = res.track.id;
+    }
+    next = placeMedia(next, media, t, trackId);
+    setProject(next);
+    setSelection([next.events[next.events.length - 1].id]);
+    setFxEventId(null);
+    setTextMediaId(media.id);
+  }, [setProject]);
+
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   // Ventana de efectos del evento: se cierra sola si el evento desaparece (borrado, deshacer…).
@@ -216,6 +255,35 @@ export default function App() {
   const updateFxEffects = useCallback((fn, record) => {
     setProject((p) => updateEvents(p, [fxEventId], (e) => ({ effects: fn(e.effects) })), record);
   }, [fxEventId, setProject]);
+
+  // Ventana del texto: edita el medio de texto (todos los eventos que lo usan). Se cierra sola si el medio desaparece.
+  const textMedia = textMediaId ? project.media.find((m) => m.id === textMediaId && isText(m)) : null;
+  const closeText = useCallback(() => setTextMediaId(null), []);
+  const updateTextMedia = useCallback((mediaId, fn, record) => {
+    setProject((p) => ({
+      ...p,
+      media: p.media.map((m) => (m.id === mediaId
+        ? withTextThumb({ ...m, text: fn({ ...TEXT_DEFAULTS, ...m.text }) }, p.settings.width / p.settings.height)
+        : m)),
+    }), record);
+  }, [setProject]);
+  const updateText = useCallback((fn, record) => updateTextMedia(textMediaId, fn, record), [textMediaId, updateTextMedia]);
+  // Clic en un texto de la vista previa: se selecciona su evento (con su grupo).
+  const selectEvent = useCallback((eventId) => {
+    const p = live.current.project;
+    const ev = p.events.find((e) => e.id === eventId);
+    if (ev) setSelection(ev.groupId ? p.events.filter((e) => e.groupId === ev.groupId).map((e) => e.id) : [ev.id]);
+  }, []);
+  const openTextEditor = useCallback((mediaId) => {
+    setFxEventId(null);
+    setTextMediaId(mediaId);
+  }, []);
+  const editTextOf = useCallback((eventId) => {
+    const ev = live.current.project.events.find((e) => e.id === eventId);
+    if (!ev) return;
+    setFxEventId(null);
+    setTextMediaId(ev.mediaId);
+  }, []);
 
   // Portapapeles. Las acciones reciben los ids explícitamente porque el menú contextual puede
   // cambiar la selección justo antes de llamarlas.
@@ -283,6 +351,11 @@ export default function App() {
         { label: 'Quitar del grupo', shortcut: 'U', action: () => ungroupIds(ids), disabled: !selected.some((e) => e.groupId) },
         'separator',
         {
+          label: 'Velocidad normal (100 %)',
+          action: () => setProject((cur) => updateEvents(cur, ids, (e) => ({ duration: e.duration * (e.rate || 1), rate: 1 }))),
+          disabled: !selected.some((e) => (e.rate || 1) !== 1),
+        },
+        {
           label: 'Quitar fundidos',
           action: () => setProject((cur) => updateEvents(cur, ids, { fadeIn: 0, fadeOut: 0 })),
           disabled: !selected.some((e) => e.fadeIn > 0 || e.fadeOut > 0),
@@ -301,6 +374,7 @@ export default function App() {
           }]
           : []),
         'separator',
+        ...(isText(media) ? [{ label: 'Editar texto…', action: () => setTextMediaId(media.id) }] : []),
         { label: 'Efectos del evento…', action: () => setFxEventId(info.event.id) },
         {
           label: 'Quitar efectos',
@@ -309,9 +383,13 @@ export default function App() {
         },
         'separator',
         {
+          label: 'Seleccionar el tramo del evento',
+          action: () => setRegion({ start: info.event.start, end: info.event.start + info.event.duration }),
+        },
+        {
           label: 'Abrir la ubicación del archivo',
           action: () => api.revealFile(media.path),
-          disabled: !media || media.missing,
+          disabled: !media || media.missing || isText(media),
         },
       ];
     } else {
@@ -320,13 +398,15 @@ export default function App() {
         { label: 'Pegar en el cursor', shortcut: 'Ctrl+V', action: () => paste(), disabled: !clip },
         'separator',
         { label: 'Seleccionar todo', shortcut: 'Ctrl+A', action: selectAll },
+        { label: 'Quitar la selección de tiempo', shortcut: 'Esc', action: () => setRegion(null), disabled: !live.current.region },
         'separator',
+        { label: 'Insertar medio de texto', action: insertText },
         { label: 'Insertar pista de video', shortcut: 'Ctrl+Mayús+Q', action: () => insertTrack('video') },
         { label: 'Insertar pista de audio', shortcut: 'Ctrl+Q', action: () => insertTrack('audio') },
       ];
     }
     setContextMenu({ x: info.x, y: info.y, items });
-  }, [copyIds, cutIds, deleteIds, groupIds, insertTrack, paste, selectAll, setProject, ungroupIds]);
+  }, [copyIds, cutIds, deleteIds, groupIds, insertText, insertTrack, paste, selectAll, setProject, ungroupIds]);
 
   const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
 
@@ -340,29 +420,36 @@ export default function App() {
 
   const acceptProjectDialog = (settings) => {
     if (projectDialog === 'edit') {
-      setProject((p) => ({ ...p, settings }));
+      // Las miniaturas de los textos dependen de la proporción del proyecto.
+      const aspect = settings.width / settings.height;
+      setProject((p) => ({ ...p, settings, media: p.media.map((m) => (isText(m) ? withTextThumb(m, aspect) : m)) }));
     } else {
       const fresh = emptyProject(settings);
       history.reset(fresh);
       setSavedProject(fresh);
       setProjectPath(null);
       setSelection([]);
+      setRegion(null);
+      setTextMediaId(null);
       setPlaying(false);
       setTime(0);
     }
     setProjectDialog(null);
   };
 
+  // Devuelve true si se ha guardado (false si se cancela el diálogo o falla).
   const save = useCallback(async (saveAs = false) => {
     const current = live.current.project;
     try {
       const saved = await api.saveProject(serializeProject(current), saveAs ? null : projectPath);
-      if (!saved) return;
+      if (!saved) return false;
       setProjectPath(saved);
       setSavedProject(current);
       setStatus(`Proyecto guardado en ${saved}`);
+      return true;
     } catch (err) {
       window.alert(`No se pudo guardar: ${err.message}`);
+      return false;
     }
   }, [projectPath]);
 
@@ -383,7 +470,12 @@ export default function App() {
     }
     setPlaying(false);
     const media = [];
+    const aspect = (data.settings?.width || 16) / (data.settings?.height || 9);
     for (const m of data.media) {
+      if (m.kind === 'text') {
+        media.push(withTextThumb({ ...newTextMedia(m.text), id: m.id }, aspect));
+        continue;
+      }
       setStatus(`Cargando ${m.name}…`);
       try {
         media.push({ ...(await api.analyzeMedia(m.path)), id: m.id });
@@ -396,10 +488,25 @@ export default function App() {
     setSavedProject(loaded);
     setProjectPath(result.path);
     setSelection([]);
+    setRegion(null);
+    setTextMediaId(null);
     setTime(0);
     const missing = media.filter((m) => m.missing).length;
     setStatus(missing ? `Proyecto abierto. Faltan ${missing} archivo(s) de medios.` : 'Proyecto abierto');
   }, [history]);
+
+  // Al cerrar la ventana con cambios sin guardar, el proceso principal pregunta (Guardar / No guardar /
+  // Cancelar). Necesita saber si hay cambios y, si se elige Guardar, pide guardar antes de cerrar.
+  useEffect(() => {
+    api.setDirty(dirty);
+  }, [dirty]);
+  const saveRef = useRef(null);
+  saveRef.current = save;
+  useEffect(() => api.onSaveBeforeClose(async () => {
+    if (await saveRef.current(false)) api.closeWindow();
+  }), []);
+
+  useEffect(() => api.onFullScreenChange(setFullScreen), []);
 
   const openRender = useCallback(() => {
     if (live.current.duration <= 0) return;
@@ -446,6 +553,8 @@ export default function App() {
         { label: 'Quitar del grupo', shortcut: 'U', action: () => ungroupIds(selection), disabled: !selection.length },
         'separator',
         { label: 'Ajuste activado', shortcut: 'F8', action: () => setSnap((v) => !v), checked: snap },
+        { label: 'Reproducción en bucle', shortcut: 'Q', action: () => setLoop((v) => !v), checked: loop },
+        { label: 'Quitar la selección de tiempo', shortcut: 'Esc', action: () => setRegion(null), disabled: !region },
       ],
     },
     {
@@ -454,6 +563,8 @@ export default function App() {
         { label: 'Acercar', shortcut: '↑', action: () => zoom(1.25) },
         { label: 'Alejar', shortcut: '↓', action: () => zoom(0.8) },
         { label: 'Ajustar el proyecto a la ventana', action: () => timelineRef.current?.zoomToFit() },
+        'separator',
+        { label: 'Pantalla completa', shortcut: 'F11', action: api.toggleFullScreen, checked: fullScreen },
         'separator',
         { label: 'Medios del proyecto', shortcut: 'Alt+4', action: () => setLeftTab('media'), checked: leftTab === 'media' },
         { label: 'Transiciones', shortcut: 'Alt+7', action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
@@ -471,6 +582,8 @@ export default function App() {
     {
       label: 'Insertar',
       items: [
+        { label: 'Medio de texto', action: insertText },
+        'separator',
         { label: 'Pista de video', shortcut: 'Ctrl+Mayús+Q', action: () => insertTrack('video') },
         { label: 'Pista de audio', shortcut: 'Ctrl+Q', action: () => insertTrack('audio') },
       ],
@@ -491,6 +604,7 @@ export default function App() {
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
   const modalOpen = renderOpen || projectDialog !== null || shortcutsOpen;
+  const floatingOpen = !!fxEventId || !!textMediaId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
     if (modalOpen || e.target.closest?.('input, select, textarea')) return;
@@ -543,6 +657,9 @@ export default function App() {
         arrowdown: () => zoom(0.8),
         f1: () => setShortcutsOpen(true),
         f8: () => setSnap((v) => !v),
+        q: () => setLoop((v) => !v),
+        escape: floatingOpen || !region ? null : () => setRegion(null),
+        f11: api.toggleFullScreen,
         f12: api.toggleDevTools,
       }[key];
     }
@@ -607,6 +724,7 @@ export default function App() {
             <MediaPool
               media={project.media}
               onImport={importDialog}
+              onNewText={insertText}
               onDropFiles={dropFilesOnPool}
               onRemove={removeMediaItem}
               onAdd={addAtCursor}
@@ -617,7 +735,17 @@ export default function App() {
           {leftTab === 'audioEffects' && <EffectsPanel key="audio" kind="audio" />}
         </Dock>
         <Dock title="Vista previa de video" className="preview-dock">
-          <Preview project={project} time={time} playing={playing} onOpenProperties={openProperties} />
+          <Preview
+            project={project}
+            time={time}
+            playing={playing}
+            selection={selection}
+            editTextId={textMediaId}
+            onSelectEvent={selectEvent}
+            onTextChange={updateTextMedia}
+            onEditText={openTextEditor}
+            onOpenProperties={openProperties}
+          />
         </Dock>
       </div>
       <div className="splitter" onPointerDown={startResize} />
@@ -630,16 +758,24 @@ export default function App() {
         time={time}
         seek={seek}
         playing={playing}
+        region={region}
+        setRegion={setRegion}
         pps={pps}
         setPps={setPps}
         snap={snap}
         onDropFiles={dropFilesOnTimeline}
         onMessage={setStatus}
         onContextMenu={openContextMenu}
-        onOpenFx={setFxEventId}
+        onOpenFx={(id) => {
+          setTextMediaId(null);
+          setFxEventId(id);
+        }}
+        onEditText={editTextOf}
         footer={
           <Transport
             playing={playing}
+            loop={loop}
+            onToggleLoop={() => setLoop((v) => !v)}
             onPlay={play}
             onPause={pause}
             onStop={stop}
@@ -659,8 +795,10 @@ export default function App() {
       </div>
       {renderOpen && (
         <RenderDialog
-          makePayload={(size) => renderPayload(project, size)}
+          makePayload={(size, onlyRegion) => renderPayload(project, size, onlyRegion ? region : null)}
           settings={project.settings}
+          region={region}
+          projectLength={duration}
           defaultName={`${baseName(projectPath)}.mp4`}
           onClose={() => setRenderOpen(false)}
         />
@@ -683,6 +821,15 @@ export default function App() {
           mediaName={project.media.find((m) => m.id === fxEvent.mediaId)?.name ?? ''}
           onChange={updateFxEffects}
           onClose={closeFx}
+        />
+      )}
+      {textMedia && (
+        <TextDialog
+          key={textMedia.id}
+          media={textMedia}
+          height={project.settings.height}
+          onChange={updateText}
+          onClose={closeText}
         />
       )}
     </div>

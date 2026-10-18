@@ -3,9 +3,11 @@ import Icon from './Icon.jsx';
 import { MEDIA_MIME } from './Timeline.jsx';
 import { formatDuration } from '../util/time.js';
 import { formatFps } from '../state/project.js';
+import { isText } from '../state/text.js';
 
 function describe(m) {
   if (m.missing) return 'Archivo no encontrado';
+  if (isText(m)) return 'Títulos y texto';
   const parts = [];
   if (m.isImage) parts.push('Imagen');
   else if (m.hasVideo) parts.push('Video');
@@ -15,7 +17,7 @@ function describe(m) {
   return parts.join(' · ');
 }
 
-export default function MediaPool({ media, onImport, onDropFiles, onRemove, onAdd }) {
+export default function MediaPool({ media, onImport, onNewText, onDropFiles, onRemove, onAdd }) {
   const [selected, setSelected] = useState(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -39,6 +41,9 @@ export default function MediaPool({ media, onImport, onDropFiles, onRemove, onAd
       <div className="dock-toolbar">
         <button className="tool" title="Importar medios (Ctrl+I)" onClick={onImport}>
           <Icon name="importMedia" />
+        </button>
+        <button className="tool" title="Insertar texto en el cursor (Insertar → Medio de texto)" onClick={onNewText}>
+          <Icon name="text" />
         </button>
         <button
           className="tool"
@@ -74,7 +79,7 @@ export default function MediaPool({ media, onImport, onDropFiles, onRemove, onAd
                 setSelected(m.id);
               }}
               onDoubleClick={() => !m.missing && onAdd(m)}
-              title={`${m.path}\nArrastra a la línea de tiempo o haz doble clic para añadir en el cursor`}
+              title={`${isText(m) ? m.name : m.path}\nArrastra a la línea de tiempo o haz doble clic para añadir en el cursor`}
             >
               <div className="thumb">
                 {m.thumb ? <img src={m.thumb} alt="" /> : <Icon name="music" size={26} />}

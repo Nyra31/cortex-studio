@@ -214,7 +214,8 @@ export class Compositor {
     }
   }
 
-  // Sube el fotograma actual del elemento a su textura (las imágenes, solo una vez). Devuelve { tex, w, h } o null.
+  // Sube el fotograma actual del elemento a su textura. Las imágenes y los canvas (textos) solo una vez,
+  // salvo que cambie su cortexVersion (el texto se ha vuelto a dibujar). Devuelve { tex, w, h } o null.
   upload(el) {
     const gl = this.gl;
     if (!el || !isReady(el)) return null;
@@ -225,9 +226,10 @@ export class Compositor {
       this.textures.set(el, entry);
     }
     gl.bindTexture(gl.TEXTURE_2D, entry.tex);
-    if (!entry.still) {
+    if (!entry.still || entry.version !== el.cortexVersion) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, el);
-      entry.still = el instanceof HTMLImageElement;
+      entry.still = !(el instanceof HTMLVideoElement);
+      entry.version = el.cortexVersion;
     }
     const [w, h] = sourceSize(el);
     return { tex: entry.tex, w, h };

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formatFps } from '../state/project.js';
+import { formatTimecode } from '../util/time.js';
 
 const SCALES = [
   { label: 'Tamaño del proyecto (100 %)', factor: 1 },
@@ -13,8 +14,10 @@ const QUALITIES = [
 ];
 const even = (v) => Math.max(2, Math.round(v / 2) * 2);
 
-// makePayload(size): datos para el proceso principal, calculados para el tamaño final (los efectos dependen de él).
-export default function RenderDialog({ makePayload, settings, defaultName, onClose }) {
+// makePayload(size, onlyRegion): datos para el proceso principal, calculados para el tamaño final (los
+// efectos y los textos dependen de él). region: selección de tiempo ({ start, end }) o null.
+export default function RenderDialog({ makePayload, settings, region, projectLength, defaultName, onClose }) {
+  const [onlyRegion, setOnlyRegion] = useState(!!region); // como en VEGAS: con selección, se ofrece solo esa parte
   const [scale, setScale] = useState(0);
   const [quality, setQuality] = useState(1);
   const [phase, setPhase] = useState('settings'); // settings | rendering | done | error
@@ -42,7 +45,7 @@ export default function RenderDialog({ makePayload, settings, defaultName, onClo
     const off = window.api.onRenderProgress(setProgress);
     try {
       const result = await window.api.startRender(
-        makePayload({ width, height }),
+        makePayload({ width, height }, onlyRegion && !!region),
         { width, height, fps: settings.fps, crf: QUALITIES[quality].crf },
         target,
       );
@@ -68,6 +71,23 @@ export default function RenderDialog({ makePayload, settings, defaultName, onClo
                 <div>Formato: <strong>MP4 (H.264 + AAC)</strong></div>
                 <div>Tamaño: <strong>{width} × {height}</strong></div>
                 <div>Velocidad: <strong>{formatFps(settings.fps)} fps</strong></div>
+                <div>
+                  Duración:{' '}
+                  <strong>{formatTimecode(onlyRegion && region ? region.end - region.start : projectLength, settings.fps)}</strong>
+                </div>
+              </div>
+              <div className="render-range">
+                <span className="field-label">Qué renderizar</span>
+                <label>
+                  <input type="radio" checked={!onlyRegion || !region} onChange={() => setOnlyRegion(false)} />
+                  Todo el proyecto
+                </label>
+                <label className={region ? '' : 'disabled'}>
+                  <input type="radio" checked={onlyRegion && !!region} disabled={!region} onChange={() => setOnlyRegion(true)} />
+                  {region
+                    ? `Solo la selección de tiempo (${formatTimecode(region.start, settings.fps)} – ${formatTimecode(region.end, settings.fps)})`
+                    : 'Solo la selección de tiempo (no hay ninguna: arrástrala en la barra de arriba de la regla)'}
+                </label>
               </div>
               <label>
                 <span className="field-label">Tamaño de salida</span>

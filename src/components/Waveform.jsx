@@ -2,8 +2,9 @@ import { memo, useEffect, useRef } from 'react';
 
 const MAX_CANVAS = 8000;
 
+// rate: velocidad del evento (dura `duration` en la línea de tiempo y usa duration × rate segundos del medio).
 // gain, fadeIn y fadeOut escalan el dibujo para que la forma de onda refleje el volumen del evento.
-export default memo(function Waveform({ peaks, peaksPerSecond, inPoint, duration, width, height, gain = 1, fadeIn = 0, fadeOut = 0 }) {
+export default memo(function Waveform({ peaks, peaksPerSecond, inPoint, duration, rate = 1, width, height, gain = 1, fadeIn = 0, fadeOut = 0 }) {
   const ref = useRef(null);
   const w = Math.max(1, Math.min(Math.round(width), MAX_CANVAS));
 
@@ -17,7 +18,7 @@ export default memo(function Waveform({ peaks, peaksPerSecond, inPoint, duration
     ctx.fillStyle = 'rgba(235, 235, 235, 0.8)';
     const mid = canvas.height / 2;
     const first = inPoint * peaksPerSecond;
-    const perPx = (duration * peaksPerSecond) / w;
+    const perPx = (duration * rate * peaksPerSecond) / w;
     for (let x = 0; x < w; x++) {
       const a = Math.floor(first + x * perPx);
       const b = Math.min(peaks.length, Math.max(a + 1, Math.floor(first + (x + 1) * perPx)));
@@ -30,7 +31,7 @@ export default memo(function Waveform({ peaks, peaksPerSecond, inPoint, duration
       const h = Math.max(0.5, (max / 255) * mid * k);
       ctx.fillRect(x, mid - h, 1, h * 2);
     }
-  }, [peaks, peaksPerSecond, inPoint, duration, w, height, gain, fadeIn, fadeOut]);
+  }, [peaks, peaksPerSecond, inPoint, duration, rate, w, height, gain, fadeIn, fadeOut]);
 
   return <canvas ref={ref} className="waveform" style={{ height }} />;
 });

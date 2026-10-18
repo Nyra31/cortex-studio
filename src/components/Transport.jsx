@@ -8,7 +8,7 @@ function TransportButton({ icon, title, onClick, active }) {
   );
 }
 
-export default function Transport({ playing, onPlay, onPause, onStop, onStart, onEnd, onPrevFrame, onNextFrame }) {
+export default function Transport({ playing, loop, onToggleLoop, onPlay, onPause, onStop, onStart, onEnd, onPrevFrame, onNextFrame }) {
   return (
     <div className="transport">
       <TransportButton icon="play" title="Reproducir (Espacio)" onClick={onPlay} active={playing} />
@@ -20,6 +20,13 @@ export default function Transport({ playing, onPlay, onPause, onStop, onStart, o
       <span className="transport-sep" />
       <TransportButton icon="prevFrame" title="Fotograma anterior (←)" onClick={onPrevFrame} />
       <TransportButton icon="nextFrame" title="Fotograma siguiente (→)" onClick={onNextFrame} />
+      <span className="transport-sep" />
+      <TransportButton
+        icon="loop"
+        title="Reproducción en bucle de la selección de tiempo (Q)"
+        onClick={onToggleLoop}
+        active={loop}
+      />
     </div>
   );
 }

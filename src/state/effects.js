@@ -4,7 +4,8 @@
 //   params: [{ id, label, type: 'range' | 'bool' | 'color', min, max, step, default, format? }]
 //   ffmpeg(p, ctx) → cadena de filtros lineal (o '' si con esos valores no hace nada)
 //   graph(p, ctx, inL, outL, tag) → subgrafo con ramas (etiquetas de entrada/salida dadas)
-//   ctx = { w, h }: tamaño en píxeles de la imagen encajada a la que se aplica (sin las bandas negras).
+//   ctx = { w, h, alpha }: tamaño en píxeles de la imagen encajada a la que se aplica (sin las bandas negras)
+//   y si tiene transparencia (textos, PNG con alfa): entonces los filtros que no la admiten la conservan aparte.
 // Las medidas (radios, tamaños de bloque) son relativas a la altura de la imagen, para que la vista
 // previa (a menos resolución) y el render den el mismo resultado. La vista previa aplica las mismas
 // fórmulas con shaders: ver preview/effects-gl.js.
@@ -159,7 +160,13 @@ export const EFFECT_GROUPS = [
         id: 'vignette',
         name: 'Viñeta',
         params: [{ id: 'amount', label: 'Intensidad', type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct }],
-        ffmpeg: (p) => (p.amount ? `vignette=angle=${n((p.amount * Math.PI) / 2)}` : ''),
+        // vignette no admite alfa: con transparencia se aparta el alfa y se vuelve a poner después.
+        graph: (p, ctx, inL, outL, tag) => {
+          if (!p.amount) return `[${inL}]null[${outL}]`;
+          const f = `vignette=angle=${n((p.amount * Math.PI) / 2)}`;
+          if (!ctx.alpha) return `[${inL}]${f}[${outL}]`;
+          return `[${inL}]format=yuva420p,split[${tag}a][${tag}b];[${tag}a]format=yuv420p,${f}[${tag}v];[${tag}b]alphaextract[${tag}m];[${tag}v][${tag}m]alphamerge[${outL}]`;
+        },
       },
       {
         id: 'mirror',
@@ -184,7 +191,17 @@ export const EFFECT_GROUPS = [
           { id: 'similarity', label: 'Similitud', type: 'range', min: 0.01, max: 1, step: 0.01, default: 0.3, format: pct },
           { id: 'blend', label: 'Suavizado', type: 'range', min: 0, max: 1, step: 0.01, default: 0.1, format: pct },
         ],
-        ffmpeg: (p) => `format=rgba,colorkey=color=${hex(p.color)}:similarity=${n(p.similarity)}:blend=${n(p.blend)}`,
+        // colorkey sustituye el alfa; si la imagen ya tenía transparencia, se multiplica por la de antes
+        // (igual que la vista previa), para que lo transparente siga siéndolo.
+        graph: (p, ctx, inL, outL, tag) => {
+          const f = `colorkey=color=${hex(p.color)}:similarity=${n(p.similarity)}:blend=${n(p.blend)}`;
+          if (!ctx.alpha) return `[${inL}]format=rgba,${f}[${outL}]`;
+          return (
+            `[${inL}]format=rgba,split[${tag}a][${tag}b];[${tag}a]${f},split[${tag}k][${tag}c];` +
+            `[${tag}b]alphaextract[${tag}m];[${tag}c]alphaextract[${tag}n];` +
+            `[${tag}m][${tag}n]blend=all_mode=multiply[${tag}p];[${tag}k][${tag}p]alphamerge[${outL}]`
+          );
+        },
       },
     ],
   },

@@ -440,6 +440,10 @@ input[type='number'] {
   color: #fff;
   border-color: #fff;
 }
+.event-fx.event-text {
+  right: 33px;
+  font: 700 9px/10px Arial, sans-serif;
+}
 .event-fx.active {
   color: #10240f;
   background: #7ed36f;
@@ -651,7 +655,7 @@ input[type='number'] {
   top: 0;
   z-index: 6;
   display: flex;
-  height: 44px;
+  height: 56px;
   background: var(--panel);
   border-bottom: 1px solid var(--edge);
 }
@@ -685,9 +689,72 @@ input[type='number'] {
   top: 0;
   left: 0;
   right: 0;
-  height: 14px;
+  height: 18px;
   background: #262626;
   border-bottom: 1px solid #1a1a1a;
+  cursor: default;
+}
+/* Selección de tiempo: línea azul con la duración y triángulos amarillos en los extremos (como VEGAS). */
+.region-line {
+  position: absolute;
+  top: 0;
+  height: 9px;
+  cursor: grab;
+}
+.region-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 3px;
+  background: #3d8bff;
+}
+.region-length {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 3px;
+  padding: 0 3px;
+  font-size: 10px;
+  line-height: 10px;
+  color: #111;
+  background: #d8d8d8;
+  border-radius: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.region-handle {
+  position: absolute;
+  top: 8px;
+  width: 14px;
+  height: 10px;
+  margin-left: -7px;
+  cursor: ew-resize;
+  z-index: 1;
+}
+.region-handle::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 9px solid #f2cf3a;
+}
+.region-handle:hover::before {
+  border-top-color: #fff3a6;
+}
+.region-shade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(40, 110, 210, 0.38);
+  pointer-events: none;
+}
+.ruler .region-shade {
+  top: 18px;
+  background: rgba(40, 110, 210, 0.22);
 }
 .tick {
   position: absolute;
@@ -711,7 +778,7 @@ input[type='number'] {
 /* Cabeza del cursor: triángulo que se puede arrastrar (con un área de agarre algo mayor que el dibujo). */
 .cursor-head {
   position: absolute;
-  top: 0;
+  top: 18px;
   width: 18px;
   height: 16px;
   margin-left: -9px;
@@ -918,6 +985,22 @@ input[type='number'] {
 }
 .event-gain {
   color: #ffd27a;
+}
+.event-rate {
+  color: #8fd3ff;
+}
+/* Evento con la velocidad cambiada: línea en zigzag bajo el título, como en VEGAS. */
+.event.stretched .event-body::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 4px;
+  background:
+    linear-gradient(135deg, transparent 50%, rgba(143, 211, 255, 0.85) 50% 62%, transparent 62%) 0 0 / 6px 4px repeat-x,
+    linear-gradient(45deg, transparent 38%, rgba(143, 211, 255, 0.85) 38% 50%, transparent 50%) 0 0 / 6px 4px repeat-x;
+  pointer-events: none;
 }
 .envelope {
   position: absolute;
@@ -1243,3 +1326,111 @@ kbd {
   border-radius: 3px;
   padding: 1px 5px;
 }
+
+/* Ventana de títulos y texto. */
+.text-window {
+  width: 380px;
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+}
+.text-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  margin-bottom: 6px;
+  font: 13px/1.35 'Segoe UI', sans-serif;
+  color: var(--text);
+  background: #1e1e1e;
+  border: 1px solid var(--line);
+  padding: 4px 6px;
+}
+.text-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+.text-row .fx-param {
+  flex: 1;
+  margin: 0;
+}
+.text-row .fx-param-label {
+  width: 110px;
+  flex: none;
+}
+.text-font {
+  flex: 1;
+  min-width: 0;
+}
+.text-toggle {
+  min-width: 26px;
+  padding: 1px 6px;
+}
+.text-toggle.wide {
+  flex: 1;
+}
+.text-toggle.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.text-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--edge);
+  color: var(--text-dim);
+}
+.text-section label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+}
+.text-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+/* Renderizar: todo el proyecto o solo la selección de tiempo. */
+.render-range {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.render-range label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+}
+.render-range label.disabled {
+  color: var(--text-faint);
+}
+
+/* Colocar textos en la vista previa: recuadro del texto seleccionado con sus esquinas. */
+.text-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.text-box {
+  position: absolute;
+  outline: 1px dashed rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  cursor: move;
+}
+.text-corner {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: #fff;
+  border: 1px solid #222;
+}
+.text-corner.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.text-corner.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.text-corner.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.text-corner.se { right: -5px; bottom: -5px; cursor: nwse-resize; }

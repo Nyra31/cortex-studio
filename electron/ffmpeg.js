@@ -74,6 +74,8 @@ async function probe(file) {
     width: video ? (turned ? video.height : video.width) : null,
     height: video ? (turned ? video.width : video.height) : null,
     fps: video ? parseRate(video.avg_frame_rate) || parseRate(video.r_frame_rate) : null,
+    // Imágenes con transparencia (PNG con alfa…): sus efectos deben conservarla en el render.
+    hasAlpha: !!video && /^(rgba|bgra|argb|abgr|ya|yuva|gbrap|pal8)/.test(video.pix_fmt || ''),
   };
 }
 
@@ -136,6 +138,20 @@ function videoFades(e) {
   return out.length ? `,format=yuva420p,${out.join(',')}` : '';
 }
 
+// Cambio de velocidad del audio sin cambiar el tono (como el navegador en la vista previa). Cada atempo
+// admite de 0,5 a 100, así que las velocidades más lentas se encadenan.
+function atempo(rate) {
+  if (Math.abs(rate - 1) < 1e-6) return '';
+  const parts = [];
+  let r = rate;
+  while (r < 0.5) {
+    parts.push('atempo=0.5');
+    r /= 0.5;
+  }
+  parts.push(`atempo=${r.toFixed(6)}`);
+  return `,${parts.join(',')}`;
+}
+
 function audioFades(e) {
   let out = '';
   if (e.fadeIn > 0) out += `,afade=t=in:st=0:d=${num(e.fadeIn)}`;
@@ -154,18 +170,26 @@ function buildRender(project, settings, outPath) {
     const m = media.get(e.mediaId);
     return t && !t.muted && m && !m.missing && e.duration > 0;
   });
-  const duration = Math.max(0.1, ...project.events.map((e) => e.start + e.duration));
-
-  const inputs = [];
-  const filters = [`color=c=black:s=${W}x${H}:r=${fps}:d=${num(duration)}[base]`];
-  let last = 'base';
-  let n = 0;
-
   // Todo el video se coloca sobre la rejilla de fotogramas del proyecto: un fragmento que va de
   // start a start+dur ocupa los fotogramas cuyo instante cae en ese intervalo. Así, al dividir un
   // evento o pegar dos seguidos, cada fotograma de salida pertenece a uno solo y no quedan huecos negros.
   const [rateNum, rateDen = 1] = fps.split('/').map(Number);
   const rate = rateNum / rateDen;
+
+  // Tramo que se renderiza: todo el proyecto o la selección de tiempo (project.range). Con selección,
+  // todo se monta en los tiempos de la línea de tiempo y al final se quita lo de antes de rangeStart,
+  // así que el resultado es exactamente ese trozo del render completo.
+  const range = project.range;
+  const end = range ? range.end : Math.max(0.1, ...project.events.map((e) => e.start + e.duration));
+  const firstFrame = range ? Math.ceil(range.start * rate - 1e-6) : 0;
+  const rangeStart = firstFrame / rate;
+  const duration = range ? Math.max(1, Math.ceil(end * rate - 1e-6) - firstFrame) / rate : end;
+
+  const inputs = [];
+  const filters = [`color=c=black:s=${W}x${H}:r=${fps}:d=${num(duration)}${firstFrame ? `,setpts=PTS+${firstFrame}` : ''}[base]`];
+  let last = 'base';
+  let n = 0;
+
   const frameSpan = (start, dur) => {
     const first = Math.ceil(start * rate - 1e-6);
     const end = Math.ceil((start + dur) * rate - 1e-6);
@@ -177,21 +201,27 @@ function buildRender(project, settings, outPath) {
   // tpad lo repite). Empieza en el tiempo local 0, que corresponde al fotograma `first` del proyecto.
   // Con efectos (fx, calculado en la interfaz por renderPayload), la imagen se escala a su tamaño
   // encajado, pasa por el subgrafo de efectos y después se le ponen las bandas negras.
-  const addVideoInput = (m, inPoint, start, dur, fx = null) => {
+  // speed: velocidad del evento (inPoint es tiempo del medio; start y dur, de la línea de tiempo).
+  const addVideoInput = (m, inPoint, start, dur, fx = null, speed = 1) => {
     const { first, count } = frameSpan(start, dur);
-    const seek = Math.max(0, inPoint + first / rate - start);
     const length = (count + 1) / rate;
-    if (m.isImage) inputs.push('-loop', '1', '-framerate', fps, '-t', num(length), '-i', m.path);
-    else inputs.push('-ss', num(seek), '-t', num(length), '-i', m.path);
+    if (m.isImage) {
+      speed = 1;
+      inputs.push('-loop', '1', '-framerate', fps, '-t', num(length), '-i', m.path);
+    } else {
+      const seek = Math.max(0, inPoint + (first / rate - start) * speed);
+      inputs.push('-ss', num(seek), '-t', num(length * speed), '-i', m.path);
+    }
+    const pts = speed === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${speed.toFixed(6)}`;
     const i = n++;
     const tail =
       `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},` +
       `tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${count}`;
     if (!fx) {
-      return { i, first, count, chain: `[${i}:v]setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease,${tail}` };
+      return { i, first, count, chain: `[${i}:v]${pts},scale=${W}:${H}:force_original_aspect_ratio=decrease,${tail}` };
     }
     filters.push(
-      `[${i}:v]setpts=PTS-STARTPTS,scale=${fx.w}:${fx.h},setsar=1[fxin${i}]`,
+      `[${i}:v]${pts},scale=${fx.w}:${fx.h},setsar=1[fxin${i}]`,
       fx.graph.replaceAll('@IN@', `fxin${i}`).replaceAll('@OUT@', `fxout${i}`).replaceAll('@N@', `fx${i}_`),
     );
     return { i, first, count, chain: `[fxout${i}]format=${fx.alpha ? 'yuva420p' : 'yuv420p'},${tail}` };
@@ -220,7 +250,7 @@ function buildRender(project, settings, outPath) {
     .filter((e) => tracks.get(e.trackId).type === 'video')
     .sort((a, b) => tracks.get(b.trackId).index - tracks.get(a.trackId).index || a.start - b.start);
   for (const e of videoEvents) {
-    const v = addVideoInput(media.get(e.mediaId), e.inPoint, e.start, e.duration, e.fx);
+    const v = addVideoInput(media.get(e.mediaId), e.inPoint, e.start, e.duration, e.fx, e.rate || 1);
     filters.push(`${v.chain}${videoFades(e)},${placeAt(v.first)}[v${v.i}]`);
     overlayAt(`v${v.i}`, v.first, v.count);
 
@@ -228,8 +258,11 @@ function buildRender(project, settings, outPath) {
     if (tr) {
       // Final del evento que sale y principio del que entra, mezclados con xfade.
       const from = eventsById.get(tr.from);
-      const a = addVideoInput(media.get(from.mediaId), from.inPoint + (tr.start - from.start), tr.start, tr.duration, from.fx);
-      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.start, tr.duration, e.fx);
+      const fromRate = from.rate || 1;
+      const a = addVideoInput(
+        media.get(from.mediaId), from.inPoint + (tr.start - from.start) * fromRate, tr.start, tr.duration, from.fx, fromRate,
+      );
+      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.start, tr.duration, e.fx, e.rate || 1);
       filters.push(
         `${a.chain},format=yuv420p[ta${a.i}]`,
         `${b.chain},format=yuv420p[tb${b.i}]`,
@@ -239,20 +272,21 @@ function buildRender(project, settings, outPath) {
       overlayAt(`tr${b.i}`, b.first, b.count);
     }
   }
-  filters.push(`[${last}]format=yuv420p[vout]`);
+  filters.push(`[${last}]format=yuv420p${firstFrame ? ',setpts=PTS-STARTPTS' : ''}[vout]`);
 
   // Pistas de audio: cada evento se recorta, se retrasa a su posición y se mezcla.
-  filters.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${num(duration)}[abase]`);
+  filters.push(`anullsrc=r=48000:cl=stereo,atrim=duration=${num(rangeStart + duration)}[abase]`);
   const mix = ['[abase]'];
   for (const e of usable.filter((ev) => tracks.get(ev.trackId).type === 'audio')) {
     const m = media.get(e.mediaId);
     const gain = (tracks.get(e.trackId).gain ?? 1) * (e.gain ?? 1);
     if (!m.hasAudio || gain === 0) continue;
-    inputs.push('-ss', num(e.inPoint), '-t', num(e.duration), '-i', m.path);
+    const speed = e.rate || 1;
+    inputs.push('-ss', num(e.inPoint), '-t', num(e.duration * speed), '-i', m.path);
     const i = n++;
     const delay = Math.round(e.start * 1000);
     const format = 'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo';
-    let head = `[${i}:a]asetpts=PTS-STARTPTS,${format}`;
+    let head = `[${i}:a]asetpts=PTS-STARTPTS,${format}${atempo(speed)}`;
     if (e.afx) {
       // Efectos del evento (subgrafo calculado en la interfaz). Las colas (eco, reverberación) se cortan
       // al final del evento, igual que en la vista previa.
@@ -267,10 +301,11 @@ function buildRender(project, settings, outPath) {
     );
     mix.push(`[a${i}]`);
   }
+  const cut = rangeStart ? `,atrim=start=${rangeStart.toFixed(6)},asetpts=PTS-STARTPTS` : '';
   filters.push(
     mix.length === 1
-      ? '[abase]anull[aout]'
-      : `${mix.join('')}amix=inputs=${mix.length}:duration=first:normalize=0[aout]`,
+      ? `[abase]anull${cut}[aout]`
+      : `${mix.join('')}amix=inputs=${mix.length}:duration=first:normalize=0${cut}[aout]`,
   );
 
   const args = [
@@ -287,8 +322,19 @@ function buildRender(project, settings, outPath) {
 }
 
 async function render(project, settings, outPath, { onProgress, onSpawn } = {}) {
-  const { args, filterGraph, duration } = buildRender(project, settings, outPath);
-  const scriptPath = path.join(os.tmpdir(), `cortex-filtros-${Date.now()}.txt`);
+  // Los textos llegan dibujados como PNG (data URL): se guardan en archivos temporales y se usan como imágenes.
+  const stamp = Date.now();
+  const temp = [];
+  const media = await Promise.all(project.media.map(async (m) => {
+    if (!m.png) return m;
+    const file = path.join(os.tmpdir(), `cortex-texto-${stamp}-${m.id}.png`);
+    await fs.promises.writeFile(file, Buffer.from(m.png.slice(m.png.indexOf(',') + 1), 'base64'));
+    temp.push(file);
+    return { ...m, png: undefined, path: file, isImage: true };
+  }));
+  const { args, filterGraph, duration } = buildRender({ ...project, media }, settings, outPath);
+  const scriptPath = path.join(os.tmpdir(), `cortex-filtros-${stamp}.txt`);
+  temp.push(scriptPath);
   await fs.promises.writeFile(scriptPath, filterGraph, 'utf8');
   args[args.indexOf(null)] = scriptPath;
   try {
@@ -301,7 +347,7 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
     });
     return result;
   } finally {
-    fs.promises.unlink(scriptPath).catch(() => {});
+    for (const file of temp) fs.promises.unlink(file).catch(() => {});
   }
 }
 

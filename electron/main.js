@@ -33,6 +33,8 @@ const PROJECT_FILTERS = [{ name: 'Proyecto de Cortex Studio', extensions: ['cort
 const allowedFiles = new Set();
 let mainWindow = null;
 let renderProcess = null;
+let projectDirty = false; // la interfaz avisa cuando hay cambios sin guardar
+let closeConfirmed = false;
 
 async function serveMedia(request) {
   const filePath = new URL(request.url).searchParams.get('p');
@@ -69,11 +71,14 @@ async function serveMedia(request) {
 }
 
 function createWindow() {
+  // Arranca maximizada (en ventana, ocupando la pantalla, como otros editores). Se muestra cuando ya
+  // está maximizada y pintada, para que no se vea primero pequeña.
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1000,
     minHeight: 640,
+    show: false,
     backgroundColor: '#1c1d20',
     title: 'Cortex Studio',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
@@ -84,8 +89,37 @@ function createWindow() {
       sandbox: false,
     },
   });
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
+    mainWindow.show();
+  });
+  // La interfaz marca «Pantalla completa» en el menú Ver según el estado real (también si cambia por otra vía).
+  const sendFullScreen = () => mainWindow.webContents.send('window:fullscreen', mainWindow.isFullScreen());
+  mainWindow.on('enter-full-screen', sendFullScreen);
+  mainWindow.on('leave-full-screen', sendFullScreen);
   if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   else mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  // Con cambios sin guardar, preguntar antes de cerrar (también al usar Archivo > Salir).
+  mainWindow.on('close', (event) => {
+    if (closeConfirmed || !projectDirty) return;
+    event.preventDefault();
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'warning',
+      title: 'Cortex Studio',
+      message: '¿Guardar los cambios del proyecto antes de salir?',
+      detail: 'Si no los guardas, se perderán.',
+      buttons: ['Guardar', 'No guardar', 'Cancelar'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    });
+    if (choice === 0) {
+      mainWindow.webContents.send('project:saveBeforeClose');
+    } else if (choice === 1) {
+      closeConfirmed = true;
+      mainWindow.close();
+    }
+  });
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -171,6 +205,17 @@ ipcMain.handle('render:start', async (event, project, settings, outPath) => {
 
 ipcMain.handle('render:cancel', () => {
   if (renderProcess) renderProcess.cancel();
+});
+
+ipcMain.on('project:dirty', (_e, dirty) => {
+  projectDirty = !!dirty;
+});
+ipcMain.handle('window:toggleFullScreen', () => {
+  if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
+});
+ipcMain.on('window:close', () => {
+  closeConfirmed = true;
+  if (mainWindow) mainWindow.close();
 });
 
 ipcMain.handle('shell:reveal', (_e, filePath) => shell.showItemInFolder(filePath));
