@@ -3,7 +3,8 @@ import Waveform from './Waveform.jsx';
 import Icon from './Icon.jsx';
 import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
-  EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, moveTrack, gainToVolume, isTrackActive,
+  EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, moveTrack,
+  markPoints, updateMark, gainToVolume, isTrackActive,
   overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain,
 } from '../state/project.js';
 import { panActive } from '../state/pan.js';
@@ -12,6 +13,7 @@ import { isText } from '../state/text.js';
 import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
 
 export const MEDIA_MIME = 'application/x-cortex-media';
+const EMPTY = [];
 const HEADER_W = 230;
 const TRACK_H = { video: 64, audio: 72 };
 const TITLE_H = 16;
@@ -59,7 +61,69 @@ function RegionBar({ region, pps, fps, onDown }) {
   );
 }
 
-const Ruler = memo(function Ruler({ pps, fps, time, scrollLeft, viewWidth, laneWidth, region, onPointerDown, onRegionDown }) {
+// Franja de marcadores (naranjas, M) y regiones con nombre (verdes, R), como en VEGAS. Se arrastran; doble
+// clic: cambiar el nombre (en una región, además, la selecciona); clic derecho: su menú. editing: { kind, id }.
+function MarkStrip({ markers, regions, pps, editing, onDown, onDouble, onMenu, onRename }) {
+  const label = (x) => (x.name ? `${x.number} · ${x.name}` : String(x.number));
+  return (
+    <div className="mark-strip">
+      {regions.map((r) => (
+        <div
+          key={r.id}
+          className="mark-region"
+          style={{ left: r.start * pps, width: Math.max(2, (r.end - r.start) * pps) }}
+          title={`Región ${label(r)} (arrastra para moverla; doble clic: seleccionarla y cambiar el nombre)`}
+          onPointerDown={(e) => onDown(e, 'region', r, 'move')}
+          onDoubleClick={() => onDouble('region', r)}
+          onContextMenu={(e) => onMenu(e, 'region', r)}
+        >
+          <div className="mark-edge start" onPointerDown={(e) => onDown(e, 'region', r, 'start')} />
+          <div className="mark-edge end" onPointerDown={(e) => onDown(e, 'region', r, 'end')} />
+          {editing?.id === r.id ? <MarkInput value={r.name} onDone={(name) => onRename('region', r.id, name)} /> : <span>{label(r)}</span>}
+        </div>
+      ))}
+      {markers.map((m) => (
+        <div
+          key={m.id}
+          className="mark-marker"
+          style={{ left: m.time * pps }}
+          title={`Marcador ${label(m)} (tecla ${m.number <= 9 ? m.number : '—'}; arrastra para moverlo; doble clic: cambiar el nombre)`}
+          onPointerDown={(e) => onDown(e, 'marker', m, 'move')}
+          onDoubleClick={() => onDouble('marker', m)}
+          onContextMenu={(e) => onMenu(e, 'marker', m)}
+        >
+          {editing?.id === m.id ? <MarkInput value={m.name} onDone={(name) => onRename('marker', m.id, name)} /> : <span>{label(m)}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MarkInput({ value, onDone }) {
+  return (
+    <input
+      className="mark-input"
+      autoFocus
+      defaultValue={value}
+      placeholder="Nombre"
+      onFocus={(e) => e.target.select()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onBlur={(e) => onDone(e.target.value.trim())}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') {
+          e.currentTarget.value = value;
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
+const Ruler = memo(function Ruler({
+  pps, fps, time, scrollLeft, viewWidth, laneWidth, region, onPointerDown, onRegionDown, markers, regions, markProps,
+}) {
   const step = majorStep(pps);
   const minor = step / 5;
   const ticks = [];
@@ -84,6 +148,7 @@ const Ruler = memo(function Ruler({ pps, fps, time, scrollLeft, viewWidth, laneW
       >
         <RegionBar region={region} pps={pps} fps={fps} onDown={onRegionDown} />
       </div>
+      <MarkStrip markers={markers} regions={regions} pps={pps} {...markProps} />
       {ticks}
       <div className="cursor-head" style={{ left: time * pps }} title="Arrastra para ajustar el cursor (Mayús: sin ajuste)" />
     </div>
@@ -460,7 +525,7 @@ const Timeline = forwardRef(function Timeline({
   const snapPoints = useCallback((exclude = new Set()) => {
     const { project: p, time: t, snap: enabled } = live.current;
     if (!enabled) return [];
-    return [0, t, ...p.events.filter((e) => !exclude.has(e.id)).flatMap((e) => [e.start, e.start + e.duration])];
+    return [0, t, ...markPoints(p), ...p.events.filter((e) => !exclude.has(e.id)).flatMap((e) => [e.start, e.start + e.duration])];
   }, []);
 
   // Dónde queda el cursor al colocarlo con el ratón, como en VEGAS: con el ajuste activado se pega al
@@ -471,7 +536,7 @@ const Timeline = forwardRef(function Timeline({
     const t = Math.max(0, time);
     if (enabled && !free) {
       let best = null;
-      for (const x of [0, ...p.events.flatMap((e) => [e.start, e.start + e.duration])]) {
+      for (const x of [0, ...markPoints(p), ...p.events.flatMap((e) => [e.start, e.start + e.duration])]) {
         if (Math.abs(x - t) < 8 / scale && (best === null || Math.abs(x - t) < Math.abs(best - t))) best = x;
       }
       if (best !== null) return best;
@@ -519,6 +584,65 @@ const Timeline = forwardRef(function Timeline({
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   }, [cursorTime, setRegion, snapTime, timeAt]);
+
+  // Marcadores y regiones: arrastrarlos (part: 'move', o 'start'/'end' para los extremos de una región).
+  const [editingMark, setEditingMark] = useState(null);
+  const onMarkDown = useCallback((e, kind, mark, part) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const startX = e.clientX;
+    const t0 = timeAt(e.clientX);
+    let moved = false;
+    const move = (me) => {
+      if (!moved && Math.abs(me.clientX - startX) < 3) return;
+      const first = !moved;
+      moved = true;
+      const dt = timeAt(me.clientX) - t0;
+      let changes;
+      if (kind === 'marker') {
+        changes = { time: snapTime(mark.time + dt, me.shiftKey) };
+      } else if (part === 'move') {
+        const len = mark.end - mark.start;
+        const raw = Math.max(0, mark.start + dt);
+        const a = snapTime(raw, me.shiftKey);
+        const b = snapTime(raw + len, me.shiftKey) - len;
+        const start = Math.max(0, Math.abs(b - raw) < Math.abs(a - raw) ? b : a);
+        changes = { start, end: start + len };
+      } else {
+        const t = snapTime((part === 'start' ? mark.start : mark.end) + dt, me.shiftKey);
+        const other = part === 'start' ? mark.end : mark.start;
+        const frame = 1 / live.current.project.settings.fps;
+        changes = { start: Math.min(t, other), end: Math.max(Math.max(t, other), Math.min(t, other) + frame) };
+      }
+      setProject((p) => updateMark(p, kind, mark.id, changes), first);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (!moved) seek(kind === 'marker' ? mark.time : mark.start); // un clic lleva el cursor ahí
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [seek, setProject, snapTime, timeAt]);
+  const onMarkDouble = useCallback((kind, mark) => {
+    if (kind === 'region') setRegion({ start: mark.start, end: mark.end });
+    setEditingMark({ kind, id: mark.id });
+  }, [setRegion]);
+  const onMarkRename = useCallback((kind, id, name) => {
+    setEditingMark(null);
+    setProject((p) => {
+      const list = kind === 'marker' ? p.markers : p.regions;
+      return list?.find((x) => x.id === id)?.name === name ? p : updateMark(p, kind, id, { name });
+    });
+  }, [setProject]);
+  const onMarkMenu = useCallback((e, kind, mark) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onContextMenu({ kind, x: e.clientX, y: e.clientY, mark, rename: () => setEditingMark({ kind, id: mark.id }) });
+  }, [onContextMenu]);
+  const markProps = useMemo(() => ({
+    editing: editingMark, onDown: onMarkDown, onDouble: onMarkDouble, onMenu: onMarkMenu, onRename: onMarkRename,
+  }), [editingMark, onMarkDown, onMarkDouble, onMarkMenu, onMarkRename]);
 
   // Doble clic en un evento: la selección de tiempo pasa a ser el tramo del evento (como en VEGAS).
   const onEventDouble = useCallback((ev) => setRegion({ start: ev.start, end: ev.start + ev.duration }), [setRegion]);
@@ -940,6 +1064,9 @@ const Timeline = forwardRef(function Timeline({
             <Ruler
               pps={pps}
               fps={fps}
+              markers={project.markers || EMPTY}
+              regions={project.regions || EMPTY}
+              markProps={markProps}
               region={region}
               onRegionDown={onRegionDown}
               time={time}
@@ -996,6 +1123,13 @@ const Timeline = forwardRef(function Timeline({
               <RegionShade region={region} pps={pps} />
             </div>
           </div>
+          {(project.markers || []).map((m) => (
+            <div key={m.id} className="mark-line" style={{ left: HEADER_W + m.time * pps }} />
+          ))}
+          {(project.regions || []).flatMap((r) => [
+            <div key={`${r.id}a`} className="mark-line region" style={{ left: HEADER_W + r.start * pps }} />,
+            <div key={`${r.id}b`} className="mark-line region" style={{ left: HEADER_W + r.end * pps }} />,
+          ])}
           <div className="cursor-line" style={{ left: HEADER_W + time * pps }} />
           {trackDrag && <div className="track-drop-line" style={{ top: trackDrag.line - 1 }} />}
           {marquee && (

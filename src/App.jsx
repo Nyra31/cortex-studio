@@ -18,7 +18,7 @@ import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
-  IMAGE_DURATION, addTrack, copyEvents, deleteRange, emptyProject, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
+  IMAGE_DURATION, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
   placeMedia, projectDuration, removeMedia, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
   ungroupEvents, updateEvents,
 } from './state/project.js';
@@ -152,7 +152,7 @@ export default function App() {
   // Siguiente/anterior punto de edición (principio o final de un evento), como Ctrl+←/→ en VEGAS.
   const jumpToEdit = useCallback((direction) => {
     const { project: p, time: t } = live.current;
-    const points = [...new Set([0, ...p.events.flatMap((e) => [e.start, e.start + e.duration])])].sort((a, b) => a - b);
+    const points = [...new Set([0, ...markPoints(p), ...p.events.flatMap((e) => [e.start, e.start + e.duration])])].sort((a, b) => a - b);
     const target = direction > 0 ? points.find((x) => x > t + 1e-6) : points.reverse().find((x) => x < t - 1e-6);
     if (target !== undefined) {
       setPlaying(false);
@@ -242,6 +242,28 @@ export default function App() {
     setRippleMode(mode);
     setRipple(mode);
   }, []);
+
+  // Marcadores (M, en el cursor) y regiones (R, de la selección de tiempo), como en VEGAS.
+  const insertMarker = useCallback(() => {
+    const res = addMarker(live.current.project, quantize(live.current.time, live.current.project.settings.fps));
+    if (!res.marker) return;
+    setProject(res.project);
+    setStatus(`Marcador ${res.marker.number} añadido${res.marker.number <= 9 ? ` (tecla ${res.marker.number} para volver a él)` : ''}. Doble clic en él para ponerle nombre.`);
+  }, [setProject]);
+  const insertRegion = useCallback(() => {
+    const r = live.current.region;
+    if (!r) {
+      setStatus('Para crear una región, primero marca una selección de tiempo en la barra de arriba de la regla.');
+      return;
+    }
+    const res = addRegion(live.current.project, r.start, r.end);
+    setProject(res.project);
+    setStatus(`Región ${res.region.number} añadida. Doble clic en ella para ponerle nombre.`);
+  }, [setProject]);
+  const goToMarker = useCallback((number) => {
+    const m = (live.current.project.markers || []).find((x) => x.number === number);
+    if (m) seek(m.time);
+  }, [seek]);
 
   // Eliminar el tramo de la selección de tiempo en todas las pistas y cerrar el hueco.
   const deleteRegion = useCallback(() => {
@@ -383,11 +405,37 @@ export default function App() {
   const groupIds = useCallback((ids) => setProject((p) => groupEvents(p, ids)), [setProject]);
   const ungroupIds = useCallback((ids) => setProject((p) => ungroupEvents(p, ids)), [setProject]);
 
+  const openRender = useCallback(() => {
+    if (live.current.duration <= 0) return;
+    setPlaying(false);
+    setRenderOpen(true);
+  }, []);
+
   // Menú del clic derecho en un evento o en una zona vacía de una pista (lo pide la línea de tiempo).
   const openContextMenu = useCallback((info) => {
     const { project: p, time: t, clipboard: clip } = live.current;
     let items;
-    if (info.kind === 'event') {
+    if (info.kind === 'marker' || info.kind === 'region') {
+      const { mark } = info;
+      const isRegion = info.kind === 'region';
+      items = [
+        { label: 'Cambiar el nombre…', action: info.rename },
+        ...(isRegion
+          ? [
+            { label: 'Seleccionar la región', action: () => setRegion({ start: mark.start, end: mark.end }) },
+            {
+              label: 'Renderizar la región…',
+              action: () => {
+                setRegion({ start: mark.start, end: mark.end });
+                openRender();
+              },
+            },
+          ]
+          : [{ label: 'Ir al marcador', shortcut: mark.number <= 9 ? String(mark.number) : undefined, action: () => seek(mark.time) }]),
+        'separator',
+        { label: isRegion ? 'Eliminar la región' : 'Eliminar el marcador', action: () => setProject((cur) => deleteMark(cur, info.kind, mark.id)) },
+      ];
+    } else if (info.kind === 'event') {
       const ids = info.selection;
       const selected = p.events.filter((e) => ids.includes(e.id));
       const types = new Map(p.tracks.map((tr) => [tr.id, tr.type]));
@@ -477,7 +525,7 @@ export default function App() {
       ];
     }
     setContextMenu({ x: info.x, y: info.y, items });
-  }, [copyIds, cutIds, deleteIds, deleteRegion, groupIds, insertText, insertTrack, openPan, openTextEditor, paste, selectAll, setProject, ungroupIds]);
+  }, [copyIds, cutIds, deleteIds, deleteRegion, groupIds, insertText, insertTrack, openPan, openRender, openTextEditor, paste, seek, selectAll, setProject, ungroupIds]);
 
   const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
 
@@ -579,11 +627,6 @@ export default function App() {
 
   useEffect(() => api.onFullScreenChange(setFullScreen), []);
 
-  const openRender = useCallback(() => {
-    if (live.current.duration <= 0) return;
-    setPlaying(false);
-    setRenderOpen(true);
-  }, []);
 
   const openProperties = useCallback(() => setProjectDialog('edit'), []);
 
@@ -658,6 +701,9 @@ export default function App() {
       label: 'Insertar',
       items: [
         { label: 'Medio de texto', action: insertText },
+        'separator',
+        { label: 'Marcador', shortcut: 'M', action: insertMarker },
+        { label: 'Región (de la selección de tiempo)', shortcut: 'R', action: insertRegion, disabled: !region },
         'separator',
         { label: 'Pista de video', shortcut: 'Ctrl+Mayús+Q', action: () => insertTrack('video') },
         { label: 'Pista de audio', shortcut: 'Ctrl+Q', action: () => insertTrack('audio') },
@@ -735,6 +781,9 @@ export default function App() {
         f1: () => setShortcutsOpen(true),
         f8: () => setSnap((v) => !v),
         q: () => setLoop((v) => !v),
+        m: insertMarker,
+        r: insertRegion,
+        ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), () => goToMarker(n)])),
         escape: floatingOpen || !region ? null : () => setRegion(null),
         f11: api.toggleFullScreen,
         f12: api.toggleDevTools,
@@ -880,9 +929,10 @@ export default function App() {
       </div>
       {renderOpen && (
         <RenderDialog
-          makePayload={(size, onlyRegion) => renderPayload(project, size, onlyRegion ? region : null)}
+          makePayload={(size, range) => renderPayload(project, size, range)}
           settings={project.settings}
           region={region}
+          regions={project.regions || []}
           projectLength={duration}
           defaultName={`${baseName(projectPath)}.mp4`}
           onClose={() => setRenderOpen(false)}

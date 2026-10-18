@@ -9,6 +9,8 @@ import { panActive, panExpr, scalePanTime, shiftPan } from './pan.js';
 //   settings: { width, height, fps },
 //   media:  [{ id, path, name, duration, width, height, fps, hasVideo, hasAudio, isImage, thumb, peaks, peaksPerSecond, missing }],
 //           o medios de texto generados: { id, kind: 'text', name, text, ... } (ver text.js; sin archivo)
+//   markers: [{ id, time, name, number }],         // marcadores (M), como en VEGAS
+//   regions: [{ id, start, end, name, number }],   // regiones con nombre (R)
 //   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume }],  // ordenadas de arriba a abajo; volume en dB
 //   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition, effects, rate, pan }],
 // }
@@ -50,8 +52,64 @@ export function emptyProject(settings = DEFAULT_SETTINGS) {
     media: [],
     tracks: [newTrack('video', 1), newTrack('audio', 1)],
     events: [],
+    markers: [],
+    regions: [],
   };
 }
+
+// ---- Marcadores y regiones ----
+
+// Número libre más bajo (como en VEGAS: las teclas 1–9 llevan a los marcadores con ese número).
+const nextNumber = (list) => {
+  const used = new Set(list.map((x) => x.number));
+  let n = 1;
+  while (used.has(n)) n++;
+  return n;
+};
+
+export function addMarker(project, time) {
+  const markers = project.markers || [];
+  if (markers.some((m) => Math.abs(m.time - time) < 1e-6)) return { project, marker: null };
+  const marker = { id: uid('k'), time, name: '', number: nextNumber(markers) };
+  return { project: { ...project, markers: [...markers, marker] }, marker };
+}
+
+export function addRegion(project, start, end) {
+  const regions = project.regions || [];
+  const region = { id: uid('r'), start, end, name: '', number: nextNumber(regions) };
+  return { project: { ...project, regions: [...regions, region] }, region };
+}
+
+// Cambia un marcador o una región (kind: 'marker' | 'region').
+export function updateMark(project, kind, id, changes) {
+  const key = kind === 'marker' ? 'markers' : 'regions';
+  return { ...project, [key]: (project[key] || []).map((x) => (x.id === id ? { ...x, ...changes } : x)) };
+}
+
+export function deleteMark(project, kind, id) {
+  const key = kind === 'marker' ? 'markers' : 'regions';
+  return { ...project, [key]: (project[key] || []).filter((x) => x.id !== id) };
+}
+
+// Desplaza marcadores y regiones (la cascada en todas las pistas los mueve, como en VEGAS).
+// shiftOf(t) → cuánto se mueve algo que está en t.
+function shiftMarks(project, shiftOf) {
+  return {
+    ...project,
+    markers: (project.markers || []).map((m) => ({ ...m, time: Math.max(0, m.time + shiftOf(m.time)) })),
+    regions: (project.regions || []).map((r) => {
+      const d = shiftOf(r.start);
+      const e = shiftOf(r.end);
+      return { ...r, start: Math.max(0, r.start + d), end: Math.max(0, r.start + d) + Math.max(1e-3, r.end + e - (r.start + d)) };
+    }),
+  };
+}
+
+// Puntos de marcadores y regiones (para el ajuste y para saltar de uno a otro).
+export const markPoints = (project) => [
+  ...(project.markers || []).map((m) => m.time),
+  ...(project.regions || []).flatMap((r) => [r.start, r.end]),
+];
 
 // Una pista suena o se ve si no está silenciada y, cuando hay pistas en solo de su tipo, si ella es una.
 export function isTrackActive(track, tracks) {
@@ -397,8 +455,9 @@ const rippleTracks = (project, trackIds, ripple) =>
 export function rippleShift(project, trackIds, from, delta, ripple, exclude = new Set()) {
   if (!ripple || Math.abs(delta) < EPS) return project;
   const tracks = rippleTracks(project, trackIds, ripple);
+  const marks = ripple === 'all' ? shiftMarks(project, (t) => (t >= from - EPS ? delta : 0)) : project;
   return {
-    ...project,
+    ...marks,
     events: project.events.map((e) => (
       tracks.has(e.trackId) && !exclude.has(e.id) && e.start >= from - EPS ? { ...e, start: Math.max(0, e.start + delta) } : e
     )),
@@ -422,8 +481,9 @@ export function rippleDelete(project, ids, ripple) {
   };
   const gaps = new Map([...byTrack.keys()].map((id) => [id, gapsOf(id)]));
   const allGaps = unionOf([...gaps.values()].flat());
+  const marks = ripple === 'all' ? shiftMarks(rest, (t) => -removedBefore(allGaps, t)) : rest;
   return {
-    ...rest,
+    ...marks,
     events: rest.events.map((e) => {
       const G = ripple === 'all' ? allGaps : gaps.get(e.trackId);
       if (!G?.length) return e;
@@ -439,6 +499,8 @@ export function deleteRange(project, a, b) {
   let p = splitEvents(splitEvents(project, a, []), b, []);
   const inside = p.events.filter((e) => e.start >= a - EPS && e.start + e.duration <= b + EPS).map((e) => e.id);
   p = deleteEvents(p, inside);
+  // Los marcadores del tramo quedan en a; los de detrás se adelantan.
+  p = shiftMarks(p, (t) => (t >= b - EPS ? -(b - a) : t > a ? a - t : 0));
   return {
     ...p,
     events: p.events.map((e) => (e.start >= b - EPS ? { ...e, start: Math.max(0, e.start - (b - a)) } : e)),
@@ -470,11 +532,13 @@ export function deleteTrack(project, trackId) {
 export function serializeProject(project) {
   return {
     format: 'cortex-studio',
-    version: 6,
+    version: 7,
     settings: project.settings,
     media: project.media.map(({ id, path, name, kind, text }) => (kind === 'text' ? { id, kind, name, text } : { id, path, name })),
     tracks: project.tracks,
     events: project.events,
+    markers: project.markers || [],
+    regions: project.regions || [],
   };
 }
 
@@ -485,6 +549,8 @@ export function loadProject(data, media) {
     media,
     tracks: data.tracks.map((t) => ({ muted: false, solo: false, volume: 0, ...t })),
     events: data.events.map((e) => ({ ...EVENT_DEFAULTS, ...e })),
+    markers: data.markers || [],
+    regions: data.regions || [],
   };
 }
 

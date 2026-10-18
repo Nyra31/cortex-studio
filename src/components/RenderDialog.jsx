@@ -14,10 +14,13 @@ const QUALITIES = [
 ];
 const even = (v) => Math.max(2, Math.round(v / 2) * 2);
 
-// makePayload(size, onlyRegion): datos para el proceso principal, calculados para el tamaño final (los
-// efectos y los textos dependen de él). region: selección de tiempo ({ start, end }) o null.
-export default function RenderDialog({ makePayload, settings, region, projectLength, defaultName, onClose }) {
-  const [onlyRegion, setOnlyRegion] = useState(!!region); // como en VEGAS: con selección, se ofrece solo esa parte
+// makePayload(size, range): datos para el proceso principal, calculados para el tamaño final (los efectos
+// y los textos dependen de él); range = tramo a renderizar o null. region: selección de tiempo ({ start, end })
+// o null; regions: regiones con nombre del proyecto (se pueden renderizar una a una).
+export default function RenderDialog({ makePayload, settings, region, regions = [], projectLength, defaultName, onClose }) {
+  // Qué renderizar: 'all', 'selection' o el id de una región. Como en VEGAS: con selección, se ofrece esa parte.
+  const [what, setWhat] = useState(region ? 'selection' : 'all');
+  const range = what === 'all' ? null : what === 'selection' ? region : regions.find((r) => r.id === what) || null;
   const [scale, setScale] = useState(0);
   const [quality, setQuality] = useState(1);
   const [phase, setPhase] = useState('settings'); // settings | rendering | done | error
@@ -45,7 +48,7 @@ export default function RenderDialog({ makePayload, settings, region, projectLen
     const off = window.api.onRenderProgress(setProgress);
     try {
       const result = await window.api.startRender(
-        makePayload({ width, height }, onlyRegion && !!region),
+        makePayload({ width, height }, range ? { start: range.start, end: range.end } : null),
         { width, height, fps: settings.fps, crf: QUALITIES[quality].crf },
         target,
       );
@@ -73,21 +76,27 @@ export default function RenderDialog({ makePayload, settings, region, projectLen
                 <div>Velocidad: <strong>{formatFps(settings.fps)} fps</strong></div>
                 <div>
                   Duración:{' '}
-                  <strong>{formatTimecode(onlyRegion && region ? region.end - region.start : projectLength, settings.fps)}</strong>
+                  <strong>{formatTimecode(range ? range.end - range.start : projectLength, settings.fps)}</strong>
                 </div>
               </div>
               <div className="render-range">
                 <span className="field-label">Qué renderizar</span>
                 <label>
-                  <input type="radio" checked={!onlyRegion || !region} onChange={() => setOnlyRegion(false)} />
+                  <input type="radio" checked={what === 'all'} onChange={() => setWhat('all')} />
                   Todo el proyecto
                 </label>
                 <label className={region ? '' : 'disabled'}>
-                  <input type="radio" checked={onlyRegion && !!region} disabled={!region} onChange={() => setOnlyRegion(true)} />
+                  <input type="radio" checked={what === 'selection'} disabled={!region} onChange={() => setWhat('selection')} />
                   {region
                     ? `Solo la selección de tiempo (${formatTimecode(region.start, settings.fps)} – ${formatTimecode(region.end, settings.fps)})`
                     : 'Solo la selección de tiempo (no hay ninguna: arrástrala en la barra de arriba de la regla)'}
                 </label>
+                {regions.map((r) => (
+                  <label key={r.id}>
+                    <input type="radio" checked={what === r.id} onChange={() => setWhat(r.id)} />
+                    {`Región ${r.number}${r.name ? ` «${r.name}»` : ''} (${formatTimecode(r.start, settings.fps)} – ${formatTimecode(r.end, settings.fps)})`}
+                  </label>
+                ))}
               </div>
               <label>
                 <span className="field-label">Tamaño de salida</span>
