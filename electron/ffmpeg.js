@@ -131,10 +131,29 @@ function frameRate(fps) {
 
 // Fundidos del evento en su tiempo local (empieza en 0). En video se funde la transparencia,
 // así que el evento aparece sobre lo que haya debajo (otra pista o negro).
+// Con curva (no lineal), fade no sirve: geq multiplica el alfa por la curva, solo en los fotogramas del fundido.
+// Mismas fórmulas que fadeCurve en src/state/project.js (P = progreso del fundido, de 0 a 1).
+const CURVE_EXPR = {
+  fast: '(1-(1-@P@)*(1-@P@))',
+  slow: '(@P@*@P@)',
+  smooth: '((1-cos(PI*@P@))/2)',
+  sharp: '(acos(1-2*@P@)/PI)',
+};
+function curveFade(curve, start, d, out) {
+  const P = `min(1,max(0,(T-${num(start)})/${num(d)}))`;
+  const f = CURVE_EXPR[curve].replaceAll('@P@', P);
+  const factor = out ? `(1-${f})` : f;
+  return `geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='alpha(X,Y)*${factor}':enable='between(t,${num(start - 0.001)},${num(start + d + 0.001)})'`;
+}
 function videoFades(e) {
   const out = [];
-  if (e.fadeIn > 0) out.push(`fade=t=in:st=0:d=${num(e.fadeIn)}:alpha=1`);
-  if (e.fadeOut > 0) out.push(`fade=t=out:st=${num(e.duration - e.fadeOut)}:d=${num(e.fadeOut)}:alpha=1`);
+  if (e.fadeIn > 0) {
+    out.push(CURVE_EXPR[e.curveIn] ? curveFade(e.curveIn, 0, e.fadeIn, false) : `fade=t=in:st=0:d=${num(e.fadeIn)}:alpha=1`);
+  }
+  if (e.fadeOut > 0) {
+    const st = e.duration - e.fadeOut;
+    out.push(CURVE_EXPR[e.curveOut] ? curveFade(e.curveOut, st, e.fadeOut, true) : `fade=t=out:st=${num(st)}:d=${num(e.fadeOut)}:alpha=1`);
+  }
   return out.length ? `,format=yuva420p,${out.join(',')}` : '';
 }
 
@@ -152,10 +171,14 @@ function atempo(rate) {
   return `,${parts.join(',')}`;
 }
 
+// Curvas de afade equivalentes a fadeCurve (src/state/project.js). En la salida afade usa curva(1 − progreso),
+// y nuestra salida es 1 − curva(progreso): por eso rápido y lento se intercambian.
+const AFADE_IN = { linear: 'tri', fast: 'ipar', slow: 'qua', smooth: 'hsin', sharp: 'ihsin' };
+const AFADE_OUT = { linear: 'tri', fast: 'qua', slow: 'ipar', smooth: 'hsin', sharp: 'ihsin' };
 function audioFades(e) {
   let out = '';
-  if (e.fadeIn > 0) out += `,afade=t=in:st=0:d=${num(e.fadeIn)}`;
-  if (e.fadeOut > 0) out += `,afade=t=out:st=${num(e.duration - e.fadeOut)}:d=${num(e.fadeOut)}`;
+  if (e.fadeIn > 0) out += `,afade=t=in:st=0:d=${num(e.fadeIn)}:curve=${AFADE_IN[e.curveIn] || 'tri'}`;
+  if (e.fadeOut > 0) out += `,afade=t=out:st=${num(e.duration - e.fadeOut)}:d=${num(e.fadeOut)}:curve=${AFADE_OUT[e.curveOut] || 'tri'}`;
   return out;
 }
 

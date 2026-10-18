@@ -5,7 +5,7 @@ import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
   EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, moveTrack,
   markPoints, updateMark, gainToVolume, isTrackActive,
-  overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain,
+  fadeCurve, overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain,
 } from '../state/project.js';
 import { panActive } from '../state/pan.js';
 import { ENVELOPE_KINDS, ENVELOPE_MAX_DB, addEnvelopePoint, envelopeValueAt } from '../state/envelopes.js';
@@ -156,11 +156,20 @@ const Ruler = memo(function Ruler({
   );
 });
 
-// Envolvente del evento: fundidos en las esquinas y, en audio, la línea de ganancia. Lo que queda por encima se oscurece.
-function Envelope({ width, height, gainY, fadeIn, fadeOut }) {
+// Envolvente del evento: fundidos en las esquinas (con su curva) y, en audio, la línea de ganancia. Lo que queda
+// por encima se oscurece.
+function Envelope({ width, height, gainY, fadeIn, fadeOut, curveIn, curveOut }) {
   const a = fadeIn;
   const b = width - fadeOut;
-  const line = `0,${height} ${a},${gainY} ${b},${gainY} ${width},${height}`;
+  const y = (f) => height - (height - gainY) * f;
+  const STEPS = 24;
+  const pts = [`0,${height}`];
+  if (a > 0) for (let i = 1; i <= STEPS; i++) pts.push(`${(a * i) / STEPS},${y(fadeCurve(curveIn, i / STEPS))}`);
+  else pts.push(`0,${gainY}`);
+  if (fadeOut > 0) for (let i = 0; i < STEPS; i++) pts.push(`${b + (fadeOut * i) / STEPS},${y(1 - fadeCurve(curveOut, i / STEPS))}`);
+  else pts.push(`${width},${gainY}`);
+  pts.push(`${width},${height}`);
+  const line = pts.join(' ');
   return (
     <svg className="envelope" width={width} height={height}>
       <polygon points={`0,0 ${line} ${width},0`} />
@@ -192,7 +201,7 @@ function TransitionZone({ width, height, label, onReset }) {
 // fadeIn/fadeOut: fundidos efectivos (en audio incluyen los fundidos cruzados de los solapamientos).
 // overlapIn/overlapOut: segundos solapados con el evento anterior/siguiente de la pista.
 const EventView = memo(function EventView({
-  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onPan, onDouble,
+  ev, media, type, selected, pps, fadeIn, fadeOut, curveIn, curveOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onPan, onDouble,
 }) {
   const width = Math.max(3, ev.duration * pps);
   const height = bodyHeight(type);
@@ -273,9 +282,15 @@ const EventView = memo(function EventView({
             gain={gain}
             fadeIn={fadeIn}
             fadeOut={fadeOut}
+            curveIn={curveIn}
+            curveOut={curveOut}
           />
         )}
-        {showEnvelope && <Envelope width={width} height={height} gainY={gainY} fadeIn={fadeIn * pps} fadeOut={fadeOut * pps} />}
+        {showEnvelope && (
+          <Envelope
+            width={width} height={height} gainY={gainY} fadeIn={fadeIn * pps} fadeOut={fadeOut * pps} curveIn={curveIn} curveOut={curveOut}
+          />
+        )}
       </div>
       {overlapIn > 0 && (
         <TransitionZone
@@ -300,7 +315,7 @@ const EventView = memo(function EventView({
         <div
           className={`fade-handle${fadeIn > 0 ? ' active' : ''}`}
           style={{ left: fadeHandleX(fadeIn * pps) }}
-          title="Fundido de entrada (doble clic: quitar)"
+          title="Fundido de entrada (doble clic: quitar; clic derecho en el fundido: curva)"
           onPointerDown={(e) => onDown(e, ev, 'fadeIn')}
           onDoubleClick={() => onReset(ev, 'fadeIn')}
         />
@@ -309,7 +324,7 @@ const EventView = memo(function EventView({
         <div
           className={`fade-handle${fadeOut > 0 ? ' active' : ''}`}
           style={{ left: fadeHandleX(width - fadeOut * pps) }}
-          title="Fundido de salida (doble clic: quitar)"
+          title="Fundido de salida (doble clic: quitar; clic derecho en el fundido: curva)"
           onPointerDown={(e) => onDown(e, ev, 'fadeOut')}
           onDoubleClick={() => onReset(ev, 'fadeOut')}
         />
@@ -535,6 +550,8 @@ const TrackRow = memo(function TrackRow({
               pps={pps}
               fadeIn={fades.fadeIn}
               fadeOut={fades.fadeOut}
+              curveIn={fades.curveIn}
+              curveOut={fades.curveOut}
               overlapIn={inc ? inc.duration : 0}
               overlapOut={resolved.outgoing.get(ev.id)?.duration ?? 0}
               transition={inc ? ev.transition : null}
@@ -991,8 +1008,14 @@ const Timeline = forwardRef(function Timeline({
       selected = ev.groupId ? p.events.filter((x) => x.groupId === ev.groupId).map((x) => x.id) : [ev.id];
       setSelection(selected);
     }
-    onContextMenu({ kind: 'event', x: e.clientX, y: e.clientY, event: ev, selection: selected, time: timeAt(e.clientX) });
-  }, [onContextMenu, setSelection, timeAt]);
+    // ¿Sobre un fundido? (o un fundido cruzado de audio): el menú ofrece su curva.
+    const fades = resolved.fades.get(ev.id);
+    const local = timeAt(e.clientX) - ev.start;
+    const fadeZone = fades && fades.fadeIn > 0 && local < fades.fadeIn ? 'in'
+      : fades && fades.fadeOut > 0 && local > ev.duration - fades.fadeOut ? 'out' : null;
+    const partner = fadeZone === 'in' ? resolved.incoming.get(ev.id)?.from : fadeZone === 'out' ? resolved.outgoing.get(ev.id)?.to : null;
+    onContextMenu({ kind: 'event', x: e.clientX, y: e.clientY, event: ev, selection: selected, time: timeAt(e.clientX), fadeZone, partner });
+  }, [onContextMenu, resolved, setSelection, timeAt]);
 
   // Clic derecho en una zona vacía de una pista.
   const onLaneMenu = useCallback((e, trackId) => {

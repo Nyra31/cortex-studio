@@ -14,7 +14,8 @@ import { trackMixExpr } from './envelopes.js';
 //   regions: [{ id, start, end, name, number }],   // regiones con nombre (R)
 //   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume, pan, envelopes }],  // ordenadas de arriba a abajo
 //           volume en dB; pan de −1 (izquierda) a 1 (derecha); envelopes: envolventes de volumen y panorámica (envelopes.js)
-//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition, effects, rate, pan }],
+//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, fadeInCurve, fadeOutCurve,
+//              transition, effects, rate, pan }],
 // }
 // pan: panorámica/recorte con fotogramas clave (ver pan.js), solo en eventos de video; null o ausente = ninguna.
 // effects: cadena [{ id, type, enabled, params }] aplicada en orden; efectos de video en los eventos de video
@@ -140,7 +141,29 @@ export function eventPeak(media, e) {
   return max / 255;
 }
 
-export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0, transition: null, effects: [], rate: 1 };
+export const EVENT_DEFAULTS = {
+  volume: 0, fadeIn: 0, fadeOut: 0, fadeInCurve: 'linear', fadeOutCurve: 'linear', transition: null, effects: [], rate: 1,
+};
+
+// Curvas de los fundidos, como en VEGAS. «Rápido»: el cambio ocurre sobre todo al principio del fundido;
+// «lento», al final; «suave», lento-rápido-lento; «brusco», rápido-lento-rápido. Mismas fórmulas que el render
+// (afade de FFmpeg en audio: ipar, qua, hsin, ihsin; geq en video).
+export const FADE_CURVES = [
+  { id: 'linear', label: 'Lineal' },
+  { id: 'fast', label: 'Rápido' },
+  { id: 'slow', label: 'Lento' },
+  { id: 'smooth', label: 'Suave' },
+  { id: 'sharp', label: 'Brusco' },
+];
+// Forma del fundido de entrada: progreso p (0…1) → factor. El de salida es 1 − fadeCurve(curva, progreso).
+export function fadeCurve(curve, p) {
+  const x = Math.min(1, Math.max(0, p));
+  if (curve === 'fast') return 1 - (1 - x) * (1 - x);
+  if (curve === 'slow') return x * x;
+  if (curve === 'smooth') return (1 - Math.cos(Math.PI * x)) / 2;
+  if (curve === 'sharp') return Math.acos(1 - 2 * x) / Math.PI;
+  return x;
+}
 
 export { shiftPan, scalePanTime };
 
@@ -205,19 +228,20 @@ export function resolveTimeline(project) {
     const fadeIn = inc ? (audio ? inc.duration : 0) : stored.fadeIn;
     let fadeOut = out ? (audio ? out.duration : 0) : stored.fadeOut;
     fadeOut = Math.min(fadeOut, e.duration - fadeIn);
-    fades.set(e.id, { fadeIn, fadeOut });
+    fades.set(e.id, { fadeIn, fadeOut, curveIn: e.fadeInCurve || 'linear', curveOut: e.fadeOutCurve || 'linear' });
   }
   return { incoming, outgoing, fades, transitions };
 }
 
-// Factor de 0 a 1 que aplican los fundidos en el instante t (lineal, igual que fade y afade de FFmpeg).
-export function fadeFactor(e, t, fades = eventFades(e)) {
-  const { fadeIn, fadeOut } = fades;
-  const local = t - e.start;
+// Factor de 0 a 1 que aplican los fundidos en el instante local (desde el principio del evento), con su curva.
+export function fadeAt(local, duration, { fadeIn, fadeOut, curveIn, curveOut }) {
   let f = 1;
-  if (fadeIn > 0 && local < fadeIn) f = Math.min(f, Math.max(0, local / fadeIn));
-  if (fadeOut > 0 && local > e.duration - fadeOut) f = Math.min(f, Math.max(0, (e.duration - local) / fadeOut));
+  if (fadeIn > 0 && local < fadeIn) f = Math.min(f, fadeCurve(curveIn, local / fadeIn));
+  if (fadeOut > 0 && local > duration - fadeOut) f = Math.min(f, 1 - fadeCurve(curveOut, (local - (duration - fadeOut)) / fadeOut));
   return f;
+}
+export function fadeFactor(e, t, fades = { ...eventFades(e), curveIn: e.fadeInCurve, curveOut: e.fadeOutCurve }) {
+  return fadeAt(t - e.start, e.duration, fades);
 }
 
 export function formatFps(fps) {
@@ -539,7 +563,7 @@ export function deleteTrack(project, trackId) {
 export function serializeProject(project) {
   return {
     format: 'cortex-studio',
-    version: 7,
+    version: 8,
     settings: project.settings,
     media: project.media.map(({ id, path, name, kind, text }) => (kind === 'text' ? { id, kind, name, text } : { id, path, name })),
     tracks: project.tracks,

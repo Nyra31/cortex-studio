@@ -19,7 +19,7 @@ import RecordDialog from './components/RecordDialog.jsx';
 import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
-  EVENT_DEFAULTS, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
+  EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
   placeMedia, projectDuration, removeMedia, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
   moveTrack, ungroupEvents, updateEvents,
 } from './state/project.js';
@@ -540,7 +540,34 @@ export default function App() {
       const audio = selected.filter((e) => types.get(e.trackId) === 'audio');
       const media = p.media.find((m) => m.id === info.event.mediaId);
       const isVideo = types.get(info.event.trackId) === 'video';
+      // Clic derecho sobre un fundido: su curva (en el evento y su grupo; en un fundido cruzado de audio,
+      // también en el fundido del otro evento), como «Tipo de fundido» en VEGAS.
+      const zone = info.fadeZone;
+      const field = zone === 'in' ? 'fadeInCurve' : 'fadeOutCurve';
+      const curveItems = zone
+        ? [
+          ...FADE_CURVES.map((c) => ({
+            label: `${zone === 'in' ? 'Fundido de entrada' : 'Fundido de salida'}: ${c.label.toLowerCase()}`,
+            checked: (info.event[field] || 'linear') === c.id,
+            action: () => setProject((cur) => {
+              const ev = info.event;
+              const otherField = zone === 'in' ? 'fadeOutCurve' : 'fadeInCurve';
+              const targets = new Set(cur.events.filter((x) => x.id === ev.id || (ev.groupId && x.groupId === ev.groupId)).map((x) => x.id));
+              return {
+                ...cur,
+                events: cur.events.map((x) => {
+                  if (targets.has(x.id)) return { ...x, [field]: c.id };
+                  if (info.partner && x.id === info.partner.id && !isVideo) return { ...x, [otherField]: c.id };
+                  return x;
+                }),
+              };
+            }),
+          })),
+          'separator',
+        ]
+        : [];
       items = [
+        ...curveItems,
         { label: 'Cortar', shortcut: 'Ctrl+X', action: () => cutIds(ids) },
         { label: 'Copiar', shortcut: 'Ctrl+C', action: () => copyIds(ids) },
         { label: 'Pegar', shortcut: 'Ctrl+V', action: () => paste(), disabled: !clip },
