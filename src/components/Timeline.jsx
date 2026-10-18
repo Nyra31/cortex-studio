@@ -396,7 +396,7 @@ const TrackRow = memo(function TrackRow({
 });
 
 const Timeline = forwardRef(function Timeline({
-  project, setProject, selection, setSelection, time, seek, playing, region, setRegion,
+  project, setProject, selection, setSelection, time, seek, playing, region, setRegion, ripple,
   pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, onEditText, onOpenPan, onAddTrack, footer,
 }, ref) {
   const scrollRef = useRef(null);
@@ -412,7 +412,7 @@ const Timeline = forwardRef(function Timeline({
 
   // Valores actuales para manejadores estables (evita re-renderizar todas las pistas a cada fotograma).
   const live = useRef(null);
-  live.current = { project, selection, time, pps, snap, playing, region };
+  live.current = { project, selection, time, pps, snap, playing, region, ripple };
 
   const mediaById = useMemo(() => new Map(project.media.map((m) => [m.id, m])), [project.media]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
@@ -616,7 +616,19 @@ const Timeline = forwardRef(function Timeline({
     const trackType = new Map(p.tracks.map((t) => [t.id, t.type]));
     const primaryType = trackType.get(primary.trackId);
     const sameType = p.tracks.filter((t) => t.type === primaryType).map((t) => t.id);
-    const points = snapPoints(new Set(origin.keys()));
+    // Edición en cascada: al mover o al recortar el final, los eventos de detrás (en las pistas afectadas o
+    // en todas) se desplazan lo mismo. Se toman de la foto inicial, como los que se editan.
+    const ripple = live.current.ripple;
+    const followers = new Map();
+    if (ripple && (mode === 'move' || mode === 'trimR')) {
+      const tracks = new Set(ripple === 'all' ? p.tracks.map((t) => t.id) : [...origin.values()].map((o) => o.trackId));
+      const list = [...origin.values()];
+      const from = mode === 'move' ? Math.min(...list.map((o) => o.start)) : Math.min(...list.map((o) => o.start + o.duration));
+      for (const x of p.events) {
+        if (!origin.has(x.id) && tracks.has(x.trackId) && x.start >= from - 1e-6) followers.set(x.id, x);
+      }
+    }
+    const points = snapPoints(new Set([...origin.keys(), ...followers.keys()]));
     const threshold = 8 / scale;
     const startX = e.clientX;
     const startY = e.clientY;
@@ -706,8 +718,17 @@ const Timeline = forwardRef(function Timeline({
         update = (o) => ({ duration: o.duration + dt });
       }
 
+      // Cuánto se desplazan los de detrás: lo que se mueve el evento o lo que cambia su final.
+      const shift = mode === 'move' || mode === 'trimR' ? dt : 0;
       setProject(
-        (cur) => ({ ...cur, events: cur.events.map((x) => (origin.has(x.id) ? { ...x, ...update(origin.get(x.id)) } : x)) }),
+        (cur) => ({
+          ...cur,
+          events: cur.events.map((x) => {
+            if (origin.has(x.id)) return { ...x, ...update(origin.get(x.id)) };
+            if (followers.has(x.id)) return { ...x, start: Math.max(0, followers.get(x.id).start + shift) };
+            return x;
+          }),
+        }),
         record,
       );
     };

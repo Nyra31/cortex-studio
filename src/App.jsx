@@ -18,8 +18,9 @@ import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
-  IMAGE_DURATION, addTrack, copyEvents, deleteEvents, emptyProject, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
-  placeMedia, projectDuration, removeMedia, renderPayload, serializeProject, splitEvents, uid, ungroupEvents, updateEvents,
+  IMAGE_DURATION, addTrack, copyEvents, deleteRange, emptyProject, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
+  placeMedia, projectDuration, removeMedia, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
+  ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
 import { panActive, setPanValues } from './state/pan.js';
@@ -47,6 +48,9 @@ export default function App() {
   const [playToken, setPlayToken] = useState(0);
   const [pps, setPps] = useState(40);
   const [snap, setSnap] = useState(true);
+  // Edición en cascada (Ctrl+L): null (desactivada), 'tracks' (pistas afectadas) o 'all' (todas las pistas).
+  const [ripple, setRipple] = useState(null);
+  const [rippleMode, setRippleMode] = useState('tracks'); // modo que se usa al activarla
   const [upperHeight, setUpperHeight] = useState(Math.round(window.innerHeight * 0.44));
   const [renderOpen, setRenderOpen] = useState(false);
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
@@ -66,7 +70,7 @@ export default function App() {
   const duration = projectDuration(project);
   const dirty = project !== savedProject;
   const live = useRef(null);
-  live.current = { project, time, playing, duration, dirty, selection, clipboard, pps, region, loop };
+  live.current = { project, time, playing, duration, dirty, selection, clipboard, pps, region, loop, ripple };
   const playStart = useRef(0);
 
   useEffect(() => {
@@ -229,9 +233,26 @@ export default function App() {
 
   const deleteSelected = useCallback(() => {
     if (!selection.length) return;
-    setProject((p) => deleteEvents(p, selection));
+    setProject((p) => rippleDelete(p, selection, live.current.ripple));
     setSelection([]);
   }, [selection, setProject]);
+
+  const toggleRipple = useCallback(() => setRipple((r) => (r ? null : rippleMode)), [rippleMode]);
+  const chooseRippleMode = useCallback((mode) => {
+    setRippleMode(mode);
+    setRipple(mode);
+  }, []);
+
+  // Eliminar el tramo de la selección de tiempo en todas las pistas y cerrar el hueco.
+  const deleteRegion = useCallback(() => {
+    const r = live.current.region;
+    if (!r) return;
+    setProject((p) => deleteRange(p, r.start, r.end));
+    setSelection([]);
+    setRegion(null);
+    seek(r.start);
+    setStatus('Tramo eliminado: lo de detrás se ha adelantado para cerrar el hueco.');
+  }, [seek, setProject]);
 
   const selectAll = useCallback(() => setSelection(live.current.project.events.map((e) => e.id)), []);
 
@@ -333,7 +354,7 @@ export default function App() {
 
   const deleteIds = useCallback((ids) => {
     if (!ids.length) return;
-    setProject((p) => deleteEvents(p, ids));
+    setProject((p) => rippleDelete(p, ids, live.current.ripple));
     setSelection((sel) => sel.filter((id) => !ids.includes(id)));
   }, [setProject]);
 
@@ -351,7 +372,10 @@ export default function App() {
       setStatus('No se puede pegar: los medios de lo copiado ya no están en el proyecto.');
       return;
     }
-    setProject(res.project);
+    // En cascada, lo pegado se inserta: lo que había desde ese punto se aparta lo que dura lo pegado.
+    const pasted = new Set(res.ids);
+    const tracks = [...new Set(res.project.events.filter((e) => pasted.has(e.id)).map((e) => e.trackId))];
+    setProject(rippleShift(res.project, tracks, at, clip.duration, live.current.ripple, pasted));
     setSelection(res.ids);
     seek(res.end);
   }, [seek, setProject]);
@@ -445,6 +469,7 @@ export default function App() {
         'separator',
         { label: 'Seleccionar todo', shortcut: 'Ctrl+A', action: selectAll },
         { label: 'Quitar la selección de tiempo', shortcut: 'Esc', action: () => setRegion(null), disabled: !live.current.region },
+        { label: 'Eliminar el tramo seleccionado y cerrar el hueco', shortcut: 'Ctrl+Supr', action: deleteRegion, disabled: !live.current.region },
         'separator',
         { label: 'Insertar medio de texto', action: insertText },
         { label: 'Insertar pista de video', shortcut: 'Ctrl+Mayús+Q', action: () => insertTrack('video') },
@@ -452,7 +477,7 @@ export default function App() {
       ];
     }
     setContextMenu({ x: info.x, y: info.y, items });
-  }, [copyIds, cutIds, deleteIds, groupIds, insertText, insertTrack, openPan, openTextEditor, paste, selectAll, setProject, ungroupIds]);
+  }, [copyIds, cutIds, deleteIds, deleteRegion, groupIds, insertText, insertTrack, openPan, openTextEditor, paste, selectAll, setProject, ungroupIds]);
 
   const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
 
@@ -599,8 +624,12 @@ export default function App() {
         { label: 'Quitar del grupo', shortcut: 'U', action: () => ungroupIds(selection), disabled: !selection.length },
         'separator',
         { label: 'Ajuste activado', shortcut: 'F8', action: () => setSnap((v) => !v), checked: snap },
+        { label: 'Edición en cascada', shortcut: 'Ctrl+L', action: toggleRipple, checked: !!ripple },
+        { label: '    Solo en las pistas afectadas', action: () => chooseRippleMode('tracks'), checked: rippleMode === 'tracks' },
+        { label: '    En todas las pistas', action: () => chooseRippleMode('all'), checked: rippleMode === 'all' },
         { label: 'Reproducción en bucle', shortcut: 'Q', action: () => setLoop((v) => !v), checked: loop },
         { label: 'Quitar la selección de tiempo', shortcut: 'Esc', action: () => setRegion(null), disabled: !region },
+        { label: 'Eliminar el tramo seleccionado y cerrar el hueco', shortcut: 'Ctrl+Supr', action: deleteRegion, disabled: !region },
       ],
     },
     {
@@ -667,6 +696,8 @@ export default function App() {
         i: importDialog,
         m: openRender,
         a: selectAll,
+        l: toggleRipple,
+        delete: deleteRegion,
         q: () => insertTrack(e.shiftKey ? 'video' : 'audio'),
         c: () => copyIds(selection),
         x: () => cutIds(selection),
@@ -753,6 +784,8 @@ export default function App() {
         hasSelection={selection.length > 0}
         snap={snap}
         onToggleSnap={() => setSnap((v) => !v)}
+        ripple={ripple}
+        onToggleRipple={toggleRipple}
       />
       <div className="upper" style={{ height: upperHeight }}>
         <Dock
@@ -808,6 +841,7 @@ export default function App() {
         playing={playing}
         region={region}
         setRegion={setRegion}
+        ripple={ripple}
         pps={pps}
         setPps={setPps}
         snap={snap}

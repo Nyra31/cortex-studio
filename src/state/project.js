@@ -357,6 +357,94 @@ export function pasteEvents(project, clip, t, targetTrackId = null) {
   return { project: { ...p, events: [...p.events, ...added] }, ids: added.map((e) => e.id), end: t + clip.duration };
 }
 
+// ---- Edición en cascada (ripple, como «Auto Ripple» de VEGAS) ----
+// ripple: 'tracks' (solo las pistas afectadas) o 'all' (todas). Con null no hay cascada.
+
+const EPS = 1e-6;
+
+// Intervalos [a, b) unidos y ordenados.
+function unionOf(intervals) {
+  const sorted = intervals.filter(([a, b]) => b > a + EPS).sort((x, y) => x[0] - y[0]);
+  const out = [];
+  for (const [a, b] of sorted) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1] + EPS) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+// Partes de los intervalos U que no tapa ningún intervalo de R.
+function subtract(U, R) {
+  let parts = U.map(([a, b]) => [a, b]);
+  for (const [ra, rb] of R) {
+    parts = parts.flatMap(([a, b]) => {
+      if (rb <= a || ra >= b) return [[a, b]];
+      return [[a, ra], [rb, b]].filter(([x, y]) => y > x + EPS);
+    });
+  }
+  return parts;
+}
+
+// Cuánto de los huecos G queda antes de t.
+const removedBefore = (G, t) => G.reduce((sum, [a, b]) => sum + Math.max(0, Math.min(b, t + EPS) - a), 0);
+
+// Pistas a las que afecta la cascada al editar en las pistas trackIds.
+const rippleTracks = (project, trackIds, ripple) =>
+  new Set(ripple === 'all' ? project.tracks.map((t) => t.id) : trackIds);
+
+// Desplaza delta segundos los eventos de las pistas afectadas que empiezan en `from` o después (salvo exclude).
+export function rippleShift(project, trackIds, from, delta, ripple, exclude = new Set()) {
+  if (!ripple || Math.abs(delta) < EPS) return project;
+  const tracks = rippleTracks(project, trackIds, ripple);
+  return {
+    ...project,
+    events: project.events.map((e) => (
+      tracks.has(e.trackId) && !exclude.has(e.id) && e.start >= from - EPS ? { ...e, start: Math.max(0, e.start + delta) } : e
+    )),
+  };
+}
+
+// Elimina eventos y, en cascada, cierra los huecos que dejan: lo de detrás se adelanta lo que ocupaban
+// (sin contar el tiempo que sigue ocupado por otros eventos de su pista, p. ej. el solapamiento de una transición).
+export function rippleDelete(project, ids, ripple) {
+  const removed = project.events.filter((e) => ids.includes(e.id));
+  const rest = deleteEvents(project, ids);
+  if (!ripple || !removed.length) return rest;
+  const byTrack = new Map();
+  for (const e of removed) {
+    if (!byTrack.has(e.trackId)) byTrack.set(e.trackId, []);
+    byTrack.get(e.trackId).push([e.start, e.start + e.duration]);
+  }
+  const gapsOf = (trackId) => {
+    const own = rest.events.filter((e) => e.trackId === trackId).map((e) => [e.start, e.start + e.duration]);
+    return subtract(unionOf(byTrack.get(trackId)), unionOf(own));
+  };
+  const gaps = new Map([...byTrack.keys()].map((id) => [id, gapsOf(id)]));
+  const allGaps = unionOf([...gaps.values()].flat());
+  return {
+    ...rest,
+    events: rest.events.map((e) => {
+      const G = ripple === 'all' ? allGaps : gaps.get(e.trackId);
+      if (!G?.length) return e;
+      const shift = removedBefore(G, e.start);
+      return shift > EPS ? { ...e, start: Math.max(0, e.start - shift) } : e;
+    }),
+  };
+}
+
+// Elimina el tramo [a, b) de todas las pistas (como cortar la selección de tiempo en VEGAS con la cascada
+// activada): divide los eventos en a y en b, quita lo de dentro y adelanta lo de detrás b − a.
+export function deleteRange(project, a, b) {
+  let p = splitEvents(splitEvents(project, a, []), b, []);
+  const inside = p.events.filter((e) => e.start >= a - EPS && e.start + e.duration <= b + EPS).map((e) => e.id);
+  p = deleteEvents(p, inside);
+  return {
+    ...p,
+    events: p.events.map((e) => (e.start >= b - EPS ? { ...e, start: Math.max(0, e.start - (b - a)) } : e)),
+  };
+}
+
 export function deleteEvents(project, ids) {
   const remove = new Set(ids);
   return { ...project, events: project.events.filter((e) => !remove.has(e.id)) };

@@ -11,6 +11,8 @@ const SHORTCUTS = [
   ['Arrastrar el triángulo', 'Ajuste fino del cursor'],
   ['S', 'Dividir en el cursor'],
   ['Supr', 'Eliminar eventos seleccionados'],
+  ['Ctrl+L', 'Edición en cascada (cerrar huecos, desplazar lo de detrás)'],
+  ['Ctrl+Supr', 'Eliminar el tramo de la selección de tiempo y cerrar el hueco'],
   ['Ctrl+A', 'Seleccionar todos los eventos'],
   ['Ctrl+X / Ctrl+C / Ctrl+V', 'Cortar / copiar / pegar eventos (en el cursor)'],
   ['G / U', 'Agrupar / quitar del grupo'],

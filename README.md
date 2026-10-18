@@ -35,6 +35,7 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 - **Línea de tiempo multipista:** pistas de video arriba y de audio abajo. Un video con sonido se coloca como dos eventos agrupados (video y audio) que se mueven y recortan juntos.
 - **Pistas:** silencio, solo, volumen (pistas de audio, de -∞ a +12 dB) y cambio de nombre con doble clic. Como en VEGAS, una pista de video nueva aparece arriba del todo y una de audio abajo del todo; se añaden desde el menú *Insertar*, con Ctrl+Mayús+Q / Ctrl+Q o con los botones de la zona vacía de abajo, y se cambian de orden arrastrando su cabecera.
 - **Edición:** arrastrar para mover (también a otra pista), recortar por los bordes, dividir en el cursor y eliminar. Incluye ajuste magnético a bordes y al cursor, y deshacer/rehacer.
+- **Edición en cascada** (ripple, como «Auto Ripple» de VEGAS; Ctrl+L o el botón de la barra de herramientas): al borrar o cortar eventos se cierra el hueco, al alargar o acortar el final de un evento o al moverlo, lo que va detrás se desplaza con él, y al pegar se inserta apartando lo de detrás. En *Edición* se elige si afecta solo a las pistas que se editan o a todas. Con una selección de tiempo, *Edición → Eliminar el tramo seleccionado y cerrar el hueco* (Ctrl+Supr) quita ese tramo de todas las pistas y adelanta lo de detrás, ideal para quitar trozos de una grabación larga.
 - **Velocidad de los eventos** como en VEGAS: con Ctrl pulsado, arrastrar un borde del evento lo estira o lo encoge sin cambiar el trozo de video que usa, así que se reproduce más lento o más rápido (del 25 % al 400 %). El audio cambia de velocidad sin cambiar el tono. La velocidad aparece en el título del evento junto a una línea en zigzag; *Velocidad normal (100 %)* en el menú contextual la quita.
 - **Panorámica/recorte del evento** como en VEGAS (botón con el icono de recorte de cada evento de video o su menú contextual): posición, zoom, rotación y recorte de los bordes, con **fotogramas clave** para animarlo (efecto Ken Burns, zooms, imagen sobre imagen que se mueve, textos que entran deslizándose…). En la vista previa, con la ventana abierta, la imagen se arrastra para moverla, las esquinas cambian el zoom y el círculo de arriba la gira (Mayús: de 15 en 15°). Con varios fotogramas clave, cambiar un valor donde no hay ninguno crea uno nuevo; cada tramo puede ser suave (acelera y frena) o uniforme. Los fotogramas clave se ven como rombos en el evento y siguen a la imagen al recortarlo, dividirlo o cambiar su velocidad. *Llenar el cuadro* quita las bandas negras (por ejemplo, un video vertical en un proyecto horizontal). Lo que queda fuera de la imagen es transparente: se ve la pista de debajo.
 - **Selección de tiempo** como en VEGAS: arrastrando en la barra de arriba de la regla se marca un tramo (línea azul con su duración, triángulos amarillos en los extremos y fondo azul en las pistas). La línea se arrastra para moverla y los triángulos, para cambiar el principio y el final; se ajusta a los bordes de los eventos y a fotogramas exactos (Mayús: sin ajuste). Doble clic en un evento selecciona su tramo; un clic en la barra o Esc la quitan. Con una selección, la reproducción empieza en ella y se para al final; con la **reproducción en bucle** (Q o el botón del transporte) vuelve a empezar.
@@ -63,7 +64,9 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 | Espacio | Reproducir / detener (vuelve a donde empezó) |
 | Intro | Reproducir / pausar |
 | S | Dividir en el cursor (los eventos seleccionados o, si no hay selección, todos) |
-| Supr | Eliminar los eventos seleccionados |
+| Supr | Eliminar los eventos seleccionados (en cascada, cierra el hueco) |
+| Ctrl+L | Activar o desactivar la edición en cascada |
+| Ctrl+Supr | Eliminar el tramo de la selección de tiempo en todas las pistas y cerrar el hueco |
 | Ctrl+A | Seleccionar todos los eventos |
 | Ctrl+X / Ctrl+C / Ctrl+V | Cortar / copiar / pegar eventos (se pega en el cursor) |
 | G / U | Agrupar los eventos seleccionados / quitarlos del grupo |
@@ -131,6 +134,7 @@ src/components/         Menús, línea de tiempo, vista previa, medios, transici
 - Los fundidos son lineales (no se puede elegir la curva).
 - Los textos no tienen animaciones propias (para que aparezcan o desaparezcan, fundidos o transiciones). Una transición entre dos textos se dibuja opaca, sobre negro (como todas las transiciones).
 - La selección de tiempo no se guarda en el proyecto.
+- En cascada, recortar el principio de un evento no desplaza lo de detrás (sí el final, mover, borrar y pegar).
 - La velocidad es constante en todo el evento (no hay rampas de velocidad) y el audio siempre conserva el tono.
 
 ## Solución de problemas
