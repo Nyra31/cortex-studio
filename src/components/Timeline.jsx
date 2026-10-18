@@ -4,8 +4,9 @@ import Icon from './Icon.jsx';
 import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
   EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, gainToVolume, isTrackActive,
-  overlapAt, placeMedia, resolveTimeline, setTransitionAt, trackColor, volumeToGain,
+  overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain,
 } from '../state/project.js';
+import { panActive } from '../state/pan.js';
 import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
 import { isText } from '../state/text.js';
 import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
@@ -125,7 +126,7 @@ function TransitionZone({ width, height, label, onReset }) {
 // fadeIn/fadeOut: fundidos efectivos (en audio incluyen los fundidos cruzados de los solapamientos).
 // overlapIn/overlapOut: segundos solapados con el evento anterior/siguiente de la pista.
 const EventView = memo(function EventView({
-  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onDouble,
+  ev, media, type, selected, pps, fadeIn, fadeOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onPan, onDouble,
 }) {
   const width = Math.max(3, ev.duration * pps);
   const height = bodyHeight(type);
@@ -152,7 +153,24 @@ const EventView = memo(function EventView({
         {rate !== 1 && <span className="event-rate"> · {formatRate(rate)}</span>}
         {type === 'audio' && volume !== 0 && <span className="event-gain"> · {formatVolume(volume)}</span>}
       </div>
-      {isText(media) && width > 70 && (
+      {type === 'video' && width > 70 && (
+        <button
+          className={`event-fx event-pan${panActive(ev.pan) ? ' active' : ''}`}
+          title="Panorámica/recorte del evento"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onPan(ev.id)}
+        >
+          <Icon name="crop" size={9} />
+        </button>
+      )}
+      {type === 'video' && ev.pan?.keyframes.length > 1 && (
+        <div className="event-keyframes">
+          {ev.pan.keyframes.filter((k) => k.t <= ev.duration).map((k) => (
+            <span key={k.t} style={{ left: k.t * pps }} />
+          ))}
+        </div>
+      )}
+      {isText(media) && width > 90 && (
         <button
           className="event-fx event-text"
           title="Editar el texto"
@@ -299,7 +317,7 @@ function VolumeSlider({ value, onChange }) {
 
 const TrackRow = memo(function TrackRow({
   track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef, region,
-  onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onEventDouble, onDrop, onUpdateTrack, onDelete,
+  onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onOpenPan, onEventDouble, onDrop, onUpdateTrack, onDelete,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
   return (
@@ -363,6 +381,7 @@ const TrackRow = memo(function TrackRow({
               onMenu={onEventMenu}
               onFx={onOpenFx}
               onText={onEditText}
+              onPan={onOpenPan}
               onDouble={onEventDouble}
             />
           );
@@ -374,7 +393,7 @@ const TrackRow = memo(function TrackRow({
 
 const Timeline = forwardRef(function Timeline({
   project, setProject, selection, setSelection, time, seek, playing, region, setRegion,
-  pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, onEditText, footer,
+  pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, onEditText, onOpenPan, footer,
 }, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -646,7 +665,8 @@ const Timeline = forwardRef(function Timeline({
         update = (o) => {
           const duration = o.duration + sign * dt;
           const rate = mediaOf(o)?.isImage ? 1 : (o.duration * (o.rate || 1)) / duration;
-          return { start: left ? o.start + dt : o.start, duration, rate };
+          // Los fotogramas clave de la panorámica se estiran con el evento.
+          return { start: left ? o.start + dt : o.start, duration, rate, pan: scalePanTime(o.pan, duration / o.duration) };
         };
       } else if (mode === 'trimL') {
         dt = snapDelta(dt, [primary.start], me.shiftKey ? [] : points, threshold);
@@ -659,6 +679,7 @@ const Timeline = forwardRef(function Timeline({
           start: o.start + dt,
           inPoint: mediaOf(o)?.isImage ? 0 : o.inPoint + dt * (o.rate || 1),
           duration: o.duration - dt,
+          pan: shiftPan(o.pan, dt), // los fotogramas clave siguen a la imagen
         });
       } else if (mode === 'fadeIn' || mode === 'fadeOut') {
         update = (o) => {
@@ -894,6 +915,7 @@ const Timeline = forwardRef(function Timeline({
               onLaneMenu={onLaneMenu}
               onOpenFx={onOpenFx}
               onEditText={onEditText}
+              onOpenPan={onOpenPan}
               onEventDouble={onEventDouble}
               onDrop={onDrop}
               onUpdateTrack={onUpdateTrack}

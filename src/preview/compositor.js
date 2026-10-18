@@ -93,16 +93,35 @@ uniform bool uTransition;
 uniform int uType;
 uniform float uP;
 uniform float uOpacity;
+uniform bool uPanOnA;   // panorámica/recorte del evento (ver state/pan.js)
+uniform bool uPanOnB;
+uniform vec4 uPanA;     // centro x, y (fracción del cuadro), escala, giro (radianes, sentido horario)
+uniform vec4 uPanB;
+uniform vec4 uCropA;    // recorte izquierda, arriba, derecha, abajo (fracciones de la imagen)
+uniform vec4 uCropB;
 const float PI = 3.14159265358979;
 
 // Imagen encajada en el cuadro; fuera de ella (bandas) negro opaco. Dentro conserva el alfa (croma).
-vec4 fit(sampler2D t, vec2 s, bool has, vec2 uv) {
+// Con panorámica: el punto q de la imagen (px del cuadro, desde su centro) se dibuja en P + S·R·q, así que
+// se deshace esa transformación; lo que queda fuera de la imagen (o recortado) es transparente, como en el render.
+vec4 fit(sampler2D t, vec2 s, bool has, vec2 uv, bool panOn, vec4 pan, vec4 crop) {
+  if (panOn) {
+    vec2 d = (uv - pan.xy) * uFrame;
+    float c = cos(pan.w), sn = sin(pan.w);
+    vec2 q = vec2(c * d.x + sn * d.y, -sn * d.x + c * d.y) / pan.z;
+    vec2 qi = (q / uFrame) / s + 0.5;
+    if (!has || qi.x < crop.x || qi.y < crop.y || qi.x > 1.0 - crop.z || qi.y > 1.0 - crop.w) return vec4(0.0);
+    return texture(t, qi);
+  }
   vec2 q = (uv - 0.5) / s + 0.5;
   if (!has || q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) return vec4(0.0, 0.0, 0.0, 1.0);
   return texture(t, q);
 }
-vec3 A(vec2 uv) { return fit(uA, uScaleA, uHasA, uv).rgb; }
-vec3 B(vec2 uv) { return fit(uB, uScaleB, uHasB, uv).rgb; }
+vec4 fitA(vec2 uv) { return fit(uA, uScaleA, uHasA, uv, uPanOnA, uPanA, uCropA); }
+vec4 fitB(vec2 uv) { return fit(uB, uScaleB, uHasB, uv, uPanOnB, uPanB, uCropB); }
+// En las transiciones (opacas, como xfade en yuv420p) se pierde el alfa: fuera de la imagen panorámica, negro.
+vec3 A(vec2 uv) { return fitA(uv).rgb; }
+vec3 B(vec2 uv) { return fitB(uv).rgb; }
 vec3 Ap(vec2 p) { return A(p / uFrame); }
 vec3 Bp(vec2 p) { return B(p / uFrame); }
 vec3 mixx(vec3 a, vec3 b, float m) { return a * m + b * (1.0 - m); }
@@ -121,7 +140,7 @@ void main() {
   if (uTransition) {
     outColor = vec4(transition(vUv), 1.0); // como xfade en yuv420p: la transición es opaca
   } else {
-    vec4 c = fit(uA, uScaleA, uHasA, vUv);
+    vec4 c = fitA(vUv);
     float a = c.a * uOpacity;
     outColor = vec4(c.rgb * a, a);
   }
@@ -192,7 +211,10 @@ export class Compositor {
     this.program = link(gl, VERTEX, FRAGMENT);
     gl.useProgram(this.program);
     this.u = {};
-    for (const name of ['uA', 'uB', 'uScaleA', 'uScaleB', 'uHasA', 'uHasB', 'uFrame', 'uTransition', 'uType', 'uP', 'uOpacity']) {
+    for (const name of [
+      'uA', 'uB', 'uScaleA', 'uScaleB', 'uHasA', 'uHasB', 'uFrame', 'uTransition', 'uType', 'uP', 'uOpacity',
+      'uPanOnA', 'uPanOnB', 'uPanA', 'uPanB', 'uCropA', 'uCropB',
+    ]) {
       this.u[name] = gl.getUniformLocation(this.program, name);
     }
     gl.uniform1i(this.u.uA, 0);
@@ -233,6 +255,15 @@ export class Compositor {
     }
     const [w, h] = sourceSize(el);
     return { tex: entry.tex, w, h };
+  }
+
+  setPan(which, pan) {
+    const gl = this.gl;
+    gl.uniform1i(this.u[`uPanOn${which}`], pan ? 1 : 0);
+    if (!pan) return;
+    gl.uniform4f(this.u[`uPan${which}`], pan.x, pan.y, pan.scale, (pan.rotation * Math.PI) / 180);
+    const c = pan.crop;
+    gl.uniform4f(this.u[`uCrop${which}`], c.left, c.top, c.right, c.bottom);
   }
 
   // Búfer intermedio libre de w×h (se reutilizan de un fotograma a otro).
@@ -328,8 +359,9 @@ void main() { outColor = fx(vUv); }`;
     return { tex: this.applyEffects(src.tex, effects, w, h), scale };
   }
 
-  // layers: de abajo a arriba. { a, opacity, fxA } o { a, b, type (índice), progress (P de xfade), fxA, fxB }.
-  // fxA/fxB: efectos activos de cada evento (activeEffects).
+  // layers: de abajo a arriba. { a, opacity, fxA, panA } o { a, b, type (índice), progress (P de xfade), fxA, fxB, panA, panB }.
+  // fxA/fxB: efectos activos de cada evento (activeEffects). panA/panB: panorámica en ese instante
+  // ({ x, y, scale, rotation (grados), crop }) o null si no cambia nada.
   render(frame, layers) {
     const gl = this.gl;
     for (const t of this.pool) t.used = false;
@@ -360,6 +392,8 @@ void main() { outColor = fx(vUv); }`;
       gl.uniform1i(this.u.uType, transition ? layer.type : 0);
       gl.uniform1f(this.u.uP, transition ? layer.progress : 1);
       gl.uniform1f(this.u.uOpacity, transition ? 1 : layer.opacity);
+      this.setPan('A', layer.panA);
+      this.setPan('B', layer.panB);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 

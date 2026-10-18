@@ -202,7 +202,9 @@ function buildRender(project, settings, outPath) {
   // Con efectos (fx, calculado en la interfaz por renderPayload), la imagen se escala a su tamaño
   // encajado, pasa por el subgrafo de efectos y después se le ponen las bandas negras.
   // speed: velocidad del evento (inPoint es tiempo del medio; start y dur, de la línea de tiempo).
-  const addVideoInput = (m, inPoint, start, dur, fx = null, speed = 1) => {
+  // pan: panorámica/recorte del evento ({ keyframes, crop, w, h }, ver src/state/pan.js) y origin, el
+  // principio del evento (los fotogramas clave cuentan desde ahí).
+  const addVideoInput = (m, inPoint, start, dur, fx = null, speed = 1, pan = null, origin = start) => {
     const { first, count } = frameSpan(start, dur);
     const length = (count + 1) / rate;
     if (m.isImage) {
@@ -217,15 +219,53 @@ function buildRender(project, settings, outPath) {
     const tail =
       `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},` +
       `tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${count}`;
+    const panTail = () => `${panChain(pan, first / rate - origin)},tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${count}`;
     if (!fx) {
+      if (pan) return { i, first, count, chain: `[${i}:v]${pts},scale=${pan.w}:${pan.h},setsar=1,${panTail()}` };
       return { i, first, count, chain: `[${i}:v]${pts},scale=${W}:${H}:force_original_aspect_ratio=decrease,${tail}` };
     }
     filters.push(
       `[${i}:v]${pts},scale=${fx.w}:${fx.h},setsar=1[fxin${i}]`,
       fx.graph.replaceAll('@IN@', `fxin${i}`).replaceAll('@OUT@', `fxout${i}`).replaceAll('@N@', `fx${i}_`),
     );
+    if (pan) return { i, first, count, chain: `[fxout${i}]${panTail()}` };
     return { i, first, count, chain: `[fxout${i}]format=${fx.alpha ? 'yuva420p' : 'yuv420p'},${tail}` };
   };
+  // Cadena de la panorámica (ver addVideoInput). offset: tiempo local del evento en el primer fotograma.
+  // La imagen encajada (con el recorte transparente) se centra en un lienzo transparente 2 px más grande que
+  // el cuadro; perspective la lleva a su sitio en cada fotograma (fuera queda el borde transparente) y se quita
+  // el borde. En YUV con alfa: pasar por RGB cambiaría los colores de los videos marcados como BT.709.
+  const panChain = (pan, offset) => {
+    const { w, h } = pan;
+    const c = pan.crop || {};
+    const cl = Math.round((c.left || 0) * w);
+    const ct = Math.round((c.top || 0) * h);
+    const cw = Math.max(2, w - cl - Math.round((c.right || 0) * w));
+    const ch = Math.max(2, h - ct - Math.round((c.bottom || 0) * h));
+    const crop = cw < w || ch < h ? `crop=${cw}:${ch}:${cl}:${ct},pad=${w}:${h}:${cl}:${ct}:color=black@0,` : '';
+    const Wp = W + 4;
+    const Hp = H + 4;
+    // Tiempo local del evento en cada fotograma de este fragmento (después de fps). En perspective,
+    // `in` vale 1 en el primer fotograma.
+    const T = `((in-1)/${rate.toFixed(9)}+${offset.toFixed(6)})`;
+    const at = (expr) => expr.replaceAll('@T@', T);
+    const X = `(2+${W}*${at(pan.x)})`;
+    const Y = `(2+${H}*${at(pan.y)})`;
+    const S = `(${at(pan.scale)})`;
+    const R = `(${at(pan.rotation)})`;
+    // Esquina del lienzo (dx, dy desde su centro) → P + S·R·(dx, dy).
+    const corner = (dx, dy) => [
+      `${X}+${S}*(${dx}*cos(${R})-(${dy})*sin(${R}))`,
+      `${Y}+${S}*(${dx}*sin(${R})+(${dy})*cos(${R}))`,
+    ];
+    const pts = [corner(-Wp / 2, -Hp / 2), corner(Wp / 2, -Hp / 2), corner(-Wp / 2, Hp / 2), corner(Wp / 2, Hp / 2)];
+    const coords = pts.map(([x, y], k) => `x${k}='${x}':y${k}='${y}'`).join(':');
+    return (
+      `format=yuva444p,${crop}pad=${Wp}:${Hp}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,fps=${fps},` +
+      `perspective=${coords}:sense=destination:eval=frame,crop=${W}:${H}:2:2`
+    );
+  };
+
   // Desplaza el fragmento a su fotograma (la base de tiempo tras fps es 1/fps) y lo superpone solo en sus fotogramas.
   const placeAt = (first) => `setpts=PTS-STARTPTS+${first}`;
   const overlayAt = (label, first, count) => {
@@ -250,7 +290,7 @@ function buildRender(project, settings, outPath) {
     .filter((e) => tracks.get(e.trackId).type === 'video')
     .sort((a, b) => tracks.get(b.trackId).index - tracks.get(a.trackId).index || a.start - b.start);
   for (const e of videoEvents) {
-    const v = addVideoInput(media.get(e.mediaId), e.inPoint, e.start, e.duration, e.fx, e.rate || 1);
+    const v = addVideoInput(media.get(e.mediaId), e.inPoint, e.start, e.duration, e.fx, e.rate || 1, e.pan, e.start);
     filters.push(`${v.chain}${videoFades(e)},${placeAt(v.first)}[v${v.i}]`);
     overlayAt(`v${v.i}`, v.first, v.count);
 
@@ -261,8 +301,9 @@ function buildRender(project, settings, outPath) {
       const fromRate = from.rate || 1;
       const a = addVideoInput(
         media.get(from.mediaId), from.inPoint + (tr.start - from.start) * fromRate, tr.start, tr.duration, from.fx, fromRate,
+        from.pan, from.start,
       );
-      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.start, tr.duration, e.fx, e.rate || 1);
+      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.start, tr.duration, e.fx, e.rate || 1, e.pan, e.start);
       filters.push(
         `${a.chain},format=yuv420p[ta${a.i}]`,
         `${b.chain},format=yuv420p[tb${b.i}]`,

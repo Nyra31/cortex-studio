@@ -2,6 +2,7 @@
 import { DEFAULT_TRANSITION } from './transitions.js';
 import { effectsGraph } from './effects.js';
 import { isText, textPng } from './text.js';
+import { panActive, panExpr, scalePanTime, shiftPan } from './pan.js';
 
 //
 // project = {
@@ -9,8 +10,9 @@ import { isText, textPng } from './text.js';
 //   media:  [{ id, path, name, duration, width, height, fps, hasVideo, hasAudio, isImage, thumb, peaks, peaksPerSecond, missing }],
 //           o medios de texto generados: { id, kind: 'text', name, text, ... } (ver text.js; sin archivo)
 //   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume }],  // ordenadas de arriba a abajo; volume en dB
-//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition, effects, rate }],
+//   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, transition, effects, rate, pan }],
 // }
+// pan: panorámica/recorte con fotogramas clave (ver pan.js), solo en eventos de video; null o ausente = ninguna.
 // effects: cadena [{ id, type, enabled, params }] aplicada en orden; efectos de video en los eventos de video
 // y de audio en los de audio (ver effects.js y audio-effects.js).
 // Tiempos en segundos. volume del evento en dB (solo afecta al audio); fadeIn/fadeOut = duración de los fundidos.
@@ -74,6 +76,8 @@ export function eventPeak(media, e) {
 }
 
 export const EVENT_DEFAULTS = { volume: 0, fadeIn: 0, fadeOut: 0, transition: null, effects: [], rate: 1 };
+
+export { shiftPan, scalePanTime };
 
 // Instante del medio que se ve o se oye en el instante t de la línea de tiempo.
 export const sourceTime = (e, t) => e.inPoint + (t - e.start) * (e.rate || 1);
@@ -230,7 +234,10 @@ export function splitEvents(project, t, selection) {
       groupId = newGroups.get(e.groupId);
     }
     // El fundido de entrada se queda en la parte izquierda y el de salida pasa a la derecha.
-    added.push({ ...e, id: uid('e'), start: t, inPoint: sourceTime(e, t), duration: e.duration - left, groupId, fadeIn: 0, transition: null });
+    added.push({
+      ...e, id: uid('e'), start: t, inPoint: sourceTime(e, t), duration: e.duration - left, groupId, fadeIn: 0, transition: null,
+      pan: shiftPan(e.pan, left), // los fotogramas clave siguen a la imagen
+    });
     return { ...e, duration: left, fadeOut: 0 };
   });
   return { ...project, events: [...events, ...added] };
@@ -363,7 +370,7 @@ export function deleteTrack(project, trackId) {
 export function serializeProject(project) {
   return {
     format: 'cortex-studio',
-    version: 5,
+    version: 6,
     settings: project.settings,
     media: project.media.map(({ id, path, name, kind, text }) => (kind === 'text' ? { id, kind, name, text } : { id, path, name })),
     tracks: project.tracks,
@@ -406,6 +413,16 @@ export function renderPayload(project, size = project.settings, range = null) {
     const g = fit && effectsGraph(e.effects, { ...fit, alpha });
     return g ? { ...fit, ...g, alpha: g.alpha || alpha } : null;
   };
+  // Panorámica/recorte: tamaño de la imagen encajada, recorte y expresiones de FFmpeg de x, y, escala y giro
+  // (radianes) en función de @T@, el tiempo local del evento, que pone el proceso principal (ver pan.js).
+  const panOf = (e) => {
+    if (trackType.get(e.trackId) !== 'video' || !panActive(e.pan)) return null;
+    const m = mediaById.get(e.mediaId);
+    const fit = m && fitSize(m.width, m.height, size.width, size.height);
+    if (!fit) return null;
+    const expr = (prop) => panExpr(e.pan, prop, '@T@');
+    return { ...fit, crop: e.pan.crop, x: expr('x'), y: expr('y'), scale: expr('scale'), rotation: expr('rotation') };
+  };
   return {
     media: project.media
       .filter((m) => used.has(m.id))
@@ -423,6 +440,7 @@ export function renderPayload(project, size = project.settings, range = null) {
       ...fades.get(e.id),
       gain: volumeToGain(e.volume ?? 0),
       fx: fxOf({ ...e, effects }),
+      pan: panOf(e),
       afx: afxOf({ ...e, effects }),
     })),
     transitions: transitions.filter((tr) => kept.has(tr.from) && kept.has(tr.to)),

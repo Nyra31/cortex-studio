@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import TextOverlay from './TextOverlay.jsx';
+import PanOverlay from './PanOverlay.jsx';
 import { mediaUrl, frameNumber, formatTimecode } from '../util/time.js';
-import { eventPeak, fadeFactor, formatFps, isTrackActive, resolveTimeline, sourceTime, volumeToGain } from '../state/project.js';
+import {
+  eventPeak, fadeFactor, fitSize, formatFps, isTrackActive, resolveTimeline, sourceTime, volumeToGain,
+} from '../state/project.js';
 import { transitionInfo } from '../state/transitions.js';
 import { EFFECTS, activeEffects } from '../state/effects.js';
 import { Compositor } from '../preview/compositor.js';
 import { drawText, isText } from '../state/text.js';
+import { NO_CROP, panActive, panAt } from '../state/pan.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
 
 // Para las pruebas automáticas: procesar un sonido con la misma cadena de efectos que la vista previa.
@@ -15,6 +19,12 @@ window.cortexPruebas = { renderOfflineAudio, activeEffects };
 const DRIFT = 0.3;
 const PRELOAD = 2; // segundos antes de que empiece un evento se prepara su <video>
 const KEEP = 1; // y después de que termine se conserva
+
+// Panorámica del evento en el instante t de la línea de tiempo (para el compositor), o null si no cambia nada.
+export function panLayer(e, t) {
+  if (!panActive(e.pan)) return null;
+  return { ...panAt(e.pan, t - e.start), crop: e.pan.crop || NO_CROP };
+}
 
 // Capas de video en t, de abajo a arriba. En cada pista activa: la transición en curso o,
 // si no hay, el evento que empieza más tarde con la opacidad de sus fundidos.
@@ -108,8 +118,10 @@ function sync(el, target, playing, rate = 1) {
 }
 
 // selection, editTextId, onSelectEvent, onTextChange, onEditText: para colocar los textos con el ratón (TextOverlay).
+// panEventId, onPanChange: evento con la ventana de panorámica abierta, que se coloca con el ratón (PanOverlay).
 export default function Preview({
-  project, time, playing, selection, editTextId, onSelectEvent, onTextChange, onEditText, onOpenProperties,
+  project, time, playing, selection, editTextId, onSelectEvent, onTextChange, onEditText, panEventId, onPanChange,
+  onOpenProperties,
 }) {
   const canvasRef = useRef(null);
   const sourcesRef = useRef(null);
@@ -129,11 +141,19 @@ export default function Preview({
 
   const layers = videoLayers(project, mediaById, resolved, eventsById, time);
 
+  // Evento con la ventana de panorámica abierta, si se ve ahora (en pausa): su recuadro sustituye al de los textos.
+  const panEvent = !playing && panEventId
+    ? layers.flatMap((l) => (l.event ? [l.event] : [l.from, l.to])).find((e) => e.id === panEventId)
+    : null;
+  const panMedia = panEvent && mediaById.get(panEvent.mediaId);
+  const panFit = panMedia && (isText(panMedia) ? { w: width, h: height } : fitSize(panMedia.width, panMedia.height, width, height));
+
   // Textos que se ven ahora (del de más arriba al de más abajo); en pausa se pueden mover con el ratón.
-  const textItems = playing
+  const textItems = playing || panEventId
     ? []
     : layers
-      .filter((l) => l.event && isText(mediaById.get(l.event.mediaId)))
+      // (los que tienen panorámica se colocan con ella: su recuadro de texto no coincidiría con lo que se ve)
+      .filter((l) => l.event && isText(mediaById.get(l.event.mediaId)) && !panActive(l.event.pan))
       .map((l) => ({ event: l.event, media: mediaById.get(l.event.mediaId) }))
       .reverse();
   const textTarget =
@@ -230,7 +250,7 @@ export default function Preview({
 
     draw.current.layers = layers.map((l) =>
       l.event
-        ? { a: sourceFor(l.event, false), opacity: l.opacity, fxA: activeEffects(l.event.effects) }
+        ? { a: sourceFor(l.event, false), opacity: l.opacity, fxA: activeEffects(l.event.effects), panA: panLayer(l.event, time) }
         : {
           a: sourceFor(l.from, false),
           b: sourceFor(l.to, false),
@@ -238,6 +258,8 @@ export default function Preview({
           progress: l.progress,
           fxA: activeEffects(l.from.effects),
           fxB: activeEffects(l.to.effects),
+          panA: panLayer(l.from, time),
+          panB: panLayer(l.to, time),
         },
     );
     draw.current.frame = { width, height };
@@ -358,6 +380,16 @@ export default function Preview({
             onChange={onTextChange}
             onEdit={onEditText}
           />
+          {panEvent && panFit && (
+            <PanOverlay
+              values={panAt(panEvent.pan, time - panEvent.start)}
+              crop={panEvent.pan?.crop || NO_CROP}
+              fit={panFit}
+              width={width}
+              height={height}
+              onChange={onPanChange}
+            />
+          )}
           {glError && <div className="preview-error">No se puede mostrar la vista previa: {glError}</div>}
         </div>
         <div className="preview-sources" ref={sourcesRef} />

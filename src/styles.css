@@ -440,8 +440,14 @@ input[type='number'] {
   color: #fff;
   border-color: #fff;
 }
-.event-fx.event-text {
+.event-fx.event-pan {
   right: 33px;
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+}
+.event-fx.event-text {
+  right: 53px;
   font: 700 9px/10px Arial, sans-serif;
 }
 .event-fx.active {
@@ -1434,3 +1440,118 @@ kbd {
 .text-corner.ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .text-corner.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
 .text-corner.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+
+/* Fotogramas clave de la panorámica, abajo del evento. */
+.event-keyframes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1px;
+  height: 7px;
+  pointer-events: none;
+  z-index: 2;
+}
+.event-keyframes span {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  background: #ffd84d;
+  border: 1px solid #3a2d00;
+  transform: rotate(45deg);
+}
+
+/* Panorámica/recorte: ventana y recuadro en la vista previa. */
+.pan-window {
+  width: 400px;
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+}
+.pan-strip {
+  position: relative;
+  height: 22px;
+  margin: 2px 4px 6px;
+  background: #1e1e1e;
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.pan-key {
+  position: absolute;
+  top: 5px;
+  width: 9px;
+  height: 9px;
+  margin-left: -5px;
+  background: #ffd84d;
+  border: 1px solid #3a2d00;
+  transform: rotate(45deg);
+  cursor: ew-resize;
+  z-index: 1;
+}
+.pan-key.active {
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.pan-cursor {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--cursor);
+  pointer-events: none;
+}
+.pan-keys button {
+  padding: 1px 7px;
+}
+.pan-smooth {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.pan-hint {
+  margin: 4px 0 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.pan-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: visible; /* con zoom, las esquinas pueden quedar fuera del cuadro */
+}
+.pan-overlay svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.pan-box {
+  fill: rgba(255, 255, 255, 0.04);
+  stroke: #fff;
+  stroke-width: 1px;
+  stroke-dasharray: 5 3;
+  vector-effect: non-scaling-stroke;
+  cursor: move;
+}
+.pan-rot-line,
+.pan-center {
+  stroke: #fff;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.pan-handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -5px 0 0 -5px;
+  background: #fff;
+  border: 1px solid #222;
+  cursor: nwse-resize;
+}
+.pan-handle.rotate {
+  border-radius: 50%;
+  background: #ffd84d;
+  cursor: grab;
+}

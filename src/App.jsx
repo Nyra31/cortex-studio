@@ -7,6 +7,7 @@ import TransitionsPanel from './components/TransitionsPanel.jsx';
 import EffectsPanel from './components/EffectsPanel.jsx';
 import EventFxDialog from './components/EventFxDialog.jsx';
 import TextDialog from './components/TextDialog.jsx';
+import PanDialog from './components/PanDialog.jsx';
 import Preview from './components/Preview.jsx';
 import Transport from './components/Transport.jsx';
 import Timeline, { MAX_PPS, MIN_PPS, gridStep } from './components/Timeline.jsx';
@@ -17,12 +18,21 @@ import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
-  IMAGE_DURATION, addTrack, copyEvents, deleteEvents, emptyProject, groupEvents, loadProject, mediaLength, pasteEvents,
+  IMAGE_DURATION, addTrack, copyEvents, deleteEvents, emptyProject, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
   placeMedia, projectDuration, removeMedia, renderPayload, serializeProject, splitEvents, uid, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
+import { panActive, setPanValues } from './state/pan.js';
 
 const api = window.api;
+
+// Escala con la que la imagen del evento llena todo el cuadro (sin bandas), para «Llenar el cuadro».
+function panFill(project, e) {
+  const m = project.media.find((x) => x.id === e.mediaId);
+  const { width: W, height: H } = project.settings;
+  const fit = m && (isText(m) ? { w: W, h: H } : fitSize(m.width, m.height, W, H));
+  return fit ? Math.max(W / fit.w, H / fit.h) : null;
+}
 const baseName = (p) => (p ? p.split(/[\\/]/).pop().replace(/\.cortex$/i, '') : 'Sin título');
 
 export default function App() {
@@ -45,6 +55,7 @@ export default function App() {
   const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects'
   const [fxEventId, setFxEventId] = useState(null); // evento cuya ventana de efectos está abierta
   const [textMediaId, setTextMediaId] = useState(null); // medio de texto cuya ventana de edición está abierta
+  const [panEventId, setPanEventId] = useState(null); // evento cuya ventana de panorámica/recorte está abierta
   const [region, setRegion] = useState(null); // selección de tiempo { start, end } (la región de bucle de VEGAS)
   const [loop, setLoop] = useState(false); // reproducción en bucle de la selección de tiempo (Q)
   const [fullScreen, setFullScreen] = useState(false); // pantalla completa (F11), lo avisa el proceso principal
@@ -244,6 +255,7 @@ export default function App() {
     setProject(next);
     setSelection([next.events[next.events.length - 1].id]);
     setFxEventId(null);
+    setPanEventId(null);
     setTextMediaId(media.id);
   }, [setProject]);
 
@@ -276,14 +288,38 @@ export default function App() {
   }, []);
   const openTextEditor = useCallback((mediaId) => {
     setFxEventId(null);
+    setPanEventId(null);
     setTextMediaId(mediaId);
   }, []);
   const editTextOf = useCallback((eventId) => {
     const ev = live.current.project.events.find((e) => e.id === eventId);
     if (!ev) return;
     setFxEventId(null);
+    setPanEventId(null);
     setTextMediaId(ev.mediaId);
   }, []);
+
+  // Ventana de panorámica/recorte del evento (una sola ventana flotante abierta a la vez).
+  const panEvent = panEventId ? project.events.find((e) => e.id === panEventId) : null;
+  const openPan = useCallback((eventId) => {
+    setFxEventId(null);
+    setTextMediaId(null);
+    setPanEventId(eventId);
+  }, []);
+  const closePan = useCallback(() => setPanEventId(null), []);
+  const updatePan = useCallback((fn, record) => {
+    setProject((p) => updateEvents(p, [panEventId], (e) => {
+      const pan = fn(e.pan || null);
+      return { pan: pan && panActive(pan) || pan?.keyframes.length > 1 ? pan : null };
+    }), record);
+  }, [panEventId, setProject]);
+  // Cambios hechos con el ratón en la vista previa: en el instante del cursor (crea fotograma clave si hace falta).
+  const changePanAtCursor = useCallback((changes, record) => {
+    const { project: p, time: t } = live.current;
+    const ev = p.events.find((e) => e.id === panEventId);
+    if (!ev) return;
+    updatePan((pan) => setPanValues(pan, Math.min(ev.duration, Math.max(0, t - ev.start)), changes, p.settings.fps), record);
+  }, [panEventId, updatePan]);
 
   // Portapapeles. Las acciones reciben los ids explícitamente porque el menú contextual puede
   // cambiar la selección justo antes de llamarlas.
@@ -374,8 +410,18 @@ export default function App() {
           }]
           : []),
         'separator',
-        ...(isText(media) ? [{ label: 'Editar texto…', action: () => setTextMediaId(media.id) }] : []),
-        { label: 'Efectos del evento…', action: () => setFxEventId(info.event.id) },
+        ...(isText(media) ? [{ label: 'Editar texto…', action: () => openTextEditor(media.id) }] : []),
+        ...(isVideo
+          ? [
+            { label: 'Panorámica/recorte del evento…', action: () => openPan(info.event.id) },
+            {
+              label: 'Quitar panorámica y recorte',
+              action: () => setProject((cur) => updateEvents(cur, ids, { pan: null })),
+              disabled: !selected.some((e) => e.pan),
+            },
+          ]
+          : []),
+        { label: 'Efectos del evento…', action: () => { setPanEventId(null); setTextMediaId(null); setFxEventId(info.event.id); } },
         {
           label: 'Quitar efectos',
           action: () => setProject((cur) => updateEvents(cur, ids, { effects: [] })),
@@ -406,7 +452,7 @@ export default function App() {
       ];
     }
     setContextMenu({ x: info.x, y: info.y, items });
-  }, [copyIds, cutIds, deleteIds, groupIds, insertText, insertTrack, paste, selectAll, setProject, ungroupIds]);
+  }, [copyIds, cutIds, deleteIds, groupIds, insertText, insertTrack, openPan, openTextEditor, paste, selectAll, setProject, ungroupIds]);
 
   const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
 
@@ -604,7 +650,7 @@ export default function App() {
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
   const modalOpen = renderOpen || projectDialog !== null || shortcutsOpen;
-  const floatingOpen = !!fxEventId || !!textMediaId; // sus ventanas usan Esc para cerrarse
+  const floatingOpen = !!fxEventId || !!textMediaId || !!panEventId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
     if (modalOpen || e.target.closest?.('input, select, textarea')) return;
@@ -744,6 +790,8 @@ export default function App() {
             onSelectEvent={selectEvent}
             onTextChange={updateTextMedia}
             onEditText={openTextEditor}
+            panEventId={panEventId}
+            onPanChange={changePanAtCursor}
             onOpenProperties={openProperties}
           />
         </Dock>
@@ -768,9 +816,11 @@ export default function App() {
         onContextMenu={openContextMenu}
         onOpenFx={(id) => {
           setTextMediaId(null);
+          setPanEventId(null);
           setFxEventId(id);
         }}
         onEditText={editTextOf}
+        onOpenPan={openPan}
         footer={
           <Transport
             playing={playing}
@@ -821,6 +871,19 @@ export default function App() {
           mediaName={project.media.find((m) => m.id === fxEvent.mediaId)?.name ?? ''}
           onChange={updateFxEffects}
           onClose={closeFx}
+        />
+      )}
+      {panEvent && (
+        <PanDialog
+          key={panEvent.id}
+          event={panEvent}
+          mediaName={project.media.find((m) => m.id === panEvent.mediaId)?.name ?? ''}
+          fps={project.settings.fps}
+          time={time}
+          fill={panFill(project, panEvent)}
+          onChange={updatePan}
+          onSeek={seek}
+          onClose={closePan}
         />
       )}
       {textMedia && (

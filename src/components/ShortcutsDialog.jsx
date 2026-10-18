@@ -22,6 +22,7 @@ const SHORTCUTS = [
   ['Esc', 'Quitar la selección de tiempo'],
   ['Q', 'Reproducción en bucle de la selección de tiempo'],
   ['Arrastrar un texto en la vista previa', 'Moverlo (esquinas: tamaño; doble clic: editarlo)'],
+  ['Arrastrar en la vista previa (panorámica)', 'Mover la imagen (esquinas: zoom; círculo: girar)'],
   ['Arrastrar en zona vacía', 'Seleccionar eventos con un rectángulo (Ctrl: añadir)'],
   ['Ctrl+Z / Ctrl+Y', 'Deshacer / rehacer'],
   ['↑ / ↓, Ctrl+rueda', 'Acercar / alejar la línea de tiempo'],
