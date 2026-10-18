@@ -29,6 +29,17 @@ const MEDIA_FILTERS = [
 ];
 const PROJECT_FILTERS = [{ name: 'Proyecto de Cortex Studio', extensions: ['cortex'] }];
 
+// Copia de recuperación (guardado automático): la interfaz la escribe cada minuto si hay cambios sin guardar.
+// Se borra al cerrar la ventana normalmente; si sigue ahí al arrancar, la aplicación se cerró de golpe.
+const recoveryPath = () => path.join(app.getPath('userData'), 'autosave', 'recuperacion.json');
+const clearRecovery = () => {
+  try {
+    fs.unlinkSync(recoveryPath());
+  } catch {
+    // no había copia
+  }
+};
+
 // Solo se sirven por media:// los archivos que el usuario importó.
 const allowedFiles = new Set();
 let mainWindow = null;
@@ -123,6 +134,7 @@ function createWindow() {
   });
   mainWindow.on('closed', () => {
     mainWindow = null;
+    clearRecovery(); // cierre normal: guardado, sin cambios o «No guardar»
   });
 }
 
@@ -153,8 +165,32 @@ ipcMain.handle('project:save', async (_e, data, filePath) => {
     if (res.canceled || !res.filePath) return null;
     target = res.filePath;
   }
+  // Copia de seguridad, como el .veg.bak de VEGAS: la versión anterior del archivo queda en «.bak».
+  try {
+    await fs.promises.copyFile(target, `${target}.bak`);
+  } catch {
+    // archivo nuevo: no hay versión anterior
+  }
   await fs.promises.writeFile(target, JSON.stringify(data, null, 2), 'utf8');
   return target;
+});
+
+// Guardado automático: { savedAt, projectPath, data }. Se escribe en un temporal y se renombra, para que
+// un cierre a medias no deje la copia rota.
+ipcMain.handle('autosave:write', async (_e, data, projectPath) => {
+  const file = recoveryPath();
+  await fs.promises.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  await fs.promises.writeFile(tmp, JSON.stringify({ savedAt: Date.now(), projectPath, data }), 'utf8');
+  await fs.promises.rename(tmp, file);
+});
+ipcMain.handle('autosave:clear', () => clearRecovery());
+ipcMain.handle('autosave:check', async () => {
+  try {
+    return JSON.parse(await fs.promises.readFile(recoveryPath(), 'utf8'));
+  } catch {
+    return null;
+  }
 });
 
 ipcMain.handle('project:open', async () => {

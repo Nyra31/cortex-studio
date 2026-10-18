@@ -57,6 +57,7 @@ El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 - **Vista previa** dibujada con WebGL, sincronizada con la línea de tiempo y con la proporción del proyecto. Muestra las transiciones, los fundidos y las pistas superpuestas igual que el renderizado.
 - **Forma de onda** en los eventos de audio y **miniaturas** en los de video.
 - **Proyectos** guardados como archivos `.cortex` (JSON con las rutas de los medios y los ajustes).
+- **Guardado automático y copias de seguridad:** cada minuto, si hay cambios sin guardar, se guarda una copia de recuperación (en la carpeta de datos de la aplicación, sin tocar el archivo del proyecto). Si la aplicación se cierra de golpe, al volver a abrirla ofrece recuperar esa copia. Al guardar encima de un proyecto, la versión anterior queda como `Proyecto.cortex.bak`, como en VEGAS.
 - **Renderizado** a MP4 (H.264 + AAC) con la resolución y velocidad del proyecto, al 100 %, 75 % o 50 % del tamaño.
 
 ## Atajos de teclado

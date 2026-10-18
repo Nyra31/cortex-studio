@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('api', {
   setDirty: (dirty) => ipcRenderer.send('project:dirty', dirty),
   closeWindow: () => ipcRenderer.send('window:close'),
   toggleFullScreen: () => ipcRenderer.invoke('window:toggleFullScreen'),
+  autosave: (data, projectPath) => ipcRenderer.invoke('autosave:write', data, projectPath),
+  clearAutosave: () => ipcRenderer.invoke('autosave:clear'),
+  checkAutosave: () => ipcRenderer.invoke('autosave:check'),
   onFullScreenChange: (callback) => {
     const handler = (_e, value) => callback(value);
     ipcRenderer.on('window:fullscreen', handler);

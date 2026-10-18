@@ -26,6 +26,7 @@ import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text
 import { panActive, setPanValues } from './state/pan.js';
 
 const api = window.api;
+const AUTOSAVE_MS = 60 * 1000; // guardado automático (copia de recuperación) cada minuto si hay cambios
 
 // Escala con la que la imagen del evento llena todo el cuadro (sin bandas), para «Llenar el cuadro».
 function panFill(project, e) {
@@ -70,7 +71,7 @@ export default function App() {
   const duration = projectDuration(project);
   const dirty = project !== savedProject;
   const live = useRef(null);
-  live.current = { project, time, playing, duration, dirty, selection, clipboard, pps, region, loop, ripple };
+  live.current = { project, time, playing, duration, dirty, selection, clipboard, pps, region, loop, ripple, projectPath };
   const playStart = useRef(0);
 
   useEffect(() => {
@@ -567,6 +568,7 @@ export default function App() {
       setProjectPath(saved);
       setSavedProject(current);
       setStatus(`Proyecto guardado en ${saved}`);
+      api.clearAutosave(); // guardado de verdad: la copia de recuperación ya no hace falta
       return true;
     } catch (err) {
       window.alert(`No se pudo guardar: ${err.message}`);
@@ -574,18 +576,10 @@ export default function App() {
     }
   }, [projectPath]);
 
-  const open = useCallback(async () => {
-    if (!confirmDiscard()) return;
-    let result;
-    try {
-      result = await api.openProject();
-    } catch (err) {
-      window.alert(`No se pudo abrir el proyecto: ${err.message}`);
-      return;
-    }
-    if (!result) return;
-    const { data } = result;
-    if (data.format !== 'cortex-studio' || !Array.isArray(data.tracks) || !Array.isArray(data.events)) {
+  // Carga un proyecto leído de disco (o una copia de recuperación: recovered = true, queda como modificado
+  // y, al guardar, se guarda en su archivo de siempre).
+  const loadData = useCallback(async (data, filePath, recovered = false) => {
+    if (data?.format !== 'cortex-studio' || !Array.isArray(data.tracks) || !Array.isArray(data.events)) {
       window.alert('El archivo no es un proyecto válido de Cortex Studio.');
       return;
     }
@@ -606,15 +600,63 @@ export default function App() {
     }
     const loaded = loadProject(data, media);
     history.reset(loaded);
-    setSavedProject(loaded);
-    setProjectPath(result.path);
+    setSavedProject(recovered ? null : loaded);
+    setProjectPath(filePath || null);
     setSelection([]);
     setRegion(null);
     setTextMediaId(null);
+    setFxEventId(null);
+    setPanEventId(null);
     setTime(0);
     const missing = media.filter((m) => m.missing).length;
-    setStatus(missing ? `Proyecto abierto. Faltan ${missing} archivo(s) de medios.` : 'Proyecto abierto');
+    const what = recovered ? 'Proyecto recuperado (aún sin guardar)' : 'Proyecto abierto';
+    setStatus(missing ? `${what}. Faltan ${missing} archivo(s) de medios.` : what);
   }, [history]);
+
+  const open = useCallback(async () => {
+    if (!confirmDiscard()) return;
+    let result;
+    try {
+      result = await api.openProject();
+    } catch (err) {
+      window.alert(`No se pudo abrir el proyecto: ${err.message}`);
+      return;
+    }
+    if (result) await loadData(result.data, result.path);
+  }, [loadData]);
+
+  // Guardado automático: cada minuto, si hay cambios sin guardar, una copia de recuperación (no toca el
+  // archivo del proyecto). Al arrancar, si quedó una (la aplicación se cerró de golpe), se ofrece recuperarla.
+  const autosaved = useRef(null);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { project: p, dirty: changed, projectPath: file } = live.current;
+      if (!changed || p === autosaved.current) return;
+      autosaved.current = p;
+      api.autosave(serializeProject(p), file).catch(() => {});
+    }, AUTOSAVE_MS);
+    return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    api.checkAutosave().then((rec) => {
+      if (!rec?.data) return;
+      const when = new Date(rec.savedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+      const ok = window.confirm(
+        `Cortex Studio no se cerró correctamente la última vez.
+
+Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
+          `guardada automáticamente el ${when}.
+
+¿Quieres recuperarla?`,
+      );
+      if (ok) {
+        setProjectDialog(null);
+        loadData(rec.data, rec.projectPath, true);
+      } else {
+        api.clearAutosave();
+      }
+    });
+  }, []);
 
   // Al cerrar la ventana con cambios sin guardar, el proceso principal pregunta (Guardar / No guardar /
   // Cancelar). Necesita saber si hay cambios y, si se elige Guardar, pide guardar antes de cerrar.
