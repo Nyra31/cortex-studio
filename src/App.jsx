@@ -19,13 +19,14 @@ import RecordDialog from './components/RecordDialog.jsx';
 import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
-  EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
+  EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, loadView, mediaLength, pasteEvents,
   placeMedia, projectDuration, removeMedia, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
   moveTrack, splitRange, trimToCursor, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
 import { panActive, setPanValues } from './state/pan.js';
 import { hasRamp, shiftSpeed, sourceOffset } from './state/speed.js';
+import { transitionLabel } from './state/transitions.js';
 import { Recorder, loadRecordSettings, micError } from './preview/recorder.js';
 
 const api = window.api;
@@ -598,6 +599,18 @@ export default function App() {
               };
             }),
           })),
+          // Transición del fundido hacia la pista de debajo (se pone soltando una transición sobre el fundido).
+          ...(isVideo && info.event[zone === 'in' ? 'fadeInTransition' : 'fadeOutTransition']
+            ? [{
+              label: `Quitar la transición (${transitionLabel(info.event[zone === 'in' ? 'fadeInTransition' : 'fadeOutTransition'])})`,
+              action: () => setProject((cur) => ({
+                ...cur,
+                events: cur.events.map((x) => (x.id === info.event.id
+                  ? { ...x, [zone === 'in' ? 'fadeInTransition' : 'fadeOutTransition']: null }
+                  : x)),
+              })),
+            }]
+            : []),
           'separator',
         ]
         : [];
@@ -733,11 +746,14 @@ export default function App() {
     setProjectDialog(null);
   };
 
+  // Selección de tiempo y cursor, que se guardan con el proyecto y se recuperan al abrirlo.
+  const viewState = () => ({ timeSelection: live.current.region, cursor: live.current.time });
+
   // Devuelve true si se ha guardado (false si se cancela el diálogo o falla).
   const save = useCallback(async (saveAs = false) => {
     const current = live.current.project;
     try {
-      const saved = await api.saveProject(serializeProject(current), saveAs ? null : projectPath);
+      const saved = await api.saveProject(serializeProject(current, viewState()), saveAs ? null : projectPath);
       if (!saved) return false;
       setProjectPath(saved);
       setSavedProject(current);
@@ -776,12 +792,13 @@ export default function App() {
     history.reset(loaded);
     setSavedProject(recovered ? null : loaded);
     setProjectPath(filePath || null);
+    const view = loadView(data);
     setSelection([]);
-    setRegion(null);
+    setRegion(view.timeSelection);
     setTextMediaId(null);
     setFxEventId(null);
     setPanEventId(null);
-    setTime(0);
+    setTime(Math.min(view.cursor, projectDuration(loaded)));
     const missing = media.filter((m) => m.missing).length;
     const what = recovered ? 'Proyecto recuperado (aún sin guardar)' : 'Proyecto abierto';
     setStatus(missing ? `${what}. Faltan ${missing} archivo(s) de medios.` : what);
@@ -807,7 +824,7 @@ export default function App() {
       const { project: p, dirty: changed, projectPath: file } = live.current;
       if (!changed || p === autosaved.current) return;
       autosaved.current = p;
-      api.autosave(serializeProject(p), file).catch(() => {});
+      api.autosave(serializeProject(p, viewState()), file).catch(() => {});
     }, AUTOSAVE_MS);
     return () => clearInterval(id);
   }, []);

@@ -5,7 +5,7 @@ export { scaleFxKeys, shiftFxKeys };
 import { isText, textPng } from './text.js';
 import { hasRamp, shiftSpeed, sourceOffset, speedPayload } from './speed.js';
 import { panActive, panExpr, scalePanTime, shiftPan } from './pan.js';
-import { trackMixExpr } from './envelopes.js';
+import { trackMixExpr, trackOpacityExpr } from './envelopes.js';
 
 //
 // project = {
@@ -14,8 +14,9 @@ import { trackMixExpr } from './envelopes.js';
 //           o medios de texto generados: { id, kind: 'text', name, text, ... } (ver text.js; sin archivo)
 //   markers: [{ id, time, name, number }],         // marcadores (M), como en VEGAS
 //   regions: [{ id, start, end, name, number }],   // regiones con nombre (R)
-//   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume, pan, envelopes }],  // ordenadas de arriba a abajo
-//           volume en dB; pan de −1 (izquierda) a 1 (derecha); envelopes: envolventes de volumen y panorámica (envelopes.js)
+//   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume, pan, envelopes, blend }],  // ordenadas de arriba a abajo
+//           volume en dB; pan de −1 (izquierda) a 1 (derecha); envelopes: envolventes de volumen, panorámica y
+//           opacidad, con curvas (envelopes.js); blend: modo de fusión de una pista de video (BLEND_MODES)
 //   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, fadeInCurve, fadeOutCurve,
 //              transition, effects, rate, speed, pan }],
 // }
@@ -105,7 +106,7 @@ function shiftMarks(project, shiftOf) {
   return {
     ...project,
     tracks: project.tracks.map((t) => (t.envelopes
-      ? { ...t, envelopes: { volume: moveEnv(t.envelopes.volume), pan: moveEnv(t.envelopes.pan) } }
+      ? { ...t, envelopes: Object.fromEntries(Object.entries(t.envelopes).map(([k, pts]) => [k, moveEnv(pts)])) }
       : t)),
     markers: (project.markers || []).map((m) => ({ ...m, time: Math.max(0, m.time + shiftOf(m.time)) })),
     regions: (project.regions || []).map((r) => {
@@ -147,7 +148,25 @@ export function eventPeak(media, e) {
 export const EVENT_DEFAULTS = {
   volume: 0, fadeIn: 0, fadeOut: 0, fadeInCurve: 'linear', fadeOutCurve: 'linear', transition: null, effects: [], rate: 1,
   speed: null, // rampa de velocidad (envolvente, ver speed.js)
+  // Transición en un fundido de video (id de transitions.js o null): en vez de transparentarse, el evento entra o
+  // sale con esa transición hacia lo que hay debajo, como al soltar una transición sobre un fundido en VEGAS.
+  fadeInTransition: null, fadeOutTransition: null,
 };
+
+// Modos de fusión de las pistas de video (track.blend; sin él, normal), como los modos de composición de VEGAS.
+// Mismas fórmulas que el filtro blend de FFmpeg (ver BLEND_CODE en preview/compositor.js).
+export const BLEND_MODES = [
+  { id: 'normal', label: 'Normal' },
+  { id: 'multiply', label: 'Multiplicar' },
+  { id: 'screen', label: 'Trama' },
+  { id: 'overlay', label: 'Superponer' },
+  { id: 'hardlight', label: 'Luz fuerte' },
+  { id: 'darken', label: 'Oscurecer' },
+  { id: 'lighten', label: 'Aclarar' },
+  { id: 'addition', label: 'Sumar' },
+  { id: 'subtract', label: 'Restar' },
+  { id: 'difference', label: 'Diferencia' },
+];
 
 // Curvas de los fundidos, como en VEGAS. «Rápido»: el cambio ocurre sobre todo al principio del fundido;
 // «lento», al final; «suave», lento-rápido-lento; «brusco», rápido-lento-rápido. Mismas fórmulas que el render
@@ -233,17 +252,32 @@ export function resolveTimeline(project) {
     const fadeIn = inc ? (audio ? inc.duration : 0) : stored.fadeIn;
     let fadeOut = out ? (audio ? out.duration : 0) : stored.fadeOut;
     fadeOut = Math.min(fadeOut, e.duration - fadeIn);
-    fades.set(e.id, { fadeIn, fadeOut, curveIn: e.fadeInCurve || 'linear', curveOut: e.fadeOutCurve || 'linear' });
+    fades.set(e.id, {
+      fadeIn, fadeOut, curveIn: e.fadeInCurve || 'linear', curveOut: e.fadeOutCurve || 'linear',
+      transIn: !audio && fadeIn > 0 ? e.fadeInTransition || null : null,
+      transOut: !audio && fadeOut > 0 ? e.fadeOutTransition || null : null,
+    });
   }
   return { incoming, outgoing, fades, transitions };
 }
 
 // Factor de 0 a 1 que aplican los fundidos en el instante local (desde el principio del evento), con su curva.
-export function fadeAt(local, duration, { fadeIn, fadeOut, curveIn, curveOut }) {
+// Un fundido con transición (transIn/transOut) no cambia la opacidad: lo hace la transición (ver edgeAt).
+export function fadeAt(local, duration, { fadeIn, fadeOut, curveIn, curveOut, transIn, transOut }) {
   let f = 1;
-  if (fadeIn > 0 && local < fadeIn) f = Math.min(f, fadeCurve(curveIn, local / fadeIn));
-  if (fadeOut > 0 && local > duration - fadeOut) f = Math.min(f, 1 - fadeCurve(curveOut, (local - (duration - fadeOut)) / fadeOut));
+  if (fadeIn > 0 && local < fadeIn && !transIn) f = Math.min(f, fadeCurve(curveIn, local / fadeIn));
+  if (fadeOut > 0 && local > duration - fadeOut && !transOut) f = Math.min(f, 1 - fadeCurve(curveOut, (local - (duration - fadeOut)) / fadeOut));
   return f;
+}
+
+// Transición de un fundido en curso en el instante local: { type, side: 'in' | 'out', progress } (progress = P de
+// xfade: 1 al principio de la transición, 0 al final; en la entrada, A es transparente y B el evento; en la
+// salida, al revés) o null.
+export function edgeAt(local, duration, { fadeIn, fadeOut, transIn, transOut }) {
+  if (transIn && local < fadeIn) return { type: transIn, side: 'in', progress: 1 - Math.max(0, local) / fadeIn };
+  const st = duration - fadeOut;
+  if (transOut && local >= st) return { type: transOut, side: 'out', progress: 1 - Math.min(fadeOut, local - st) / fadeOut };
+  return null;
 }
 export function fadeFactor(e, t, fades = { ...eventFades(e), curveIn: e.fadeInCurve, curveOut: e.fadeOutCurve }) {
   return fadeAt(t - e.start, e.duration, fades);
@@ -602,16 +636,30 @@ export function deleteTrack(project, trackId) {
 }
 
 // Versión para guardar en disco: sin miniaturas ni formas de onda (se regeneran al abrir).
-export function serializeProject(project) {
+// view = estado de la edición que no forma parte del proyecto pero se recupera al abrirlo, como en VEGAS:
+// { timeSelection: { start, end } | null, cursor } (no se deshace ni marca el proyecto como modificado).
+export function serializeProject(project, view = null) {
   return {
     format: 'cortex-studio',
-    version: 8,
+    version: 9,
     settings: project.settings,
     media: project.media.map(({ id, path, name, kind, text }) => (kind === 'text' ? { id, kind, name, text } : { id, path, name })),
     tracks: project.tracks,
     events: project.events,
     markers: project.markers || [],
     regions: project.regions || [],
+    ...(view && { view }),
+  };
+}
+
+// Estado de la edición guardado con el proyecto (ver serializeProject), comprobado.
+export function loadView(data) {
+  const v = data?.view || {};
+  const s = v.timeSelection;
+  const ok = (x) => typeof x === 'number' && Number.isFinite(x) && x >= 0;
+  return {
+    timeSelection: s && ok(s.start) && ok(s.end) && s.end > s.start ? { start: s.start, end: s.end } : null,
+    cursor: ok(v.cursor) ? v.cursor : 0,
   };
 }
 
@@ -674,6 +722,9 @@ export function renderPayload(project, size = project.settings, range = null) {
       muted: !isTrackActive(t, project.tracks),
       gain: volumeToGain(t.volume ?? 0),
       mix: t.type === 'audio' ? trackMixExpr(t) : null, // envolventes y panorámica (ganancia de cada canal)
+      // Video: modo de fusión y envolvente de opacidad (expresión en función de @T@).
+      blend: t.type === 'video' ? t.blend || 'normal' : undefined,
+      opacity: t.type === 'video' ? trackOpacityExpr(t) : null,
     })),
     events: events.map(({ effects, ...e }) => ({
       ...e,

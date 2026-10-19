@@ -83,7 +83,10 @@ const transitionCode = (index) => {
 // Shader de composición. Hay uno para las capas normales y otro por cada transición, que se compila la
 // primera vez que se usa: con todas las transiciones en un mismo shader, Direct3D tardaba de 10 a 30 s en
 // compilarlo al abrir la aplicación sin caché (y la ventana no se pintaba hasta entonces).
-const fragmentSource = (transition) => `#version 300 es
+// edge: transición de un fundido hacia lo de debajo (ver edgeAt en state/project.js): A y B son la misma imagen
+// con alfa uAlphaA / uAlphaB (0 el lado transparente) y se mezcla también el alfa, como xfade en yuva420p (sus
+// negro y blanco son opacos: C4).
+const fragmentSource = (transition, edge = false) => `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 outColor;
@@ -115,17 +118,37 @@ vec4 fit(sampler2D t, vec2 s, bool has, vec2 uv, vec4 pan, vec4 crop, float outA
 }
 vec4 fitA(vec2 uv) { return fit(uA, uScaleA, uHasA, uv, uPanA, uCropA, uOutA); }
 vec4 fitB(vec2 uv) { return fit(uB, uScaleB, uHasB, uv, uPanB, uCropB, uOutB); }
-// En las transiciones (opacas, como xfade en yuv420p) se pierde el alfa: fuera de la imagen panorámica, negro.
+${edge ? `uniform float uAlphaA;
+uniform float uAlphaB;
+vec4 A(vec2 uv) { vec4 c = fitA(uv); return vec4(c.rgb, c.a * uAlphaA); }
+vec4 B(vec2 uv) { vec4 c = fitB(uv); return vec4(c.rgb, c.a * uAlphaB); }
+vec4 Ap(vec2 p) { return A(p / uFrame); }
+vec4 Bp(vec2 p) { return B(p / uFrame); }
+vec4 C4(float v) { return vec4(vec3(v), 1.0); }
+vec4 mixx(vec4 a, vec4 b, float m) { return a * m + b * (1.0 - m); }` : `// En las transiciones (opacas, como xfade en yuv420p) se pierde el alfa: fuera de la imagen panorámica, negro.
 vec3 A(vec2 uv) { return fitA(uv).rgb; }
 vec3 B(vec2 uv) { return fitB(uv).rgb; }
 vec3 Ap(vec2 p) { return A(p / uFrame); }
 vec3 Bp(vec2 p) { return B(p / uFrame); }
-vec3 mixx(vec3 a, vec3 b, float m) { return a * m + b * (1.0 - m); }
+vec3 mixx(vec3 a, vec3 b, float m) { return a * m + b * (1.0 - m); }`}
 float frand(vec2 p) { return fract(sin(p.x * 12.9898 + p.y * 78.233) * 43758.545); }
 
 ${transition === null ? `
 void main() {
   vec4 c = fitA(vUv);
+  float a = c.a * uOpacity;
+  outColor = vec4(c.rgb * a, a);
+}` : edge ? `
+vec4 transition(vec2 uv) {
+  float P = uP;
+  vec2 F = uFrame;
+  vec2 px = uv * F;
+  float x = px.x, y = px.y, W = F.x, H = F.y;
+  ${transition.replaceAll('vec3(', 'C4(')}
+}
+
+void main() {
+  vec4 c = transition(vUv);
   float a = c.a * uOpacity;
   outColor = vec4(c.rgb * a, a);
 }` : `
@@ -138,12 +161,52 @@ vec3 transition(vec2 uv) {
 }
 
 void main() {
-  outColor = vec4(transition(vUv), 1.0); // como xfade en yuv420p: la transición es opaca
+  outColor = vec4(transition(vUv), 1.0) * uOpacity; // como xfade en yuv420p: opaca (salvo la envolvente de opacidad)
 }`}`;
+
+// Modos de fusión de pista: la capa (B, con su alfa) se mezcla con lo que hay debajo (A) con las fórmulas del
+// filtro blend de FFmpeg (libavfilter/blend_modes.c, entradas [debajo][capa]) y el resultado se pone encima con el
+// alfa de la capa: A + alfa·(f(A, B) − A), como hace el render. Los ids son los de BLEND_MODES (state/project.js).
+const BLEND_CODE = {
+  multiply: 'A * B',
+  screen: '1.0 - (1.0 - A) * (1.0 - B)',
+  overlay: 'mix(2.0 * A * B, 1.0 - 2.0 * (1.0 - A) * (1.0 - B), step(128.0 / 255.0, A))',
+  hardlight: 'mix(2.0 * A * B, 1.0 - 2.0 * (1.0 - A) * (1.0 - B), step(128.0 / 255.0, B))',
+  darken: 'min(A, B)',
+  lighten: 'max(A, B)',
+  addition: 'min(vec3(1.0), A + B)',
+  subtract: 'max(vec3(0.0), A - B)',
+  difference: 'abs(A - B)',
+};
+const BLEND_IDS = Object.keys(BLEND_CODE);
+const BLEND_FRAGMENT = `#version 300 es
+precision highp float;
+out vec4 outColor;
+uniform sampler2D uBase;
+uniform sampler2D uLayer;
+uniform vec2 uSize;
+uniform int uMode;
+vec3 blendf(vec3 A, vec3 B) {
+${BLEND_IDS.map((id, i) => `  if (uMode == ${i}) return ${BLEND_CODE[id]};`).join('\n')}
+  return B;
+}
+void main() {
+  vec2 uv = gl_FragCoord.xy / uSize;
+  vec3 base = texture(uBase, uv).rgb;
+  vec4 l = texture(uLayer, uv);
+  vec3 top = l.a > 0.0 ? l.rgb / l.a : vec3(0.0);
+  outColor = vec4(mix(base, clamp(blendf(base, top), 0.0, 1.0), l.a), 1.0);
+}`;
+const COPY_FRAGMENT = `#version 300 es
+precision highp float;
+out vec4 outColor;
+uniform sampler2D uBase;
+uniform vec2 uSize;
+void main() { outColor = texture(uBase, gl_FragCoord.xy / uSize); }`;
 
 const UNIFORMS = [
   'uA', 'uB', 'uScaleA', 'uScaleB', 'uHasA', 'uHasB', 'uFrame', 'uP', 'uOpacity',
-  'uPanA', 'uPanB', 'uCropA', 'uCropB', 'uOutA', 'uOutB',
+  'uPanA', 'uPanB', 'uCropA', 'uCropB', 'uOutA', 'uOutB', 'uAlphaA', 'uAlphaB',
 ];
 
 // Pasadas de efectos: dibujan en un búfer del tamaño de la imagen encajada, con la fila 0 arriba
@@ -248,19 +311,21 @@ export class Compositor {
     return { tex: entry.tex, w, h };
   }
 
-  // Programa de composición para las capas normales (null) o para una transición (su índice).
-  programFor(type) {
-    let entry = this.programs.get(type);
+  // Programa de composición para las capas normales (null) o para una transición (su índice; edge: la de un
+  // fundido hacia lo de debajo).
+  programFor(type, edge = false) {
+    const key = edge ? `edge${type}` : type;
+    let entry = this.programs.get(key);
     if (!entry) {
       const gl = this.gl;
-      const program = link(gl, VERTEX, fragmentSource(type === null ? null : transitionCode(type)));
+      const program = link(gl, VERTEX, fragmentSource(type === null ? null : transitionCode(type), edge));
       const u = {};
       for (const name of UNIFORMS) u[name] = gl.getUniformLocation(program, name);
       gl.useProgram(program);
       gl.uniform1i(u.uA, 0);
       gl.uniform1i(u.uB, 1);
       entry = { program, u };
-      this.programs.set(type, entry);
+      this.programs.set(key, entry);
     }
     return entry;
   }
@@ -368,9 +433,68 @@ void main() { outColor = fx(vUv); }`;
     return { tex: this.applyEffects(src.tex, effects, w, h), scale };
   }
 
-  // layers: de abajo a arriba. { a, opacity, fxA, panA } o { a, b, type (índice), progress (P de xfade), fxA, fxB, panA, panB }.
-  // fxA/fxB: efectos activos de cada evento (activeEffects). panA/panB: panorámica en ese instante
-  // ({ x, y, scale, rotation (grados), crop }) o null si no cambia nada.
+  // Programa auxiliar (fusión o copia) que lee texturas del tamaño del lienzo por gl_FragCoord.
+  auxProgram(key, fragment) {
+    this.aux ||= new Map();
+    let entry = this.aux.get(key);
+    if (!entry) {
+      const gl = this.gl;
+      const program = link(gl, VERTEX, fragment);
+      const u = {};
+      for (const name of ['uBase', 'uLayer', 'uSize', 'uMode']) u[name] = gl.getUniformLocation(program, name);
+      entry = { program, u };
+      this.aux.set(key, entry);
+    }
+    return entry;
+  }
+
+  // Dibuja una capa en el búfer actual (con la mezcla de colores premultiplicados activada).
+  drawLayer(frame, { layer, a, b }) {
+    const gl = this.gl;
+    const { edge } = layer;
+    if (edge) b = a; // la misma imagen a los dos lados (uno transparente)
+    const transition = layer.b !== undefined || !!edge;
+    const { program, u } = edge ? this.programFor(edge.type, true) : this.programFor(transition ? layer.type : null);
+    gl.useProgram(program);
+    gl.uniform2f(u.uFrame, frame.width, frame.height);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, a ? a.tex : null);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, b ? b.tex : null);
+    gl.uniform1i(u.uHasA, a ? 1 : 0);
+    gl.uniform1i(u.uHasB, b ? 1 : 0);
+    if (a) gl.uniform2f(u.uScaleA, ...a.scale);
+    if (b) gl.uniform2f(u.uScaleB, ...b.scale);
+    gl.uniform1f(u.uP, edge ? edge.progress : transition ? layer.progress : 1);
+    gl.uniform1f(u.uOpacity, layer.opacity ?? 1);
+    if (edge) {
+      gl.uniform1f(u.uAlphaA, edge.side === 'in' ? 0 : 1);
+      gl.uniform1f(u.uAlphaB, edge.side === 'in' ? 1 : 0);
+    }
+    this.setPan(u, 'A', layer.panA);
+    this.setPan(u, 'B', edge ? layer.panA : layer.panB);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  // Pasada a pantalla completa con un programa auxiliar: base (unidad 0) y capa (unidad 1).
+  auxPass(entry, base, layerTex = null, mode = 0) {
+    const gl = this.gl;
+    gl.useProgram(entry.program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, base);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, layerTex);
+    gl.uniform1i(entry.u.uBase, 0);
+    if (entry.u.uLayer) gl.uniform1i(entry.u.uLayer, 1);
+    if (entry.u.uMode) gl.uniform1i(entry.u.uMode, mode);
+    gl.uniform2f(entry.u.uSize, this.canvas.width, this.canvas.height);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  // layers: de abajo a arriba. { a, opacity, blend, fxA, panA } o { a, b, type (índice), progress (P de xfade),
+  // opacity, blend, fxA, fxB, panA, panB }. fxA/fxB: efectos activos de cada evento (activeEffects). panA/panB:
+  // panorámica en ese instante ({ x, y, scale, rotation (grados), crop }) o null si no cambia nada. blend: modo
+  // de fusión de la pista ('normal' o un id de BLEND_CODE).
   render(frame, layers) {
     const gl = this.gl;
     for (const t of this.pool) t.used = false;
@@ -380,29 +504,44 @@ void main() { outColor = fx(vUv); }`;
       b: layer.b !== undefined ? this.prepare(layer.b, layer.fxB, frame) : null,
     }));
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    // Con algún modo de fusión se compone en búferes intermedios (hay que leer lo que queda debajo); si no,
+    // directamente en el lienzo.
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const blended = prepared.some((p) => BLEND_CODE[p.layer.blend]);
+    let acc = blended ? this.acquire(W, H) : null;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, acc ? acc.fbo : null);
+    gl.viewport(0, 0, W, H);
     gl.enable(gl.BLEND);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    for (const { layer, a, b } of prepared) {
-      const transition = layer.b !== undefined;
-      const { program, u } = this.programFor(transition ? layer.type : null);
-      gl.useProgram(program);
-      gl.uniform2f(u.uFrame, frame.width, frame.height);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, a ? a.tex : null);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, b ? b.tex : null);
-      gl.uniform1i(u.uHasA, a ? 1 : 0);
-      gl.uniform1i(u.uHasB, b ? 1 : 0);
-      if (a) gl.uniform2f(u.uScaleA, ...a.scale);
-      if (b) gl.uniform2f(u.uScaleB, ...b.scale);
-      gl.uniform1f(u.uP, transition ? layer.progress : 1);
-      gl.uniform1f(u.uOpacity, transition ? 1 : layer.opacity);
-      this.setPan(u, 'A', layer.panA);
-      this.setPan(u, 'B', layer.panB);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    for (const p of prepared) {
+      const mode = BLEND_IDS.indexOf(p.layer.blend);
+      if (mode < 0) {
+        this.drawLayer(frame, p);
+        continue;
+      }
+      // La capa sola (premultiplicada, sobre transparente) y después la fusión con lo de debajo.
+      const layerBuf = this.acquire(W, H);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, layerBuf.fbo);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.drawLayer(frame, p);
+      const next = this.acquire(W, H);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, next.fbo);
+      gl.disable(gl.BLEND);
+      this.auxPass(this.auxProgram('blend', BLEND_FRAGMENT), acc.tex, layerBuf.tex, mode);
+      gl.enable(gl.BLEND);
+      gl.clearColor(0, 0, 0, 1);
+      layerBuf.busy = false;
+      acc.busy = false;
+      acc = next;
+    }
+    if (acc) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.disable(gl.BLEND);
+      this.auxPass(this.auxProgram('copy', COPY_FRAGMENT), acc.tex);
+      gl.enable(gl.BLEND);
     }
 
     // Los búferes quedan libres para el siguiente fotograma; los que no se han usado se borran.

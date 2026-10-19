@@ -4,14 +4,14 @@ import TextOverlay from './TextOverlay.jsx';
 import PanOverlay from './PanOverlay.jsx';
 import { mediaUrl, frameNumber, formatTimecode } from '../util/time.js';
 import {
-  eventPeak, fadeFactor, fitSize, formatFps, isTrackActive, resolveTimeline, sourceTime, volumeToGain,
+  edgeAt, eventPeak, fadeFactor, fitSize, formatFps, isTrackActive, resolveTimeline, sourceTime, volumeToGain,
 } from '../state/project.js';
 import { transitionInfo } from '../state/transitions.js';
 import { EFFECTS, activeEffects } from '../state/effects.js';
 import { Compositor } from '../preview/compositor.js';
 import { drawText, isText } from '../state/text.js';
 import { NO_CROP, panActive, panAt } from '../state/pan.js';
-import { trackMixAt } from '../state/envelopes.js';
+import { trackMixAt, trackOpacityAt } from '../state/envelopes.js';
 import { hasRamp, speedAt } from '../state/speed.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
 import { setMeterEngine } from '../preview/meters.js';
@@ -30,7 +30,8 @@ export function panLayer(e, t) {
 }
 
 // Capas de video en t, de abajo a arriba. En cada pista activa: la transición en curso o,
-// si no hay, el evento que empieza más tarde con la opacidad de sus fundidos.
+// si no hay, el evento que empieza más tarde con la opacidad de sus fundidos. La envolvente de opacidad de la
+// pista multiplica la de las dos; blend = modo de fusión de la pista.
 function videoLayers(project, mediaById, resolved, eventsById, t) {
   const usable = (e) => {
     const m = e && mediaById.get(e.mediaId);
@@ -39,12 +40,15 @@ function videoLayers(project, mediaById, resolved, eventsById, t) {
   const layers = [];
   const tracks = project.tracks.filter((tr) => tr.type === 'video' && isTrackActive(tr, project.tracks)).reverse();
   for (const track of tracks) {
+    const level = trackOpacityAt(track, t);
+    const blend = track.blend || 'normal';
+    if (level <= 0) continue;
     const tr = resolved.transitions.find((x) => x.trackId === track.id && x.start <= t && t < x.start + x.duration);
     if (tr) {
       const from = eventsById.get(tr.from);
       const to = eventsById.get(tr.to);
       if (usable(from) && usable(to)) {
-        layers.push({ from, to, type: transitionInfo(tr.type).index, progress: 1 - (t - tr.start) / tr.duration });
+        layers.push({ from, to, type: transitionInfo(tr.type).index, progress: 1 - (t - tr.start) / tr.duration, opacity: level, blend });
         continue;
       }
     }
@@ -53,8 +57,11 @@ function videoLayers(project, mediaById, resolved, eventsById, t) {
       if (e.trackId === track.id && e.start <= t && t < e.start + e.duration && (!best || e.start >= best.start)) best = e;
     }
     if (!usable(best)) continue;
-    const opacity = fadeFactor(best, t, resolved.fades.get(best.id));
-    if (opacity > 0) layers.push({ event: best, opacity });
+    const fades = resolved.fades.get(best.id);
+    const opacity = fadeFactor(best, t, fades) * level;
+    // Fundido con transición: hacia lo que hay debajo (ver edgeAt).
+    const edge = fades && edgeAt(t - best.start, best.duration, fades);
+    if (opacity > 0) layers.push({ event: best, opacity, blend, edge: edge && { ...edge, type: transitionInfo(edge.type).index } });
   }
   return layers;
 }
@@ -263,12 +270,14 @@ export default function Preview({
 
     draw.current.layers = layers.map((l) =>
       l.event
-        ? { a: sourceFor(l.event, false), opacity: l.opacity, fxA: activeEffects(l.event.effects, time - l.event.start), panA: panLayer(l.event, time) }
+        ? { a: sourceFor(l.event, false), opacity: l.opacity, blend: l.blend, edge: l.edge, fxA: activeEffects(l.event.effects, time - l.event.start), panA: panLayer(l.event, time) }
         : {
           a: sourceFor(l.from, false),
           b: sourceFor(l.to, false),
           type: l.type,
           progress: l.progress,
+          opacity: l.opacity,
+          blend: l.blend,
           fxA: activeEffects(l.from.effects, time - l.from.start),
           fxB: activeEffects(l.to.effects, time - l.to.start),
           panA: panLayer(l.from, time),

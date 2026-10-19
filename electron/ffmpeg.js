@@ -147,10 +147,10 @@ function curveFade(curve, start, d, out) {
 }
 function videoFades(e) {
   const out = [];
-  if (e.fadeIn > 0) {
+  if (e.fadeIn > 0 && !e.transIn) {
     out.push(CURVE_EXPR[e.curveIn] ? curveFade(e.curveIn, 0, e.fadeIn, false) : `fade=t=in:st=0:d=${num(e.fadeIn)}:alpha=1`);
   }
-  if (e.fadeOut > 0) {
+  if (e.fadeOut > 0 && !e.transOut) {
     const st = e.duration - e.fadeOut;
     out.push(CURVE_EXPR[e.curveOut] ? curveFade(e.curveOut, st, e.fadeOut, true) : `fade=t=out:st=${num(st)}:d=${num(e.fadeOut)}:alpha=1`);
   }
@@ -314,7 +314,8 @@ function buildRender(project, settings, outPath) {
     ? []
     : [`color=c=black:s=${W}x${H}:r=${fps}:d=${num(duration)}${firstFrame ? `,setpts=PTS+${firstFrame}` : ''}[base]`];
   let last = 'base';
-  let n = 0;
+  let n = 0; // entradas (-i)
+  let tag = 0; // etiquetas propias de los fundidos con transición, la opacidad y los modos de fusión
 
   const frameSpan = (start, dur) => {
     const first = Math.ceil(start * rate - 1e-6);
@@ -416,6 +417,84 @@ function buildRender(project, settings, outPath) {
     last = out;
   };
 
+  // Fundidos con transición (e.transIn / e.transOut: id de xfade, ver edgeAt en src/state/project.js): xfade
+  // entre el evento y una copia suya transparente (mismo color, alfa 0), en yuva420p, así que la transición
+  // descubre lo que hay debajo. label: el evento con sus efectos y fundidos (count fotogramas desde el primero,
+  // first); devuelve la etiqueta del resultado. En la salida, el desfase d0 (el evento puede empezar entre dos
+  // fotogramas) entra en el offset y el progreso coincide con el de la vista previa.
+  const edgeTransitions = (label, e, first, count) => {
+    if (!e.transIn && !e.transOut) return label;
+    const k = tag++;
+    let cur = `ed${k}`;
+    filters.push(`[${label}]format=yuva420p[${cur}]`);
+    if (e.transIn) {
+      filters.push(
+        `[${cur}]split[ei${k}a][ei${k}b]`,
+        `[ei${k}b]lutyuv=a=0[ei${k}t]`,
+        `[ei${k}t][ei${k}a]xfade=transition=${e.transIn}:duration=${num(e.fadeIn)}:offset=0,trim=end_frame=${count}[ei${k}]`,
+      );
+      cur = `ei${k}`;
+    }
+    if (e.transOut) {
+      const d0 = first / rate - e.start;
+      const off = Math.max(0, e.duration - e.fadeOut - d0);
+      const offFrame = Math.ceil(off * rate - 1e-6);
+      filters.push(
+        `[${cur}]split[eo${k}a][eo${k}b]`,
+        `[eo${k}b]trim=start_frame=${offFrame},setpts=PTS-STARTPTS,lutyuv=a=0[eo${k}t]`,
+        `[eo${k}a][eo${k}t]xfade=transition=${e.transOut}:duration=${num(e.fadeOut)}:offset=${num(off)},trim=end_frame=${count}[eo${k}]`,
+      );
+      cur = `eo${k}`;
+    }
+    return cur;
+  };
+
+  // Envolvente de opacidad de la pista (track.opacity: expresión en función de @T@, el tiempo de la línea de
+  // tiempo) en un fragmento ya colocado (label, fotogramas first … first+count−1): una máscara gris con el
+  // factor de cada fotograma (geq en un cuadro de 2×2, calculado con el instante de ese fotograma, y escalada)
+  // multiplica el alfa. Devuelve la etiqueta del resultado. (No con sendcmd: los comandos llegan al filtro antes
+  // que los fotogramas que aún esperan en la cola y el valor se adelanta.)
+  const applyLevel = (label, track, first, count) => {
+    if (!track.opacity) return label;
+    const k = tag++;
+    const expr = track.opacity.replaceAll('@T@', 'T');
+    filters.push(
+      `color=c=black:s=2x2:r=${fps}:d=${num((count + 1) / rate)},setpts=PTS-STARTPTS+${first},format=gray,` +
+        `geq=lum='round(255*(${expr}))',scale=${W}:${H}:flags=neighbor,trim=end_frame=${count}[lm${k}]`,
+      `[${label}]format=yuva420p,split[lv${k}][lw${k}]`,
+      `[lw${k}]alphaextract[la${k}]`,
+      `[la${k}][lm${k}]blend=all_mode=multiply[lb${k}]`,
+      `[lv${k}][lb${k}]alphamerge[lo${k}]`,
+    );
+    return `lo${k}`;
+  };
+
+  // Superpone un fragmento colocado con el modo de fusión de su pista (track.blend): fuera de 'normal', el trozo
+  // de lo de debajo y la capa pasan a RGB (BT.601 de rango limitado en los dos sentidos, así lo que no cambia
+  // vuelve igual), blend los mezcla ([debajo][capa], como el compositor de la vista previa) y el resultado se
+  // pone encima con el alfa de la capa. Solo en los fotogramas first … first+count−1.
+  const compositeAt = (label, first, count, mode) => {
+    if (!mode || mode === 'normal') {
+      overlayAt(label, first, count);
+      return;
+    }
+    const k = tag++;
+    const from = ((first - 0.5) / rate).toFixed(6);
+    const to = ((first + count - 0.5) / rate).toFixed(6);
+    const toRgb = 'scale=in_color_matrix=bt601:in_range=tv';
+    filters.push(
+      `[${last}]split[bk${k}][bu${k}]`,
+      `[bu${k}]trim=start=${from}:end=${to},${toRgb},format=gbrp[bb${k}]`,
+      `[${label}]trim=start=${from}:end=${to},${toRgb},format=gbrap,split[lc${k}][la${k}]`,
+      `[lc${k}]format=gbrp[lr${k}]`,
+      `[bb${k}][lr${k}]blend=all_mode=${mode}[bm${k}]`,
+      `[la${k}]alphaextract[lal${k}]`,
+      `[bm${k}][lal${k}]alphamerge,scale=out_color_matrix=bt601:out_range=tv,format=yuva420p[bl${k}]`,
+    );
+    last = `bk${k}`;
+    overlayAt(`bl${k}`, first, count);
+  };
+
   // Transiciones de video: se dibujan encima del evento que entra, dentro de su misma pista.
   const usableIds = new Set(usable.map((e) => e.id));
   const eventsById = new Map(project.events.map((e) => [e.id, e]));
@@ -430,11 +509,16 @@ function buildRender(project, settings, outPath) {
     .filter((e) => tracks.get(e.trackId).type === 'video')
     .sort((a, b) => tracks.get(b.trackId).index - tracks.get(a.trackId).index || a.start - b.start);
   for (const e of videoEvents) {
+    const track = tracks.get(e.trackId);
     const v = addVideoInput(media.get(e.mediaId), e, e.start, e.duration);
-    filters.push(`${v.chain}${videoFades(e)},${placeAt(v.first)}[v${v.i}]`);
-    overlayAt(`v${v.i}`, v.first, v.count);
-
+    filters.push(`${v.chain}${videoFades(e)}[vf${v.i}]`);
+    filters.push(`[${edgeTransitions(`vf${v.i}`, e, v.first, v.count)}]${placeAt(v.first)}[v${v.i}]`);
     const tr = transitionInto.get(e.id);
+    // Con modo de fusión, los fotogramas de la transición de entrada no se mezclan dos veces: el evento se
+    // superpone desde que acaba la transición.
+    const skip = tr && track.blend && track.blend !== 'normal' ? Math.min(v.count - 1, frameSpan(tr.start, tr.duration).count) : 0;
+    compositeAt(applyLevel(`v${v.i}`, track, v.first, v.count), v.first + skip, v.count - skip, track.blend);
+
     if (tr) {
       // Final del evento que sale y principio del que entra, mezclados con xfade.
       const from = eventsById.get(tr.from);
@@ -446,7 +530,7 @@ function buildRender(project, settings, outPath) {
         `[ta${a.i}][tb${b.i}]xfade=transition=${tr.type}:duration=${(b.count / rate).toFixed(6)}:offset=0,` +
           `trim=end_frame=${b.count},${placeAt(b.first)}[tr${b.i}]`,
       );
-      overlayAt(`tr${b.i}`, b.first, b.count);
+      compositeAt(applyLevel(`tr${b.i}`, track, b.first, b.count), b.first, b.count, track.blend);
     }
   }
   if (!format.audioOnly) {

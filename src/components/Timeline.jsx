@@ -4,7 +4,7 @@ import Icon from './Icon.jsx';
 import Meter from './Meter.jsx';
 import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
-  EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, moveTrack,
+  BLEND_MODES, EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, moveTrack,
   markPoints, updateMark, gainToVolume, isTrackActive,
   fadeCurve, overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain, scaleFxKeys, shiftFxKeys,
 } from '../state/project.js';
@@ -13,7 +13,9 @@ import {
   MAX_SPEED, MIN_SPEED, addSpeedPoint, hasRamp, localForSource, moveSpeedPoint, rampAt, removeSpeedPoint, scaleSpeedTime, shiftSpeed,
   sourceOffset,
 } from '../state/speed.js';
-import { ENVELOPE_KINDS, ENVELOPE_MAX_DB, addEnvelopePoint, envelopeValueAt } from '../state/envelopes.js';
+import {
+  ENVELOPE_CURVES, ENVELOPE_KINDS, ENVELOPE_MAX_DB, addEnvelopePoint, envelopeAt, envelopeKinds, envelopeValueAt, setEnvelopeCurve,
+} from '../state/envelopes.js';
 import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
 import { isText } from '../state/text.js';
 import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
@@ -194,6 +196,19 @@ function keyTimes(ev) {
 
 const HANDLE_TITLE = 'Arrastra para recortar (Ctrl: cambiar la velocidad, como en VEGAS)';
 
+// Fundido con transición hacia la pista de debajo: el nombre de la transición en la esquina del fundido.
+function FadeTransition({ side, width, height, label }) {
+  return (
+    <div
+      className={`fade-transition ${side}`}
+      style={{ top: TITLE_H, width, height }}
+      title={`${side === 'in' ? 'Entrada' : 'Salida'} con transición: ${label} (clic derecho sobre el fundido: quitarla)`}
+    >
+      {width > 30 && <span>{label}</span>}
+    </div>
+  );
+}
+
 // Zona de solapamiento al principio del evento que entra: aspa de la transición y su nombre.
 function TransitionZone({ width, height, label, onReset }) {
   return (
@@ -250,7 +265,7 @@ function SpeedEnvelope({ ev, width, height, pps, onPointDown, onLineDouble, onPo
 // fadeIn/fadeOut: fundidos efectivos (en audio incluyen los fundidos cruzados de los solapamientos).
 // overlapIn/overlapOut: segundos solapados con el evento anterior/siguiente de la pista.
 const EventView = memo(function EventView({
-  ev, media, type, selected, pps, fadeIn, fadeOut, curveIn, curveOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onPan, onDouble,
+  ev, media, type, selected, pps, fadeIn, fadeOut, curveIn, curveOut, transIn, transOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onPan, onDouble,
   onSpeedPointDown, onSpeedLineDouble, onSpeedPointMenu,
 }) {
   const width = Math.max(3, ev.duration * pps);
@@ -350,6 +365,8 @@ const EventView = memo(function EventView({
           onPointDown={onSpeedPointDown} onLineDouble={onSpeedLineDouble} onPointMenu={onSpeedPointMenu}
         />
       )}
+      {transIn && fadeIn > 0 && <FadeTransition side="in" width={fadeIn * pps} height={height} label={transitionLabel(transIn)} />}
+      {transOut && fadeOut > 0 && <FadeTransition side="out" width={fadeOut * pps} height={height} label={transitionLabel(transOut)} />}
       {overlapIn > 0 && (
         <TransitionZone
           width={Math.min(width, overlapIn * pps)}
@@ -397,32 +414,57 @@ function RegionShade({ region, pps }) {
   return <div className="region-shade" style={{ left: region.start * pps, width: (region.end - region.start) * pps }} />;
 }
 
-// Envolventes de la pista (volumen en azul, panorámica en rojo) dibujadas sobre todo el alto de la pista.
-// Volumen: 0 dB a un 70 % de la altura desde abajo, +6 dB arriba y −∞ abajo (escala de raíz cuadrada de la
-// ganancia, como un fader). Panorámica: izquierda arriba, centro en medio y derecha abajo, como en VEGAS.
+// Envolventes de la pista (volumen y opacidad en azul, panorámica en rojo) dibujadas sobre todo el alto de la
+// pista. Volumen: 0 dB a un 70 % de la altura desde abajo, +6 dB arriba y −∞ abajo (escala de raíz cuadrada de
+// la ganancia, como un fader). Panorámica: izquierda arriba, centro en medio y derecha abajo, como en VEGAS.
+// Opacidad: 100 % arriba y 0 % abajo.
 const ENV_PAD = 4;
 const maxGain = 10 ** (ENVELOPE_MAX_DB / 20);
-export function envelopeY(kind, v, h) {
+// Altura de un valor en las unidades de envelopeAt (ganancia lineal para el volumen).
+function unitY(kind, u, h) {
   const inner = h - ENV_PAD * 2;
-  const f = kind === 'volume' ? Math.sqrt(Math.min(maxGain, volumeToGain(v)) / maxGain) : (1 - v) / 2;
+  const f = kind === 'volume' ? Math.sqrt(Math.min(maxGain, u) / maxGain) : kind === 'opacity' ? u : (1 - u) / 2;
   return ENV_PAD + (1 - f) * inner;
 }
+export const envelopeY = (kind, v, h) => unitY(kind, kind === 'volume' ? volumeToGain(v) : v, h);
 export function envelopeValue(kind, y, h) {
   const f = Math.min(1, Math.max(0, 1 - (y - ENV_PAD) / (h - ENV_PAD * 2)));
   if (kind === 'pan') return Math.round((1 - 2 * f) * 100) / 100;
+  if (kind === 'opacity') return Math.round(f * 100) / 100;
   const g = f * f * maxGain;
   return g <= volumeToGain(MIN_VOLUME_DB) ? MIN_VOLUME_DB : Math.round(20 * Math.log10(g) * 10) / 10;
 }
 export const formatPan = (v) => (Math.abs(v) < 0.005 ? 'Centro' : `${Math.round(Math.abs(v) * 100)} % ${v < 0 ? 'I' : 'D'}`);
-const formatEnv = (kind, v) => (kind === 'volume' ? formatVolume(v) : formatPan(v));
+const formatEnv = (kind, v) => (kind === 'volume' ? formatVolume(v) : kind === 'opacity' ? `${Math.round(v * 100)} %` : formatPan(v));
+
+// Línea de la envolvente en píxeles: los tramos con curva se dibujan a pasos (los de volumen, también los
+// lineales: van en amplitud y la escala no lo es); «mantener» es un escalón.
+function envelopePath(pts, kind, pps, laneWidth, height) {
+  const coords = pts.map((p) => [p.t * pps, envelopeY(kind, p.v, height)]);
+  const line = [[0, coords[0][1]], coords[0]];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    if (a.c === 'hold') {
+      line.push([coords[i + 1][0], coords[i][1]]);
+    } else if ((a.c && a.c !== 'linear') || kind === 'volume') {
+      const STEPS = Math.max(2, Math.min(24, Math.ceil((coords[i + 1][0] - coords[i][0]) / 3)));
+      for (let k = 1; k < STEPS; k++) {
+        const t = a.t + ((b.t - a.t) * k) / STEPS;
+        line.push([t * pps, unitY(kind, envelopeAt(pts, kind, t), height)]);
+      }
+    }
+    line.push(coords[i + 1]);
+  }
+  line.push([laneWidth, coords[coords.length - 1][1]]);
+  return { coords, d: line.map((c) => c.join(',')).join(' ') };
+}
 
 function EnvelopeLines({ track, pps, laneWidth, height, onPointDown, onLineDouble, onPointMenu }) {
   const env = track.envelopes || {};
-  return ['volume', 'pan'].filter((kind) => env[kind]?.length).map((kind) => {
+  return envelopeKinds(track.type).filter((kind) => env[kind]?.length).map((kind) => {
     const pts = env[kind];
-    const coords = pts.map((p) => [p.t * pps, envelopeY(kind, p.v, height)]);
-    const line = [[0, coords[0][1]], ...coords, [laneWidth, coords[coords.length - 1][1]]];
-    const d = line.map((c) => c.join(',')).join(' ');
+    const { coords, d } = envelopePath(pts, kind, pps, laneWidth, height);
     return (
       <svg key={kind} className={`track-envelope ${kind}`} width={laneWidth} height={height}>
         <polyline className="env-hit" points={d} onDoubleClick={(e) => onLineDouble(e, track.id, kind)}>
@@ -579,6 +621,14 @@ const TrackRow = memo(function TrackRow({
               <Icon name="close" size={11} />
             </button>
           </div>
+          {track.type === 'video' && (
+            <label className="track-slider track-blend" title="Modo de fusión con las pistas de debajo" onPointerDown={(e) => e.stopPropagation()}>
+              <span className="slider-label">Fusión:</span>
+              <select value={track.blend || 'normal'} onChange={(e) => update({ blend: e.target.value === 'normal' ? undefined : e.target.value })}>
+                {BLEND_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </label>
+          )}
           {track.type === 'audio' && (
             <>
               <VolumeSlider value={track.volume ?? 0} onChange={(volume, record) => update({ volume }, record)} />
@@ -612,6 +662,8 @@ const TrackRow = memo(function TrackRow({
               fadeOut={fades.fadeOut}
               curveIn={fades.curveIn}
               curveOut={fades.curveOut}
+              transIn={fades.transIn}
+              transOut={fades.transOut}
               overlapIn={inc ? inc.duration : 0}
               overlapOut={resolved.outgoing.get(ev.id)?.duration ?? 0}
               transition={inc ? ev.transition : null}
@@ -636,12 +688,12 @@ const TrackRow = memo(function TrackRow({
             ● Grabando
           </div>
         )}
-        {track.type === 'audio' && track.envelopes && (
+        {track.envelopes && (
           <EnvelopeLines
             track={track}
             pps={pps}
             laneWidth={laneWidth}
-            height={TRACK_H.audio}
+            height={TRACK_H[track.type]}
             onPointDown={onEnvPointDown}
             onLineDouble={onEnvLineDouble}
             onPointMenu={onEnvPointMenu}
@@ -1134,7 +1186,32 @@ const Timeline = forwardRef(function Timeline({
       if (!track || track.type !== 'video') {
         onMessage('Las transiciones se colocan en pistas de video. En audio, los solapamientos ya son fundidos cruzados.');
       } else if (!overlapAt(p, target, at)) {
-        onMessage('Para crear una transición, solapa el final de un evento con el principio de otro en la misma pista y suéltala sobre el solapamiento.');
+        // Sin solapamiento: transición del fundido de entrada o de salida del evento (hacia la pista de debajo).
+        const ev = p.events
+          .filter((x) => x.trackId === target && x.start <= at && at < x.start + x.duration)
+          .sort((a, b) => b.start - a.start)[0];
+        const res = resolveTimeline(p);
+        const f = ev && res.fades.get(ev.id);
+        if (!ev) {
+          onMessage('Suelta la transición sobre el solapamiento de dos eventos o sobre el principio o el final de un evento (para entrar o salir hacia la pista de debajo).');
+          return;
+        }
+        const local = at - ev.start;
+        const side = f.fadeIn > 0 && local < f.fadeIn ? 'in'
+          : f.fadeOut > 0 && local > ev.duration - f.fadeOut ? 'out' : local < ev.duration / 2 ? 'in' : 'out';
+        if (side === 'in' ? res.incoming.has(ev.id) : res.outgoing.has(ev.id)) {
+          onMessage('Ese borde ya tiene una transición con otro evento.');
+          return;
+        }
+        const fadeKey = side === 'in' ? 'fadeIn' : 'fadeOut';
+        const length = f[fadeKey] > 0 ? f[fadeKey] : Math.min(1, ev.duration / 2);
+        setProject((cur) => ({
+          ...cur,
+          events: cur.events.map((x) => (x.id === ev.id
+            ? { ...x, [fadeKey]: length, [side === 'in' ? 'fadeInTransition' : 'fadeOutTransition']: transition }
+            : x)),
+        }));
+        onMessage(`${transitionLabel(transition)} en el fundido de ${side === 'in' ? 'entrada' : 'salida'}. Arrastra la esquina del evento para cambiar su duración.`);
       } else {
         setProject((cur) => setTransitionAt(cur, target, at, transition));
         onMessage('');
@@ -1213,7 +1290,7 @@ const Timeline = forwardRef(function Timeline({
     const move = (me) => {
       const t = Math.min(hi, Math.max(lo, snapTime(timeAt(me.clientX), me.shiftKey)));
       const v = envelopeValue(kind, me.clientY - row.top, row.height);
-      setEnvelope(trackId, kind, (pts) => pts.map((p, i) => (i === index ? { t, v } : p)), first);
+      setEnvelope(trackId, kind, (pts) => pts.map((p, i) => (i === index ? { ...p, t, v } : p)), first);
       first = false;
       onMessage(`${ENVELOPE_KINDS[kind].name}: ${formatEnv(kind, v)} en ${formatTimecode(t, live.current.project.settings.fps)}`);
     };
@@ -1308,9 +1385,17 @@ const Timeline = forwardRef(function Timeline({
           disabled: points.length < 2,
         },
         {
-          label: kind === 'volume' ? 'Poner a 0 dB' : 'Poner en el centro',
-          action: () => setEnvelope(trackId, kind, (pts) => pts.map((p, i) => (i === index ? { ...p, v: 0 } : p))),
+          label: { volume: 'Poner a 0 dB', pan: 'Poner en el centro', opacity: 'Poner a 100 %' }[kind],
+          action: () => setEnvelope(trackId, kind, (pts) => pts.map((p, i) => (i === index ? { ...p, v: ENVELOPE_KINDS[kind].initial } : p))),
         },
+        'separator',
+        // Curva del tramo que va de este punto al siguiente (como el menú de los puntos de VEGAS).
+        ...ENVELOPE_CURVES.map((c) => ({
+          label: `Curva: ${c.label.toLowerCase()}`,
+          checked: (points[index].c || 'linear') === c.id,
+          disabled: index >= points.length - 1,
+          action: () => setEnvelope(trackId, kind, (pts) => setEnvelopeCurve(pts, index, c.id)),
+        })),
         'separator',
         { label: `Quitar la envolvente de ${ENVELOPE_KINDS[kind].name.toLowerCase()}`, action: () => setEnvelope(trackId, kind, () => null) },
       ],
@@ -1328,17 +1413,30 @@ const Timeline = forwardRef(function Timeline({
       x: e.clientX,
       y: e.clientY,
       items: [
-        ...(track.type === 'audio'
+        ...envelopeKinds(track.type).map((kind) => ({
+          label: `Envolvente de ${ENVELOPE_KINDS[kind].name.toLowerCase()}`,
+          checked: !!env[kind],
+          action: () => toggle(kind),
+        })),
+        'separator',
+        // Modo de fusión de la pista de video con las de debajo (como el modo de composición de VEGAS).
+        ...(track.type === 'video'
           ? [
-            { label: 'Envolvente de volumen', checked: !!env.volume, action: () => toggle('volume') },
-            { label: 'Envolvente de panorámica', checked: !!env.pan, action: () => toggle('pan') },
+            ...BLEND_MODES.map((m) => ({
+              label: `Fusión: ${m.label.toLowerCase()}`,
+              checked: (track.blend || 'normal') === m.id,
+              action: () => setProject((p) => ({
+                ...p,
+                tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, blend: m.id === 'normal' ? undefined : m.id } : t)),
+              })),
+            })),
             'separator',
           ]
           : []),
         { label: 'Eliminar la pista', action: () => onDeleteTrackRef.current(trackId) },
       ],
     });
-  }, [onContextMenu, setEnvelope]);
+  }, [onContextMenu, setEnvelope, setProject]);
   const onDeleteTrackRef = useRef(null);
 
   const onUpdateTrack = useCallback((trackId, changes, record) => {

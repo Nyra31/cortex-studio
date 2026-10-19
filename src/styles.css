@@ -2001,3 +2001,39 @@ kbd {
   background: #e0574b;
   border-color: #ff8a80;
 }
+
+/* Modo de fusión de las pistas de video y envolvente de opacidad */
+.track-blend select {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  font-size: 11px;
+  background: #1b1b1b;
+  color: var(--text);
+  border: 1px solid #3a3a3a;
+  border-radius: 2px;
+}
+.track-envelope.opacity .env-line { stroke: #4da3ff; }
+.track-envelope.opacity .env-point { fill: #8cc6ff; }
+/* Fundido con transición hacia la pista de debajo */
+.fade-transition {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(135deg, rgba(255, 210, 122, 0.16) 0 4px, transparent 4px 8px);
+  overflow: hidden;
+}
+.fade-transition.in { left: 0; border-right: 1px dashed rgba(255, 210, 122, 0.6); }
+.fade-transition.out { right: 0; border-left: 1px dashed rgba(255, 210, 122, 0.6); }
+.fade-transition span {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: 2px;
+  font-size: 10px;
+  color: #ffd27a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px #000;
+}
