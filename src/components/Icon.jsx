@@ -37,6 +37,7 @@ const PATHS = {
   crop: <path d="M7 3v14h14M3 7h14v14" />,
   text: <path d="M5 5h14M12 5v14M9 19h6" />,
   fullscreen: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5M8 8h8v8H8z" />,
+  camera: <path d="M4 8h3l2-3h6l2 3h3v11H4zM12 10.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6z" />,
   record: <circle cx="12" cy="12" r="6.5" {...FILLED} />,
   keyboard: <path d="M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10" />,
 };

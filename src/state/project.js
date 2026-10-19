@@ -349,6 +349,40 @@ export function splitEvents(project, t, selection) {
   return { ...project, events: [...events, ...added] };
 }
 
+// Recortar hasta el cursor (Alt+[ / Alt+] de VEGAS): quita de los eventos indicados (y de su grupo) lo que hay
+// antes (side = 'start') o después ('end') del instante t. Solo cambian los que t corta por dentro.
+export function trimToCursor(project, ids, t, side) {
+  const chosen = new Set(ids);
+  const groups = new Set(project.events.filter((e) => chosen.has(e.id) && e.groupId).map((e) => e.groupId));
+  const media = new Map(project.media.map((m) => [m.id, m]));
+  let changed = false;
+  const events = project.events.map((e) => {
+    if (!chosen.has(e.id) && !(e.groupId && groups.has(e.groupId))) return e;
+    if (!(e.start + MIN_EVENT <= t && t <= e.start + e.duration - MIN_EVENT)) return e;
+    changed = true;
+    const left = t - e.start;
+    if (side === 'end') return { ...e, duration: left, fadeOut: Math.min(e.fadeOut || 0, left - Math.min(e.fadeIn || 0, left)) };
+    const duration = e.duration - left;
+    return {
+      ...e,
+      start: t,
+      inPoint: media.get(e.mediaId)?.isImage ? 0 : sourceTime(e, t),
+      duration,
+      fadeIn: Math.min(e.fadeIn || 0, duration),
+      transition: null,
+      pan: shiftPan(e.pan, left),
+      speed: shiftSpeed(e.speed, left),
+    };
+  });
+  return changed ? { ...project, events } : project;
+}
+
+// Dividir con selección de tiempo (S, como en VEGAS): por sus dos extremos. Primero por el final, para que
+// las partes izquierdas (que conservan el id) sigan seleccionadas al dividir por el principio.
+export function splitRange(project, start, end, selection) {
+  return splitEvents(splitEvents(project, end, selection), start, selection);
+}
+
 // Evento que entra en el solapamiento de la pista que contiene el instante t (o null si no hay ninguno).
 export function overlapAt(project, trackId, t) {
   const { incoming } = resolveTimeline(project);

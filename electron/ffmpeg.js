@@ -255,6 +255,7 @@ const OUTPUT_FORMATS = {
     extra: [],
   },
   gif: { gif: true, extra: ['-loop', '0'] },
+  png: { still: true, extra: ['-frames:v', '1', '-update', '1', '-c:v', 'png'] }, // un fotograma (exportar imagen)
   mp3: { audioOnly: true, audio: (k) => ['-c:a', 'libmp3lame', '-b:a', `${k}k`], extra: [] },
   wav: { audioOnly: true, audio: () => ['-c:a', 'pcm_s16le'], extra: [] },
 };
@@ -477,14 +478,14 @@ function buildRender(project, settings, outPath) {
       ? `[abase]anull${cut}[aout]`
       : `${mix.join('')}amix=inputs=${mix.length}:duration=first:normalize=0${cut}[aout]`,
   );
-  if (format.gif) filters.push('[aout]anullsink'); // el GIF no lleva sonido
+  if (format.gif || format.still) filters.push('[aout]anullsink'); // el GIF y la imagen no llevan sonido
 
   const args = [
     '-y', '-nostdin', '-v', 'error', '-progress', 'pipe:1', '-nostats',
     ...inputs,
     '-filter_complex_script', null, // se completa con la ruta del archivo temporal
     ...(format.audioOnly ? [] : ['-map', '[vout]']),
-    ...(format.gif ? [] : ['-map', '[aout]']),
+    ...(format.gif || format.still ? [] : ['-map', '[aout]']),
     ...(format.video ? [...format.video(settings.quality), '-r', fps] : format.gif ? ['-r', fps] : []),
     ...(format.audio ? format.audio(settings.audioKbps || 192) : []),
     '-t', num(duration), ...format.extra,

@@ -129,7 +129,7 @@ function sync(el, target, playing, speed = 1) {
 // panEventId, onPanChange: evento con la ventana de panorámica abierta, que se coloca con el ratón (PanOverlay).
 export default function Preview({
   project, time, playing, selection, editTextId, onSelectEvent, onTextChange, onEditText, panEventId, onPanChange,
-  onOpenProperties, commands, onMessage,
+  onOpenProperties, commands, onMessage, onExportFrame,
 }) {
   const canvasRef = useRef(null);
   const previewRef = useRef(null);
@@ -444,6 +444,9 @@ export default function Preview({
         </button>
         <span className="dock-toolbar-label">Vista previa: completa</span>
         <span className="footer-spacer" />
+        <button className="tool" title="Exportar el fotograma como imagen PNG (Ctrl+Mayús+E)" onClick={onExportFrame}>
+          <Icon name="camera" />
+        </button>
         <button
           className={`tool${external ? ' active' : ''}`}
           title="Vista previa a pantalla completa (Alt+Mayús+4 o doble clic en la imagen; con dos pantallas, en la otra)"

@@ -56,6 +56,8 @@ Para publicar una versión, la release debe llevar el instalador, su `.blockmap`
 - **Cursor como en VEGAS:** al hacer clic o arrastrar en la regla, en una pista o en un evento, el cursor se coloca ahí; con el ajuste activado (F8) se pega al principio o al final de los eventos cercanos y, si no, cae siempre en un fotograma exacto. Mayús mientras se arrastra desactiva el ajuste (también al mover eventos). El triángulo de arriba se arrastra sin saltar al puntero, para ajustes finos. Con el teclado: fotograma a fotograma (← →), de corte en corte (Ctrl+← →) y por marcas de la regla (Re Pág / Av Pág). Si el cursor sale de la vista, la línea de tiempo se desplaza para enseñarlo.
 - **Selección por área:** arrastrando desde una zona vacía de las pistas se dibuja un rectángulo que selecciona los eventos que toca (con su grupo, para que el audio no se separe de su video). Con Ctrl se añaden a la selección. Un clic simple en una zona vacía quita la selección y coloca el cursor.
 - **Cortar, copiar y pegar** eventos (Ctrl+X, Ctrl+C, Ctrl+V). Se pega en el cursor, en las mismas pistas, y el cursor salta al final de lo pegado para poder pegar varias veces seguidas. **Agrupar** (G) y **quitar del grupo** (U) para que varios eventos se muevan juntos o separar el audio de su video.
+- **Dividir y recortar como en VEGAS:** con una selección de tiempo, S divide en sus dos extremos (para aislar un tramo); Alt+[ y Alt+] recortan el principio o el final del evento seleccionado (y su grupo) hasta el cursor.
+- **Exportar el fotograma** del cursor como imagen PNG al tamaño del proyecto (*Archivo → Exportar el fotograma como imagen…*, Ctrl+Mayús+E o el botón de la cámara de la vista previa). Se renderiza igual que el video, con efectos, textos y transiciones.
 - **Menú contextual** con clic derecho: en un evento (cortar, copiar, pegar, eliminar, dividir, agrupar, velocidad normal, quitar fundidos, editar texto, panorámica/recorte, seleccionar el tramo del evento, volumen a 0 dB, volver a disolución cruzada, abrir la ubicación del archivo) y en una zona vacía de una pista (pegar ahí, seleccionar todo, insertar pistas).
 - **Fundidos de entrada y salida:** se arrastran desde los cuadraditos de las esquinas superiores del evento. En audio bajan el volumen; en video hacen aparecer o desaparecer el evento sobre lo que haya debajo (otra pista o negro). Al dividir, cada parte conserva su fundido. Con clic derecho sobre un fundido se elige su **curva**, como en VEGAS: lineal, rápido (el cambio ocurre sobre todo al principio), lento (al final), suave (lento-rápido-lento) o brusco (rápido-lento-rápido). La curva se dibuja en el evento y se aplica también al resto del grupo; en un fundido cruzado de audio, a los dos eventos.
 - **Volumen por evento:** en los eventos de audio, arrastrar en vertical la línea superior (de -∞ a 0 dB). El valor aparece en el título del evento y la forma de onda se escala. Se suma al volumen de la pista.
@@ -75,7 +77,9 @@ Para publicar una versión, la release debe llevar el instalador, su `.blockmap`
 |---|---|
 | Espacio | Reproducir / detener (vuelve a donde empezó) |
 | Intro | Reproducir / pausar |
-| S | Dividir en el cursor (los eventos seleccionados o, si no hay selección, todos) |
+| S | Dividir en el cursor (los eventos seleccionados o, si no hay selección, todos); con selección de tiempo, en sus dos extremos |
+| Alt+[ / Alt+] | Recortar el principio / el final del evento seleccionado hasta el cursor |
+| Ctrl+Mayús+E | Exportar el fotograma del cursor como imagen PNG |
 | Supr | Eliminar los eventos seleccionados (en cascada, cierra el hueco) |
 | Ctrl+L | Activar o desactivar la edición en cascada |
 | Ctrl+R | Grabar voz en off en la pista armada / terminar la grabación |

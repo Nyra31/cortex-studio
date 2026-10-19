@@ -21,7 +21,7 @@ import ContextMenu from './components/ContextMenu.jsx';
 import {
   EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, mediaLength, pasteEvents,
   placeMedia, projectDuration, removeMedia, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
-  moveTrack, ungroupEvents, updateEvents,
+  moveTrack, splitRange, trimToCursor, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
 import { panActive, setPanValues } from './state/pan.js';
@@ -246,9 +246,37 @@ export default function App() {
 
   // ---- Edición ----
 
+  // S: en el cursor o, con selección de tiempo, en sus dos extremos (como en VEGAS).
   const split = useCallback(() => {
-    setProject((p) => splitEvents(p, live.current.time, selection));
+    const r = live.current.region;
+    setProject((p) => (r ? splitRange(p, r.start, r.end, selection) : splitEvents(p, live.current.time, selection)));
   }, [selection, setProject]);
+
+  // Alt+[ / Alt+]: recortar el principio o el final del evento seleccionado (y su grupo) hasta el cursor.
+  const trimCursor = useCallback((side) => {
+    const { selection: sel, time: t, project: p } = live.current;
+    const ids = sel.length ? sel : p.events.filter((e) => e.start < t && t < e.start + e.duration).map((e) => e.id);
+    const next = trimToCursor(p, ids, t, side);
+    if (next === p) setStatus('Para recortar hasta el cursor, el cursor tiene que estar dentro del evento seleccionado.');
+    else setProject(next);
+  }, [setProject]);
+
+  // Exportar el fotograma del cursor como PNG, al tamaño del proyecto (se renderiza con FFmpeg: sale igual
+  // que en el render, con efectos, textos y transiciones).
+  const exportFrame = useCallback(async () => {
+    const { project: p, time: t, projectPath: file } = live.current;
+    const fps = p.settings.fps;
+    const frame = Math.min(Math.floor(t * fps + 1e-6), Math.max(0, Math.ceil(projectDuration(p) * fps) - 1));
+    if (projectDuration(p) <= 0) return;
+    const name = `${baseName(file)} ${String(frame).padStart(5, '0')}.png`;
+    const target = await api.pickRenderPath(name, { name: 'Imagen PNG', ext: 'png' });
+    if (!target) return;
+    setStatus('Exportando el fotograma…');
+    const size = { width: p.settings.width, height: p.settings.height };
+    const range = { start: frame / fps, end: (frame + 1) / fps };
+    const res = await api.startRender(renderPayload(p, size, range), { ...size, fps, format: 'png' }, target);
+    setStatus(res.ok ? `Fotograma ${frame} guardado en ${target}` : `No se pudo exportar el fotograma: ${res.error || ''}`);
+  }, []);
 
   const deleteSelected = useCallback(() => {
     if (!selection.length) return;
@@ -852,6 +880,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         'separator',
         { label: 'Importar medios…', shortcut: 'Ctrl+I', action: importDialog },
         { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
+        { label: 'Exportar el fotograma como imagen…', shortcut: 'Ctrl+Mayús+E', action: exportFrame, disabled: duration <= 0 },
         'separator',
         { label: 'Propiedades del proyecto…', shortcut: 'Alt+Intro', action: openProperties },
         'separator',
@@ -868,7 +897,9 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: 'Copiar', shortcut: 'Ctrl+C', action: () => copyIds(selection), disabled: !selection.length },
         { label: 'Pegar', shortcut: 'Ctrl+V', action: () => paste(), disabled: !clipboard },
         'separator',
-        { label: 'Dividir', shortcut: 'S', action: split },
+        { label: region ? 'Dividir en los extremos de la selección' : 'Dividir', shortcut: 'S', action: split },
+        { label: 'Recortar el principio hasta el cursor', shortcut: 'Alt+[', action: () => trimCursor('start') },
+        { label: 'Recortar el final hasta el cursor', shortcut: 'Alt+]', action: () => trimCursor('end') },
         { label: 'Eliminar', shortcut: 'Supr', action: deleteSelected, disabled: !selection.length },
         { label: 'Seleccionar todo', shortcut: 'Ctrl+A', action: selectAll },
         'separator',
@@ -952,6 +983,10 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
     let action;
     if (e.altKey && e.shiftKey && e.code === 'Digit4') {
       action = togglePreviewFull; // como la vista previa externa de VEGAS
+    } else if (e.altKey && !ctrl && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+      action = () => trimCursor(e.code === 'BracketLeft' ? 'start' : 'end'); // por la tecla, no por el carácter
+    } else if (ctrl && e.shiftKey && key === 'e') {
+      action = exportFrame;
     } else if (ctrl) {
       action = {
         z: e.shiftKey ? history.redo : history.undo,
@@ -1098,6 +1133,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             onOpenProperties={openProperties}
             commands={previewCommands}
             onMessage={setStatus}
+            onExportFrame={exportFrame}
           />
         </Dock>
       </div>
