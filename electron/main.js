@@ -4,6 +4,13 @@ const fs = require('fs');
 const { Readable } = require('stream');
 const ff = require('./ffmpeg');
 
+// Actualizaciones automáticas (electron-updater, releases de GitHub: latest.yml + instalador). Solo en la app
+// instalada: al arrancar busca una versión nueva, la descarga en segundo plano y la interfaz pregunta si
+// reiniciar ya o instalarla al salir. CORTEX_UPDATE_URL: servidor de pruebas (proveedor genérico).
+let autoUpdater = null;
+let updateState = { status: 'idle' }; // idle | checking | downloading | ready | latest | error
+let manualCheck = false;
+
 // Protocolo media:// para que la vista previa lea archivos locales con soporte de rangos (búsqueda en video).
 // Con CORS, para que el compositor WebGL pueda leer los fotogramas sin que el lienzo quede bloqueado.
 protocol.registerSchemesAsPrivileged([
@@ -330,6 +337,47 @@ ipcMain.handle('record:stop', async (_e, id) => {
   return r.path;
 });
 
+function sendUpdate(state) {
+  updateState = state;
+  if (mainWindow) mainWindow.webContents.send('update:state', { ...state, manual: manualCheck });
+}
+function setupUpdates() {
+  if (!app.isPackaged && !process.env.CORTEX_UPDATE_URL) return;
+  ({ autoUpdater } = require('electron-updater'));
+  if (process.env.CORTEX_UPDATE_URL) autoUpdater.setFeedURL({ provider: 'generic', url: process.env.CORTEX_UPDATE_URL });
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true; // «Al cerrar»: se instala al salir
+  autoUpdater.logger = null;
+  autoUpdater.on('checking-for-update', () => sendUpdate({ status: 'checking' }));
+  autoUpdater.on('update-available', (info) => sendUpdate({ status: 'downloading', version: info.version, percent: 0 }));
+  autoUpdater.on('download-progress', (p) => sendUpdate({ ...updateState, status: 'downloading', percent: p.percent }));
+  autoUpdater.on('update-not-available', () => sendUpdate({ status: 'latest' }));
+  autoUpdater.on('update-downloaded', (info) => sendUpdate({ status: 'ready', version: info.version }));
+  autoUpdater.on('error', (err) => sendUpdate({ status: 'error', message: String(err?.message || err).split('\n')[0] }));
+  // Unos segundos después de arrancar, para no competir con la carga del proyecto.
+  setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 4000);
+}
+ipcMain.handle('update:check', async () => {
+  if (!autoUpdater) return { status: 'unavailable' };
+  if (updateState.status === 'downloading' || updateState.status === 'ready') return updateState;
+  manualCheck = true;
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch {
+    // el error llega también por el evento
+  }
+  return updateState;
+});
+ipcMain.handle('update:state', () => updateState);
+ipcMain.handle('app:version', () => app.getVersion());
+// Reiniciar e instalar. Si hay cambios sin guardar, primero la pregunta de siempre al cerrar.
+ipcMain.handle('update:install', () => {
+  if (!autoUpdater || updateState.status !== 'ready') return;
+  installOnClose = true;
+  if (mainWindow) mainWindow.close();
+});
+let installOnClose = false;
+
 ipcMain.handle('screen:count', () => screen.getAllDisplays().length);
 
 ipcMain.handle('shell:reveal', (_e, filePath) => shell.showItemInFolder(filePath));
@@ -339,6 +387,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   protocol.handle('media', serveMedia);
   createWindow();
+  setupUpdates();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -346,5 +395,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (renderProcess) renderProcess.cancel();
-  if (process.platform !== 'darwin') app.quit();
+  // «Reiniciar y actualizar»: el instalador (sin preguntas) sustituye la aplicación y la vuelve a abrir.
+  if (installOnClose && autoUpdater) autoUpdater.quitAndInstall(true, true);
+  else if (process.platform !== 'darwin') app.quit();
 });

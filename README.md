@@ -27,6 +27,12 @@ El instalador no está firmado digitalmente, así que la primera vez Windows Sma
 
 El icono se genera con `npm run icon` (script en `scripts/make-icon.js`).
 
+### Actualizaciones automáticas
+
+Desde la versión 0.6.0, la aplicación instalada busca versiones nuevas en las [releases de GitHub](https://github.com/Nyra31/cortex-studio/releases) unos segundos después de arrancar. Si hay una, la descarga en segundo plano (el progreso se ve en la barra de estado) y avisa: *Reiniciar y actualizar* la instala al momento y vuelve a abrir la aplicación (si hay cambios sin guardar, antes pregunta si guardarlos); *Al cerrar* la instala al salir. También se puede buscar a mano en *Ayuda → Buscar actualizaciones…*. Desde la 0.5.0 o anteriores hay que instalar la 0.6.0 a mano una vez.
+
+Para publicar una versión, la release debe llevar el instalador, su `.blockmap` y `latest.yml` (los tres los genera `npm run dist` en `release/`).
+
 ## Funciones
 
 - **Interfaz al estilo de los editores clásicos:** barra de menús, barra de iconos, ventanas acopladas, contador de tiempo grande, pistas de colores y transporte bajo la línea de tiempo.
@@ -154,6 +160,10 @@ src/components/         Menús, línea de tiempo, vista previa, medios, transici
 - En cascada, recortar el principio de un evento no desplaza lo de detrás (sí el final, mover, borrar y pegar).
 - Al grabar voz en off conviene usar auriculares: con altavoces, el micrófono recoge también el sonido del proyecto (la cancelación de eco de las opciones lo reduce, pero cambia el timbre). Se graba en mono y desde un solo micrófono a la vez. El retardo del micrófono y los altavoces se compensa con lo que informa el sistema; si se nota desplazada, se puede mover el evento.
 - El audio siempre conserva el tono al cambiar la velocidad. Con rampas, el render puede diferir de la vista previa en un fotograma como mucho (y el sonido en unos 20 ms).
+
+## Licencia
+
+Cortex Studio es software libre con licencia [GPL-3.0](LICENSE). Incluye FFmpeg (GPL) y 50 fuentes de Google Fonts con sus propias licencias libres (`public/fonts/LICENCIAS.txt`).
 
 ## Solución de problemas
 

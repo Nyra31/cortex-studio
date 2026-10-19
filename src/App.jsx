@@ -69,6 +69,10 @@ export default function App() {
   const [fullScreen, setFullScreen] = useState(false); // pantalla completa (F11), lo avisa el proceso principal
   const [clipboard, setClipboard] = useState(null); // eventos copiados (copyEvents)
   const [contextMenu, setContextMenu] = useState(null); // { x, y, items }
+  // Actualizaciones: estado que manda el proceso principal y si el aviso de «lista para instalar» está cerrado.
+  const [update, setUpdate] = useState({ status: 'idle' });
+  const [updateHidden, setUpdateHidden] = useState(false);
+  const [version, setVersion] = useState('');
   // Grabación de voz en off: pista preparada (armada) para grabar, grabación en curso y ventana de ajustes.
   const [armedTrackId, setArmedTrackId] = useState(null);
   const [recording, setRecording] = useState(null); // { trackId, start } mientras se graba
@@ -813,6 +817,25 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
 
   useEffect(() => api.onFullScreenChange(setFullScreen), []);
 
+  // Actualizaciones automáticas: el proceso principal busca, descarga y avisa; aquí se enseña el aviso.
+  useEffect(() => {
+    api.getVersion().then(setVersion);
+    api.getUpdateState().then(setUpdate);
+    return api.onUpdateState((state) => {
+      setUpdate(state);
+      if (state.status === 'ready') setUpdateHidden(false);
+      if (state.manual && state.status === 'latest') setStatus('Ya tienes la última versión de Cortex Studio.');
+      if (state.manual && state.status === 'error') setStatus(`No se pudo buscar actualizaciones: ${state.message}`);
+    });
+  }, []);
+  const checkForUpdates = useCallback(async () => {
+    setStatus('Buscando actualizaciones…');
+    const state = await api.checkForUpdates();
+    if (state.status === 'unavailable') setStatus('Las actualizaciones automáticas solo funcionan en la aplicación instalada.');
+    else if (state.status === 'downloading') setStatus(`Descargando la versión ${state.version}…`);
+    else if (state.status === 'ready') setUpdateHidden(false);
+  }, []);
+
 
   const openProperties = useCallback(() => setProjectDialog('edit'), []);
 
@@ -908,7 +931,12 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
     },
     {
       label: 'Ayuda',
-      items: [{ label: 'Atajos de teclado', shortcut: 'F1', action: () => setShortcutsOpen(true) }],
+      items: [
+        { label: 'Atajos de teclado', shortcut: 'F1', action: () => setShortcutsOpen(true) },
+        'separator',
+        { label: 'Buscar actualizaciones…', action: checkForUpdates },
+        { label: `Cortex Studio ${version}`, disabled: true },
+      ],
     },
   ];
 
@@ -1122,8 +1150,21 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           />
         }
       />
+      {update.status === 'ready' && !updateHidden && (
+        <div className="update-banner">
+          <span>
+            La versión <strong>{update.version}</strong> de Cortex Studio está lista para instalar.
+          </span>
+          <button className="primary" onClick={() => api.installUpdate()}>Reiniciar y actualizar</button>
+          <button onClick={() => setUpdateHidden(true)} title="Se instalará sola al cerrar Cortex Studio">Al cerrar</button>
+        </div>
+      )}
       <div className="statusbar">
-        <span>{status || 'Listo'}</span>
+        <span>
+          {status || 'Listo'}
+          {update.status === 'downloading' && ` · Descargando la versión ${update.version} (${Math.round(update.percent || 0)} %)`}
+          {update.status === 'ready' && updateHidden && ` · Versión ${update.version} lista: se instalará al cerrar`}
+        </span>
         <span>
           {baseName(projectPath)}
           {dirty ? ' (modificado)' : ''} · {project.events.length} eventos · {project.tracks.length} pistas

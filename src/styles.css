@@ -1920,3 +1920,17 @@ kbd {
   pointer-events: all;
   cursor: move;
 }
+
+/* Aviso de actualización lista para instalar, encima de la barra de estado. */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #24476d;
+  border-top: 1px solid var(--accent);
+  color: #fff;
+}
+.update-banner span {
+  flex: 1;
+}

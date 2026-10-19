@@ -9,10 +9,11 @@
     "build": "vite build",
     "start": "vite build && node scripts/electron.js .",
     "icon": "node scripts/make-icon.js",
-    "dist": "vite build && electron-builder --win"
+    "dist": "vite build && electron-builder --win --publish never"
   },
   "dependencies": {
     "@ffprobe-installer/ffprobe": "^2.1.2",
+    "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.3.0"
   },
   "devDependencies": {
@@ -32,6 +33,7 @@
     "electron-winstaller": false
   },
   "author": "Illan Gonzalez Tellez",
+  "license": "GPL-3.0-only",
   "build": {
     "appId": "com.nyra31.cortexstudio",
     "productName": "Cortex Studio",
@@ -64,6 +66,14 @@
       "shortcutName": "Cortex Studio",
       "artifactName": "Cortex-Studio-Setup-${version}.${ext}"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Nyra31",
+        "repo": "cortex-studio",
+        "releaseType": "release"
+      }
+    ],
     "electronLanguages": [
       "es",
       "es-419",

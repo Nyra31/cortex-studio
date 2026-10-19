@@ -17,6 +17,15 @@ contextBridge.exposeInMainWorld('api', {
   recordStart: (projectPath, sampleRate) => ipcRenderer.invoke('record:start', projectPath, sampleRate),
   recordWrite: (id, chunk) => ipcRenderer.send('record:write', id, chunk),
   recordStop: (id) => ipcRenderer.invoke('record:stop', id),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  getUpdateState: () => ipcRenderer.invoke('update:state'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  getVersion: () => ipcRenderer.invoke('app:version'),
+  onUpdateState: (callback) => {
+    const handler = (_e, state) => callback(state);
+    ipcRenderer.on('update:state', handler);
+    return () => ipcRenderer.removeListener('update:state', handler);
+  },
   displayCount: () => ipcRenderer.invoke('screen:count'),
   revealFile: (filePath) => ipcRenderer.invoke('shell:reveal', filePath),
   toggleDevTools: () => ipcRenderer.invoke('devtools:toggle'),
