@@ -87,7 +87,7 @@ Si `npm start` dice que `vite` no se reconoce, falta `npm install`. Si falta `no
 
 `dist/` y `release/` no están en el repo: se regeneran con `npm run build` / `npm run dist` (el instalador solo se puede generar en Windows).
 
-## Estado (18/10/2026, v0.5.0)
+## Estado (19/10/2026, v0.6.0)
 
 v0.1.0 terminada: edición multipista, vista previa, renderizado a MP4, interfaz estilo editor clásico, propiedades del proyecto e instalador de Windows.
 v0.2.0: volumen por evento y fundidos de entrada/salida (formato `.cortex` versión 2; los de versión 1 se siguen abriendo).
@@ -95,6 +95,8 @@ v0.3.0: transiciones (fase 1 de 3) con vista previa WebGL (formato `.cortex` ver
 v0.4.0: efectos de video (fase 2, formato versión 4) y de audio (fase 3), volumen de pista hasta +12 dB, corrección de tirones con los paneles de efectos abiertos, pregunta al cerrar con cambios sin guardar, velocidad de los eventos con Ctrl + arrastrar un borde (formato versión 5), selección de tiempo con bucle y render de la selección, medios de texto (colocados con el ratón en la vista previa), arranque maximizado y pantalla completa (F11).
 
 v0.5.0 (18/10/2026): panorámica/recorte del evento con fotogramas clave (formato `.cortex` versión 6), pistas de video nuevas arriba y de audio abajo y reordenar pistas arrastrando, edición en cascada (ripple), marcadores y regiones con nombre (formato versión 7), envolventes de volumen y panorámica de pista, guardado automático con recuperación y copia `.bak`, más formatos y plantillas de render (H.265, WebM, ProRes, GIF, MP3, WAV, vertical, bandas negras, tasa de bits) y grabación de voz en off desde el micrófono. También se arregló que la ventana no apareciera al arrancar (shader demasiado grande para Direct3D) y `npm start` con `ELECTRON_RUN_AS_NODE`.
+
+v0.6.0 (19/10/2026): curvas de fundido (formato `.cortex` versión 8), 50 fuentes incluidas y selector de fuentes, vista previa a pantalla completa (y en otra pantalla), rampas de velocidad, dividir en la selección de tiempo (S), recortar hasta el cursor (Alt+[ / Alt+]), exportar fotograma, medidores de volumen, fotogramas clave en los efectos de video, **actualizaciones automáticas** y licencia GPL-3.0. Desde esta versión el repositorio es público.
 
 **Siguiente paso**: preguntar al usuario qué añadir (ideas en «Pendiente»). Si nota tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma.
 
@@ -105,8 +107,6 @@ El repositorio ya es público con licencia **GPL-3.0** (desde la v0.6.0, para la
 ## Pendiente (siguientes pasos naturales)
 
 Hechas las tres fases de «transiciones y efectos de sonido y video como los de VEGAS» (v0.3.0 y v0.4.0).
-
-Después de v0.5.0 (19/10/2026, sin publicar; irá en la v0.6.0): curvas de fundido, 50 fuentes incluidas y selector de fuentes, vista previa a pantalla completa (y en otra pantalla), rampas de velocidad, actualizaciones automáticas y licencia GPL-3.0, dividir en la selección de tiempo (S), recortar hasta el cursor (Alt+[ / Alt+]), exportar fotograma, medidores de volumen y fotogramas clave en los efectos de video. Pendiente de confirmar con el usuario antes de publicar: poner el repositorio en público (los commits llevan su correo `illangt79@educastur.es`).
 
 Otros: fotogramas clave para los valores de los efectos, transiciones sobre un fundido hacia la pista de debajo (sin solapamiento), guardar la selección de tiempo en el proyecto, dividir con S en los dos extremos de la selección de tiempo (como VEGAS), curvas en las envolventes. La vista previa usa el reproductor de Chromium, así que algunos códecs (HEVC, ProRes, AVI antiguos) se renderizan pero no se ven en la vista previa.
 
