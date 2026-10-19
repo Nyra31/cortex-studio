@@ -221,6 +221,24 @@ function audioRamp(e, i) {
   return `,asendcmd=c='${cmds}',${name}=tempo=${steps[0][1].toFixed(6)}`;
 }
 
+// Comandos de los efectos animados (fx.cmds: [[t local del evento, 'filtro@nombre opción valor,…']], ver
+// effectsGraph) para un trozo que empieza en el tiempo local local0 y dura length s: al principio, los últimos
+// valores de antes del trozo; después, los cambios con el tiempo del trozo.
+function fxCommands(fx, local0, length) {
+  if (!fx.cmds) return '';
+  const state = new Map();
+  const later = [];
+  for (const [t, c] of fx.cmds) {
+    if (t <= local0 + 1e-6) {
+      for (const cmd of c.split(',')) state.set(cmd.split(' ').slice(0, 2).join(' '), cmd);
+    } else if (t < local0 + length + 1e-6) {
+      later.push([t - local0, c]);
+    }
+  }
+  const intervals = [...(state.size ? [[0, [...state.values()].join(',')]] : []), ...later];
+  return intervals.length ? `,sendcmd=c='${intervals.map(([t, c]) => `${t.toFixed(4)} ${c}`).join(';')}'` : '';
+}
+
 function audioFades(e) {
   let out = '';
   if (e.fadeIn > 0) out += `,afade=t=in:st=0:d=${num(e.fadeIn)}:curve=${AFADE_IN[e.curveIn] || 'tri'}`;
@@ -344,8 +362,10 @@ function buildRender(project, settings, outPath) {
       if (pan) return { i, first, count, chain: `[${i}:v]${pts},scale=${pan.w}:${pan.h},setsar=1,${panTail()}` };
       return { i, first, count, chain: `[${i}:v]${pts},scale=${W}:${H}:force_original_aspect_ratio=decrease,${tail}` };
     }
+    // Efectos animados: sendcmd cambia los valores de sus filtros en cada fotograma (tiempos del trozo).
+    const local0 = first / rate - origin; // tiempo local del evento en el primer fotograma del trozo
     filters.push(
-      `[${i}:v]${pts},scale=${fx.w}:${fx.h},setsar=1[fxin${i}]`,
+      `[${i}:v]${pts},scale=${fx.w}:${fx.h},setsar=1${fxCommands(fx, local0, length).replaceAll('@N@', `fx${i}_`)}[fxin${i}]`,
       fx.graph.replaceAll('@IN@', `fxin${i}`).replaceAll('@OUT@', `fxout${i}`).replaceAll('@N@', `fx${i}_`),
     );
     if (pan) return { i, first, count, chain: `[fxout${i}]${panTail()}` };

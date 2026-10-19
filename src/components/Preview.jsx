@@ -263,14 +263,14 @@ export default function Preview({
 
     draw.current.layers = layers.map((l) =>
       l.event
-        ? { a: sourceFor(l.event, false), opacity: l.opacity, fxA: activeEffects(l.event.effects), panA: panLayer(l.event, time) }
+        ? { a: sourceFor(l.event, false), opacity: l.opacity, fxA: activeEffects(l.event.effects, time - l.event.start), panA: panLayer(l.event, time) }
         : {
           a: sourceFor(l.from, false),
           b: sourceFor(l.to, false),
           type: l.type,
           progress: l.progress,
-          fxA: activeEffects(l.from.effects),
-          fxB: activeEffects(l.to.effects),
+          fxA: activeEffects(l.from.effects, time - l.from.start),
+          fxB: activeEffects(l.to.effects, time - l.to.start),
           panA: panLayer(l.from, time),
           panB: panLayer(l.to, time),
         },

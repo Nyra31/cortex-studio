@@ -1232,6 +1232,9 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         <EventFxDialog
           key={fxEvent.id}
           event={fxEvent}
+          fps={project.settings.fps}
+          time={time}
+          onSeek={seek}
           kind={project.tracks.find((t) => t.id === fxEvent.trackId)?.type ?? 'video'}
           mediaName={project.media.find((m) => m.id === fxEvent.mediaId)?.name ?? ''}
           onChange={updateFxEffects}

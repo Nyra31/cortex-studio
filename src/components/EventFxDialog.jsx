@@ -1,17 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
-import { EFFECTS, effectDefaults, effectGroups, newEffect } from '../state/effects.js';
+import {
+  EFFECTS, addFxKey, canAnimate, effectDefaults, effectGroups, fxKeyAt, fxParamsAt, hasKeyframes, isAnimatable, moveFxKey, newEffect,
+  removeFxKey, setFxValues,
+} from '../state/effects.js';
 
 // Ventana flotante con los efectos de un evento (como «FX de evento» de VEGAS); kind = 'video' o 'audio'
 // según la pista. Arriba la cadena (en el orden en que se aplican), abajo los controles del efecto elegido.
 // Los cambios se ven (y se oyen) al momento en la vista previa; un arrastre de control es un solo paso de deshacer.
-export default function EventFxDialog({ event, kind, mediaName, onChange, onClose }) {
+// Los efectos de video se pueden animar con fotogramas clave (tira como la de la panorámica): con ellos, los
+// controles muestran y cambian los valores en el cursor (time); onSeek lleva el cursor a un fotograma clave.
+export default function EventFxDialog({ event, kind, mediaName, fps = 30, time = 0, onSeek = () => {}, onChange, onClose }) {
   const effects = event.effects || [];
   const [selectedId, setSelectedId] = useState(effects[0]?.id ?? null);
   const [pos, setPos] = useState({ x: 16, y: 120 });
   const first = useRef(true); // el primer cambio de cada arrastre crea un paso de deshacer
   const selected = effects.find((fx) => fx.id === selectedId) || effects[0] || null;
   const def = selected && EFFECTS.get(selected.type);
+  const local = Math.min(event.duration, Math.max(0, time - event.start));
+  const animatable = !!def && isAnimatable(def);
+  const kfs = selected?.keyframes?.length > 1 ? selected.keyframes : [];
+  const at = selected ? fxKeyAt(selected, local, fps) : -1;
+  const stripRef = useRef(null);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -22,8 +32,39 @@ export default function EventFxDialog({ event, kind, mediaName, onChange, onClos
   }, [onClose]);
 
   const update = (fn, record = true) => onChange((list) => fn(list || []), record);
-  const setParam = (id, value, record) =>
-    update((list) => list.map((fx) => (fx.id === selected.id ? { ...fx, params: { ...fx.params, [id]: value } } : fx)), record);
+  const changeSelected = (fn, record = true) => update((list) => list.map((fx) => (fx.id === selected.id ? fn(fx) : fx)), record);
+  const setParam = (id, value, record) => changeSelected((fx) => setFxValues(fx, local, { [id]: value }, fps), record);
+
+  // Tira de fotogramas clave: clic para mover el cursor; arrastrar un rombo lo cambia de momento.
+  const stripTime = (clientX) => {
+    const r = stripRef.current.getBoundingClientRect();
+    return Math.min(event.duration, Math.max(0, ((clientX - r.left) / r.width) * event.duration));
+  };
+  const onKeyDown = (e, index) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    onSeek(event.start + kfs[index].t);
+    const startX = e.clientX;
+    let moved = false;
+    const moveKey = (me) => {
+      if (!moved && Math.abs(me.clientX - startX) < 3) return;
+      const t = Math.round(stripTime(me.clientX) * fps) / fps;
+      changeSelected((fx) => moveFxKey(fx, index, t, event.duration), !moved);
+      moved = true;
+      onSeek(event.start + t);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', moveKey);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', moveKey);
+    window.addEventListener('pointerup', up);
+  };
+  const jump = (dir) => {
+    const list = kfs.map((k) => k.t);
+    const t = dir > 0 ? list.find((x) => x > local + 1e-6) : [...list].reverse().find((x) => x < local - 1e-6);
+    if (t !== undefined) onSeek(event.start + t);
+  };
   const move = (dir) =>
     update((list) => {
       const i = list.findIndex((fx) => fx.id === selected.id);
@@ -61,7 +102,7 @@ export default function EventFxDialog({ event, kind, mediaName, onChange, onClos
     window.addEventListener('pointerup', up);
   };
 
-  const values = selected ? { ...effectDefaults(selected.type), ...selected.params } : {};
+  const values = selected ? fxParamsAt(selected, local) : {};
 
   return (
     <div className="fx-window" style={{ left: pos.x, top: pos.y }}>
@@ -113,14 +154,48 @@ export default function EventFxDialog({ event, kind, mediaName, onChange, onClos
             <span className="fx-buttons">
               <button onClick={() => move(-1)} disabled={effects[0]?.id === selected.id} title="Aplicar antes">◀</button>
               <button onClick={() => move(1)} disabled={effects.at(-1)?.id === selected.id} title="Aplicar después">▶</button>
-              <button onClick={() => update((list) => list.map((fx) => (fx.id === selected.id ? { ...fx, params: effectDefaults(fx.type) } : fx)))}>
+              <button
+                onClick={() => changeSelected((fx) => ({ ...fx, params: effectDefaults(fx.type), keyframes: null }))}
+                title="Valores por defecto (y quita la animación)"
+              >
                 Restablecer
               </button>
               <button onClick={remove}>Quitar</button>
             </span>
           </div>
+          {kind === 'video' && (animatable ? (
+            <>
+              <div className="pan-strip" ref={stripRef} onPointerDown={(e) => e.button === 0 && onSeek(event.start + stripTime(e.clientX))} title="Clic: llevar el cursor ahí">
+                {kfs.map((k, i) => (
+                  <span
+                    key={i}
+                    className={`pan-key${i === at ? ' active' : ''}`}
+                    style={{ left: `${(k.t / event.duration) * 100}%` }}
+                    title="Fotograma clave (arrastra para moverlo)"
+                    onPointerDown={(e) => onKeyDown(e, i)}
+                  />
+                ))}
+                {time >= event.start && time <= event.start + event.duration && (
+                  <span className="pan-cursor" style={{ left: `${(local / event.duration) * 100}%` }} />
+                )}
+              </div>
+              <div className="text-row pan-keys">
+                <button title="Fotograma clave anterior" onClick={() => jump(-1)} disabled={!kfs.some((k) => k.t < local - 1e-6)}>◀</button>
+                <button title="Fotograma clave siguiente" onClick={() => jump(1)} disabled={!kfs.some((k) => k.t > local + 1e-6)}>▶</button>
+                <button onClick={() => changeSelected((fx) => addFxKey(fx, local, fps))} disabled={at >= 0}>+ Fotograma clave</button>
+                <button onClick={() => changeSelected((fx) => removeFxKey(fx, at))} disabled={at < 0 || !hasKeyframes(selected)}>Quitar</button>
+              </div>
+              <p className="pan-hint">
+                {kfs.length
+                  ? `Animado con ${kfs.length} fotogramas clave: los controles muestran los valores en el cursor y, al cambiarlos donde no hay ninguno, se crea uno nuevo.`
+                  : 'Sin animación: los valores valen para todo el evento. Para animarlo, lleva el cursor a otro momento del evento y pulsa «+ Fotograma clave».'}
+              </p>
+            </>
+          ) : (
+            <p className="pan-hint">Este efecto no se puede animar con fotogramas clave.</p>
+          ))}
           {def.params.map((p) => (
-            <label key={p.id} className="fx-param">
+            <label key={p.id} className="fx-param" title={kfs.length && !canAnimate(def, p) ? 'Este valor no se anima: vale para todo el evento' : undefined}>
               <span className="fx-param-label">{p.label}</span>
               {p.type === 'range' && (
                 <>

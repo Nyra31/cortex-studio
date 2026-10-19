@@ -1,6 +1,7 @@
 // Modelo del proyecto y operaciones de edición (funciones puras).
 import { DEFAULT_TRANSITION } from './transitions.js';
-import { effectsGraph } from './effects.js';
+import { effectsGraph, scaleFxKeys, shiftFxKeys } from './effects.js';
+export { scaleFxKeys, shiftFxKeys };
 import { isText, textPng } from './text.js';
 import { hasRamp, shiftSpeed, sourceOffset, speedPayload } from './speed.js';
 import { panActive, panExpr, scalePanTime, shiftPan } from './pan.js';
@@ -343,6 +344,7 @@ export function splitEvents(project, t, selection) {
       ...e, id: uid('e'), start: t, inPoint: sourceTime(e, t), duration: e.duration - left, groupId, fadeIn: 0, transition: null,
       pan: shiftPan(e.pan, left), // los fotogramas clave siguen a la imagen
       speed: shiftSpeed(e.speed, left),
+      effects: shiftFxKeys(e.effects, left),
     });
     return { ...e, duration: left, fadeOut: 0 };
   });
@@ -372,6 +374,7 @@ export function trimToCursor(project, ids, t, side) {
       transition: null,
       pan: shiftPan(e.pan, left),
       speed: shiftSpeed(e.speed, left),
+      effects: shiftFxKeys(e.effects, left),
     };
   });
   return changed ? { ...project, events } : project;
@@ -646,7 +649,7 @@ export function renderPayload(project, size = project.settings, range = null) {
     const m = mediaById.get(e.mediaId);
     const fit = m && fitSize(m.width, m.height, size.width, size.height);
     const alpha = !!m && (isText(m) || !!m.hasAlpha); // imagen con transparencia: los efectos la conservan
-    const g = fit && effectsGraph(e.effects, { ...fit, alpha });
+    const g = fit && effectsGraph(e.effects, { ...fit, alpha }, 'video', { duration: e.duration, fps: project.settings.fps });
     return g ? { ...fit, ...g, alpha: g.alpha || alpha } : null;
   };
   // Panorámica/recorte: tamaño de la imagen encajada, recorte y expresiones de FFmpeg de x, y, escala y giro

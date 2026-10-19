@@ -6,7 +6,7 @@ import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
   EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, moveTrack,
   markPoints, updateMark, gainToVolume, isTrackActive,
-  fadeCurve, overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain,
+  fadeCurve, overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain, scaleFxKeys, shiftFxKeys,
 } from '../state/project.js';
 import { panActive } from '../state/pan.js';
 import {
@@ -183,6 +183,15 @@ function Envelope({ width, height, gainY, fadeIn, fadeOut, curveIn, curveOut }) 
   );
 }
 
+// Momentos con fotograma clave en el evento (panorámica y efectos), para los rombos de la línea de tiempo.
+function keyTimes(ev) {
+  const list = [
+    ...(ev.pan?.keyframes.length > 1 ? ev.pan.keyframes : []),
+    ...(ev.effects || []).flatMap((fx) => (fx.keyframes?.length > 1 ? fx.keyframes : [])),
+  ].map((k) => Math.round(k.t * 1000) / 1000);
+  return [...new Set(list)].filter((t) => t >= 0 && t <= ev.duration);
+}
+
 const HANDLE_TITLE = 'Arrastra para recortar (Ctrl: cambiar la velocidad, como en VEGAS)';
 
 // Zona de solapamiento al principio del evento que entra: aspa de la transición y su nombre.
@@ -280,10 +289,10 @@ const EventView = memo(function EventView({
           <Icon name="crop" size={9} />
         </button>
       )}
-      {type === 'video' && ev.pan?.keyframes.length > 1 && (
+      {type === 'video' && keyTimes(ev).length > 0 && (
         <div className="event-keyframes">
-          {ev.pan.keyframes.filter((k) => k.t <= ev.duration).map((k) => (
-            <span key={k.t} style={{ left: k.t * pps }} />
+          {keyTimes(ev).map((t) => (
+            <span key={t} style={{ left: t * pps }} />
           ))}
         </div>
       )}
@@ -995,6 +1004,7 @@ const Timeline = forwardRef(function Timeline({
           return {
             start: left ? o.start + dt : o.start, duration, rate,
             pan: scalePanTime(o.pan, duration / o.duration), speed: scaleSpeedTime(o.speed, duration / o.duration),
+            effects: scaleFxKeys(o.effects, duration / o.duration),
           };
         };
       } else if (mode === 'trimL') {
@@ -1010,6 +1020,7 @@ const Timeline = forwardRef(function Timeline({
           duration: o.duration - dt,
           pan: shiftPan(o.pan, dt), // los fotogramas clave siguen a la imagen
           speed: shiftSpeed(o.speed, dt),
+          effects: shiftFxKeys(o.effects, dt),
         });
       } else if (mode === 'fadeIn' || mode === 'fadeOut') {
         update = (o) => {

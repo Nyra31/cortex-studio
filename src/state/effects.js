@@ -4,8 +4,15 @@
 //   params: [{ id, label, type: 'range' | 'bool' | 'color', min, max, step, default, format? }]
 //   ffmpeg(p, ctx) → cadena de filtros lineal (o '' si con esos valores no hace nada)
 //   graph(p, ctx, inL, outL, tag) → subgrafo con ramas (etiquetas de entrada/salida dadas)
-//   ctx = { w, h, alpha }: tamaño en píxeles de la imagen encajada a la que se aplica (sin las bandas negras)
-//   y si tiene transparencia (textos, PNG con alfa): entonces los filtros que no la admiten la conservan aparte.
+//   ctx = { w, h, alpha, keep }: tamaño en píxeles de la imagen encajada a la que se aplica (sin las bandas
+//   negras) y si tiene transparencia (textos, PNG con alfa): entonces los filtros que no la admiten la conservan
+//   aparte. keep: con fotogramas clave, los filtros se ponen siempre (aunque con esos valores no hagan nada),
+//   para que el grafo sea el mismo en todo el evento y el render solo les cambie los valores.
+//   animatable: false (en el efecto o en un parámetro) = no se puede animar con fotogramas clave: su filtro no
+//   admite cambios en marcha (unsharp, vignette) o el valor no se puede mandar como comando (umbral del brillo difuso).
+// Fotogramas clave del efecto (fx.keyframes, como en VEGAS): [{ t, params }] con t desde el principio del
+// evento; con dos o más, los valores numéricos se interpolan linealmente y los demás cambian al llegar al
+// fotograma clave. Ver fxParamsAt y, para el render, effectsGraph (comandos de sendcmd).
 // Las medidas (radios, tamaños de bloque) son relativas a la altura de la imagen, para que la vista
 // previa (a menos resolución) y el render den el mismo resultado. La vista previa aplica las mismas
 // fórmulas con shaders: ver preview/effects-gl.js.
@@ -39,7 +46,7 @@ export const EFFECT_GROUPS = [
           { id: 'brightness', label: 'Brillo', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
           { id: 'contrast', label: 'Contraste', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
         ],
-        ffmpeg: (p) => (p.brightness || p.contrast ? `eq=brightness=${n(p.brightness)}:contrast=${n(1 + p.contrast)}` : ''),
+        ffmpeg: (p, ctx) => (ctx.keep || p.brightness || p.contrast ? `eq=brightness=${n(p.brightness)}:contrast=${n(1 + p.contrast)}` : ''),
       },
       {
         id: 'colorcorrect',
@@ -50,10 +57,10 @@ export const EFFECT_GROUPS = [
           { id: 'blue', label: 'Azul', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
           { id: 'saturation', label: 'Saturación', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
         ],
-        ffmpeg: (p) =>
+        ffmpeg: (p, ctx) =>
           [
-            p.red !== 1 || p.green !== 1 || p.blue !== 1 ? `colorchannelmixer=rr=${n(p.red)}:gg=${n(p.green)}:bb=${n(p.blue)}` : '',
-            p.saturation !== 1 ? `hue=s=${n(p.saturation)}` : '',
+            ctx.keep || p.red !== 1 || p.green !== 1 || p.blue !== 1 ? `colorchannelmixer=rr=${n(p.red)}:gg=${n(p.green)}:bb=${n(p.blue)}` : '',
+            ctx.keep || p.saturation !== 1 ? `hue=s=${n(p.saturation)}` : '',
           ].filter(Boolean).join(','),
       },
       {
@@ -64,21 +71,21 @@ export const EFFECT_GROUPS = [
           { id: 'saturation', label: 'Saturación', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
           { id: 'lightness', label: 'Luminosidad', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
         ],
-        ffmpeg: (p) =>
-          p.hue || p.saturation !== 1 || p.lightness ? `hue=h=${n(p.hue)}:s=${n(p.saturation)}:b=${n(p.lightness * 10)}` : '',
+        ffmpeg: (p, ctx) =>
+          ctx.keep || p.hue || p.saturation !== 1 || p.lightness ? `hue=h=${n(p.hue)}:s=${n(p.saturation)}:b=${n(p.lightness * 10)}` : '',
       },
       {
         id: 'blackwhite',
         name: 'Blanco y negro',
         params: [{ id: 'amount', label: 'Cantidad', type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct }],
-        ffmpeg: (p) => (p.amount ? `hue=s=${n(1 - p.amount)}` : ''),
+        ffmpeg: (p, ctx) => (ctx.keep || p.amount ? `hue=s=${n(1 - p.amount)}` : ''),
       },
       {
         id: 'sepia',
         name: 'Sepia',
         params: [{ id: 'amount', label: 'Cantidad', type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct }],
-        ffmpeg: (p) => {
-          if (!p.amount) return '';
+        ffmpeg: (p, ctx) => {
+          if (!p.amount && !ctx.keep) return '';
           const m = sepiaMatrix(p.amount);
           const k = ['rr', 'rg', 'rb', 'gr', 'gg', 'gb', 'br', 'bg', 'bb'];
           return `colorchannelmixer=${k.map((key, i) => `${key}=${n(m[i])}`).join(':')}`;
@@ -88,8 +95,8 @@ export const EFFECT_GROUPS = [
         id: 'invert',
         name: 'Invertir',
         params: [{ id: 'amount', label: 'Cantidad', type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct }],
-        ffmpeg: (p) => {
-          if (!p.amount) return '';
+        ffmpeg: (p, ctx) => {
+          if (!p.amount && !ctx.keep) return '';
           const e = `val*${n(1 - p.amount)}+negval*${n(p.amount)}`;
           return `lutrgb=r=${e}:g=${e}:b=${e}`;
         },
@@ -109,12 +116,13 @@ export const EFFECT_GROUPS = [
         ffmpeg: (p, ctx) => {
           const sx = blurSigma(p.horizontal, ctx.h);
           const sy = blurSigma(p.vertical, ctx.h);
-          return sx < 0.05 && sy < 0.05 ? '' : `format=gbrap,gblur=sigma=${n(sx)}:sigmaV=${n(sy)}`;
+          return sx < 0.05 && sy < 0.05 && !ctx.keep ? '' : `format=gbrap,gblur=sigma=${n(sx)}:sigmaV=${n(sy)}`;
         },
       },
       {
         id: 'sharpen',
         name: 'Enfocar',
+        animatable: false,
         params: [{ id: 'amount', label: 'Cantidad', type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct }],
         ffmpeg: (p, ctx) => {
           const size = odd(ctx.h * 0.005);
@@ -125,13 +133,13 @@ export const EFFECT_GROUPS = [
         id: 'glow',
         name: 'Brillo difuso',
         params: [
-          { id: 'threshold', label: 'Umbral', type: 'range', min: 0, max: 1, step: 0.01, default: 0.6, format: pct },
+          { id: 'threshold', label: 'Umbral', type: 'range', min: 0, max: 1, step: 0.01, default: 0.6, format: pct, animatable: false },
           { id: 'intensity', label: 'Intensidad', type: 'range', min: 0, max: 1, step: 0.01, default: 0.6, format: pct },
           { id: 'radius', label: 'Radio', type: 'range', min: 0, max: 1, step: 0.01, default: 0.3, format: pct },
         ],
         // Las zonas por encima del umbral se desenfocan y se suman en modo "trama" (screen).
         graph: (p, ctx, inL, outL, tag) => {
-          if (!p.intensity) return `[${inL}]null[${outL}]`;
+          if (!p.intensity && !ctx.keep) return `[${inL}]null[${outL}]`;
           const t = Math.round(p.threshold * 255);
           const keep = `'if(gt(val,${t}),val,0)'`;
           const sigma = Math.max(0.05, blurSigma(p.radius, ctx.h));
@@ -159,6 +167,7 @@ export const EFFECT_GROUPS = [
       {
         id: 'vignette',
         name: 'Viñeta',
+        animatable: false,
         params: [{ id: 'amount', label: 'Intensidad', type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct }],
         // vignette no admite alfa: con transparencia se aparta el alfa y se vuelve a poner después.
         graph: (p, ctx, inL, outL, tag) => {
@@ -229,19 +238,154 @@ export function effectDefaults(type) {
 
 export const newEffect = (type) => ({ id: uid('x'), type, enabled: true, params: effectDefaults(type) });
 
-// Efectos que de verdad hay que aplicar, con los parámetros completos (los que falten, por defecto).
-export function activeEffects(effects) {
+// ---- Fotogramas clave de los efectos ----
+
+export const isAnimatable = (def) => def.kind === 'video' && def.animatable !== false && def.params.some((p) => canAnimate(def, p));
+export const canAnimate = (def, p) => def.animatable !== false && p.type === 'range' && p.animatable !== false;
+export const hasKeyframes = (fx) => (fx?.keyframes?.length ?? 0) > 1;
+
+// Valores del efecto en el tiempo local t (con los que falten por defecto).
+export function fxParamsAt(fx, t) {
+  const base = { ...effectDefaults(fx.type), ...fx.params };
+  if (!hasKeyframes(fx)) return base;
+  const def = EFFECTS.get(fx.type);
+  const kfs = fx.keyframes;
+  const full = (k) => ({ ...base, ...k.params });
+  if (t <= kfs[0].t) return full(kfs[0]);
+  const j = kfs.findIndex((k) => k.t > t);
+  if (j < 0) return full(kfs[kfs.length - 1]);
+  const a = full(kfs[j - 1]);
+  const b = full(kfs[j]);
+  const f = (t - kfs[j - 1].t) / (kfs[j].t - kfs[j - 1].t);
+  const out = { ...a };
+  for (const p of def.params) if (canAnimate(def, p)) out[p.id] = a[p.id] + (b[p.id] - a[p.id]) * f;
+  return out;
+}
+
+// Índice del fotograma clave en t (a menos de medio fotograma) o −1.
+export const fxKeyAt = (fx, t, fps) => (fx.keyframes || []).findIndex((k) => Math.abs(k.t - t) < 0.5 / fps);
+
+// Cambiar valores en el instante t: sin animación, valen para todo el evento; con fotogramas clave, se cambia
+// el que haya en t o se crea uno nuevo ahí (los parámetros que no se pueden animar valen siempre para todo).
+export function setFxValues(fx, t, changes, fps) {
+  const def = EFFECTS.get(fx.type);
+  const fixed = Object.fromEntries(Object.entries(changes).filter(([id]) => !canAnimate(def, def.params.find((p) => p.id === id))));
+  const params = { ...fx.params, ...changes };
+  if (!hasKeyframes(fx)) return { ...fx, params, keyframes: null };
+  const animated = Object.fromEntries(Object.entries(changes).filter(([id]) => !(id in fixed)));
+  let kfs = fx.keyframes.map((k) => ({ ...k, params: { ...k.params, ...fixed } }));
+  const i = fxKeyAt(fx, t, fps);
+  if (i >= 0) kfs = kfs.map((k, j) => (j === i ? { ...k, params: { ...k.params, ...animated } } : k));
+  else kfs = [...kfs, { t, params: { ...fxParamsAt(fx, t), ...animated } }].sort((a, b) => a.t - b.t);
+  return { ...fx, params: { ...fx.params, ...fixed }, keyframes: kfs };
+}
+
+// Añadir un fotograma clave en t con los valores que hay ahí. El primero también crea uno al principio del
+// evento (si t no es 0), con los valores de siempre, para que haya animación desde el principio.
+export function addFxKey(fx, t, fps) {
+  if (fxKeyAt(fx, t, fps) >= 0) return fx;
+  const now = fxParamsAt(fx, t);
+  const kfs = hasKeyframes(fx) ? fx.keyframes : t > 0.5 / fps ? [{ t: 0, params: now }] : [];
+  const list = [...kfs, { t, params: now }].sort((a, b) => a.t - b.t);
+  return list.length > 1 ? { ...fx, keyframes: list } : { ...fx, params: now, keyframes: null };
+}
+// Quitar uno: si queda solo uno, el efecto deja de estar animado y se queda con sus valores.
+export function removeFxKey(fx, index) {
+  const list = fx.keyframes.filter((_, i) => i !== index);
+  return list.length > 1 ? { ...fx, keyframes: list } : { ...fx, params: { ...fx.params, ...list[0]?.params }, keyframes: null };
+}
+export function moveFxKey(fx, index, t, duration) {
+  const kfs = fx.keyframes;
+  const lo = index > 0 ? kfs[index - 1].t + 0.001 : 0;
+  const hi = index < kfs.length - 1 ? kfs[index + 1].t - 0.001 : duration;
+  return { ...fx, keyframes: kfs.map((k, i) => (i === index ? { ...k, t: Math.min(hi, Math.max(lo, t)) } : k)) };
+}
+// Al recortar por la izquierda o dividir (los fotogramas clave cuentan desde el principio del evento) y al
+// cambiar la duración con Ctrl, como los de la panorámica.
+export const shiftFxKeys = (effects, dt) => (effects || []).map((fx) => (hasKeyframes(fx) ? { ...fx, keyframes: fx.keyframes.map((k) => ({ ...k, t: k.t - dt })) } : fx));
+export const scaleFxKeys = (effects, f) => (effects || []).map((fx) => (hasKeyframes(fx) ? { ...fx, keyframes: fx.keyframes.map((k) => ({ ...k, t: k.t * f })) } : fx));
+
+// Efectos que de verdad hay que aplicar, con los parámetros completos (los que falten, por defecto) y, si
+// están animados, con sus valores en el tiempo local t.
+export function activeEffects(effects, t = 0) {
   return (effects || [])
     .filter((fx) => fx.enabled !== false && EFFECTS.has(fx.type))
-    .map((fx) => ({ ...fx, params: { ...effectDefaults(fx.type), ...fx.params } }));
+    .map((fx) => ({ ...fx, params: fxParamsAt(fx, t) }));
 }
+
+// ---- Render de efectos animados: filtros con nombre y comandos de sendcmd ----
+
+// Parte una cadena por un separador fuera de comillas y corchetes.
+function splitTop(s, sep) {
+  const out = [];
+  let cur = '';
+  let quote = false;
+  for (const ch of s) {
+    if (ch === "'") quote = !quote;
+    if (ch === sep && !quote) {
+      out.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+// Filtros de un subgrafo: [{ pre, name, args: [[clave, valor] | [null, texto]], post }] por cadena.
+function parseGraph(g) {
+  return splitTop(g, ';').map((chain) => splitTop(chain, ',').map((spec) => {
+    const m = /^((?:\[[^\]]*\])*)([A-Za-z0-9_]+)(?:=(.*?))?((?:\[[^\]]*\])*)$/s.exec(spec.trim());
+    if (!m) return { raw: spec };
+    const args = m[3] === undefined ? [] : splitTop(m[3], ':').map((a) => {
+      const i = a.indexOf('=');
+      return i > 0 && !a.startsWith("'") ? [a.slice(0, i), a.slice(i + 1)] : [null, a];
+    });
+    return { pre: m[1], name: m[2], args, post: m[4] };
+  }));
+}
+const printGraph = (chains) => chains.map((c) => c.map((f) => (f.raw !== undefined ? f.raw
+  : `${f.pre}${f.name}${f.inst ? `@${f.inst}` : ''}${f.args.length ? `=${f.args.map(([k, v]) => (k ? `${k}=${v}` : v)).join(':')}` : ''}${f.post}`)).join(',')).join(';');
+
+// Grafo de un efecto con fotogramas clave para el render: los filtros llevan nombre (@N@k…) y, para cada
+// fotograma del evento (tiempo local), los comandos que cambian los valores que varían.
+function animatedGraph(fx, def, ctx, build, timing, tag) {
+  const kctx = { ...ctx, keep: true };
+  const at = (t) => parseGraph(build(def, fxParamsAt(fx, t), kctx));
+  const base = at(0);
+  let k = 0;
+  for (const chain of base) for (const f of chain) if (f.name) f.inst = `${tag}k${k++}`;
+  const cmds = [];
+  let prev = base;
+  const frames = Math.ceil(timing.duration * timing.fps) + 1;
+  for (let i = 1; i <= frames; i++) {
+    const t = i / timing.fps;
+    const cur = at(t);
+    const list = [];
+    cur.forEach((chain, c) => chain.forEach((f, j) => {
+      const b = base[c]?.[j];
+      if (!b?.inst || b.name !== f.name) return;
+      f.args.forEach(([key, v], a) => {
+        if (key && prev[c][j].args[a]?.[1] !== v) list.push(`${b.name}@${b.inst} ${key} ${v}`);
+      });
+    }));
+    // Medio fotograma antes: el fotograma de t ya lleva sus valores aunque su instante no caiga justo en la
+    // rejilla (los tiempos se redondean al escribirlos).
+    if (list.length) cmds.push([t - 0.5 / timing.fps, list.join(',')]);
+    prev = cur;
+  }
+  return { graph: printGraph(base), cmds };
+}
+
 
 // Subgrafo de FFmpeg con toda la cadena de efectos de un evento, entre las etiquetas @IN@ y @OUT@
 // (@N@ es un prefijo único que pone el proceso principal). alpha: si deja transparencia (croma).
 // kind: 'video' o 'audio' (solo cambia el filtro que no hace nada: null / anull).
-export function effectsGraph(effects, ctx, kind = 'video') {
+// timing = { duration, fps }: con efectos animados, cmds = [[t local, 'filtro@nombre opción valor,…'], …]
+// para sendcmd (el proceso principal los pasa al tiempo de cada trozo).
+export function effectsGraph(effects, ctx, kind = 'video', timing = null) {
   const list = activeEffects(effects).filter((fx) => EFFECTS.get(fx.type).kind === kind);
   if (!list.length) return null;
+  const source = new Map((effects || []).map((fx) => [fx.id, fx]));
+  const cmds = [];
   const parts = [];
   let chain = [];
   let cur = '@IN@';
@@ -255,6 +399,24 @@ export function effectsGraph(effects, ctx, kind = 'video') {
   for (const fx of list) {
     const def = EFFECTS.get(fx.type);
     if (def.alpha) alpha = true;
+    const original = source.get(fx.id);
+    if (timing && kind === 'video' && hasKeyframes(original) && isAnimatable(def)) {
+      // Animado: un trozo de grafo propio con nombres y comandos.
+      const tag = `@N@a${k++}`;
+      if (def.graph) {
+        flush(`@N@s${k++}`);
+        const out = `@N@s${k++}`;
+        const res = animatedGraph(original, def, ctx, (d, p, c) => d.graph(p, c, cur, out, `@N@g${k}`), timing, tag);
+        parts.push(res.graph);
+        cmds.push(...res.cmds);
+        cur = out;
+      } else {
+        const res = animatedGraph(original, def, ctx, (d, p, c) => d.ffmpeg(p, c), timing, tag);
+        if (res.graph) chain.push(res.graph);
+        cmds.push(...res.cmds);
+      }
+      continue;
+    }
     if (def.graph) {
       flush(`@N@s${k++}`);
       const out = `@N@s${k++}`;
@@ -266,5 +428,9 @@ export function effectsGraph(effects, ctx, kind = 'video') {
     }
   }
   flush('@OUT@');
-  return { graph: parts.join(';'), alpha };
+  // Comandos de todos los efectos animados, juntos por instante.
+  const byTime = new Map();
+  for (const [t, c] of cmds) byTime.set(t, byTime.has(t) ? `${byTime.get(t)},${c}` : c);
+  const merged = [...byTime].sort((a, b) => a[0] - b[0]);
+  return { graph: parts.join(';'), alpha, ...(merged.length ? { cmds: merged } : {}) };
 }
