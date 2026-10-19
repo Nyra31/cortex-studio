@@ -106,7 +106,7 @@ El repositorio ya es público con licencia **GPL-3.0** (desde la v0.6.0, para la
 
 Hechas las tres fases de «transiciones y efectos de sonido y video como los de VEGAS» (v0.3.0 y v0.4.0).
 
-Después de v0.5.0 (19/10/2026, sin publicar): curvas de fundido, 50 fuentes incluidas y selector de fuentes, vista previa a pantalla completa (y en otra pantalla) y rampas de velocidad.
+Después de v0.5.0 (19/10/2026, sin publicar; irá en la v0.6.0): curvas de fundido, 50 fuentes incluidas y selector de fuentes, vista previa a pantalla completa (y en otra pantalla), rampas de velocidad, actualizaciones automáticas y licencia GPL-3.0, dividir en la selección de tiempo (S), recortar hasta el cursor (Alt+[ / Alt+]), exportar fotograma, medidores de volumen y fotogramas clave en los efectos de video. Pendiente de confirmar con el usuario antes de publicar: poner el repositorio en público (los commits llevan su correo `illangt79@educastur.es`).
 
 Otros: fotogramas clave para los valores de los efectos, transiciones sobre un fundido hacia la pista de debajo (sin solapamiento), guardar la selección de tiempo en el proyecto, dividir con S en los dos extremos de la selección de tiempo (como VEGAS), curvas en las envolventes. La vista previa usa el reproductor de Chromium, así que algunos códecs (HEVC, ProRes, AVI antiguos) se renderizan pero no se ven en la vista previa.
 
