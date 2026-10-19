@@ -17,7 +17,9 @@ function describe(m) {
   return parts.join(' · ');
 }
 
-export default function MediaPool({ media, onImport, onNewText, onDropFiles, onRemove, onAdd }) {
+// proxies / proxyJobs: proxies de la vista previa ya hechos (ruta → proxy) y los que se están creando (ruta → %).
+// onMenu(e, medio): clic derecho en un medio.
+export default function MediaPool({ media, proxies = {}, proxyJobs = {}, onImport, onNewText, onDropFiles, onRemove, onAdd, onMenu }) {
   const [selected, setSelected] = useState(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -79,11 +81,22 @@ export default function MediaPool({ media, onImport, onNewText, onDropFiles, onR
                 setSelected(m.id);
               }}
               onDoubleClick={() => !m.missing && onAdd(m)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setSelected(m.id);
+                onMenu?.(e, m);
+              }}
               title={`${isText(m) ? m.name : m.path}\nArrastra a la línea de tiempo o haz doble clic para añadir en el cursor`}
             >
               <div className="thumb">
                 {m.thumb ? <img src={m.thumb} alt="" /> : <Icon name="music" size={26} />}
                 {!m.isImage && m.duration != null && <span className="badge">{formatDuration(m.duration)}</span>}
+                {m.path in proxyJobs ? (
+                  <span className="badge proxy busy" title="Creando una copia ligera para la vista previa">Proxy {proxyJobs[m.path]} %</span>
+                ) : proxies[m.path] ? (
+                  <span className="badge proxy" title="La vista previa usa una copia ligera (proxy); el render, el original">Proxy</span>
+                ) : null}
               </div>
               <div className="media-name">{m.name}</div>
               <div className="media-meta">{describe(m)}</div>

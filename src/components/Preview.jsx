@@ -137,8 +137,12 @@ function sync(el, target, playing, speed = 1) {
 // panEventId, onPanChange: evento con la ventana de panorámica abierta, que se coloca con el ratón (PanOverlay).
 export default function Preview({
   project, time, playing, selection, editTextId, onSelectEvent, onTextChange, onEditText, panEventId, onPanChange,
-  onOpenProperties, commands, onMessage, onExportFrame,
+  onOpenProperties, commands, onMessage, onExportFrame, proxies = {}, onMediaError = () => {},
 }) {
+  // Video y audio de los medios: su proxy si lo tienen (copia ligera, ver App) o el original.
+  const sourceUrl = (media) => mediaUrl(proxies[media.path] || media.path);
+  const mediaErrorRef = useRef(onMediaError);
+  mediaErrorRef.current = onMediaError;
   const canvasRef = useRef(null);
   const previewRef = useRef(null);
   const externalWin = useRef(null);
@@ -217,6 +221,15 @@ export default function Preview({
     }
     const key = players.get(e.id);
     let el = videoEls.current.get(key);
+    const url = sourceUrl(media);
+    if (el && el.cortexUrl !== url) {
+      // Ha llegado (o se ha quitado) el proxy: otro reproductor con la nueva fuente.
+      el.removeAttribute('src');
+      el.load();
+      el.remove();
+      videoEls.current.delete(key);
+      el = null;
+    }
     if (!el && create) {
       el = document.createElement('video');
       el.crossOrigin = 'anonymous';
@@ -225,7 +238,10 @@ export default function Preview({
       el.playsInline = true;
       el.addEventListener('loadeddata', invalidate);
       el.addEventListener('seeked', invalidate);
-      el.src = mediaUrl(media.path);
+      // Si el reproductor no puede abrir el archivo (códec no admitido), App crea un proxy.
+      el.addEventListener('error', () => mediaErrorRef.current(media.id));
+      el.cortexUrl = url;
+      el.src = url;
       el.currentTime = e.inPoint;
       sourcesRef.current.appendChild(el);
       videoEls.current.set(key, el);
@@ -295,7 +311,12 @@ export default function Preview({
     if (!engine) return;
     if (playing) engine.resume();
     const audioFor = (e) => {
-      const p = engine.player(players.get(e.id), mediaUrl(mediaById.get(e.mediaId).path), e.inPoint, e.trackId);
+      const m = mediaById.get(e.mediaId);
+      const p = engine.player(players.get(e.id), sourceUrl(m), e.inPoint, e.trackId);
+      if (!p.watched) {
+        p.watched = true;
+        p.el.addEventListener('error', () => mediaErrorRef.current(m.id));
+      }
       const effects = activeEffects(e.effects).filter((fx) => EFFECTS.get(fx.type).kind === 'audio');
       engine.setEffects(p, effects, { peak: eventPeak(mediaById.get(e.mediaId), e) });
       return p;

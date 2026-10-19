@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, protocol, shell, Menu, screen } = r
 const path = require('path');
 const fs = require('fs');
 const { Readable } = require('stream');
+const crypto = require('crypto');
 const ff = require('./ffmpeg');
 
 // Actualizaciones automáticas (electron-updater, releases de GitHub: latest.yml + instalador). Solo en la app
@@ -171,7 +172,87 @@ ipcMain.handle('media:analyze', async (_e, filePath) => {
   const resolved = path.resolve(filePath);
   const info = await ff.analyze(resolved);
   allowedFiles.add(resolved);
-  return info;
+  const proxy = info.isImage ? null : existingProxy(resolved);
+  if (proxy) allowedFiles.add(proxy);
+  return { ...info, proxy };
+});
+
+// ---- Proxies de la vista previa (ver makeProxy en ffmpeg.js) ----
+// Se guardan en userData/proxies con un nombre que depende de la ruta, el tamaño y la fecha del original (si el
+// archivo cambia, se hace otro). Se crean de uno en uno; al salir se para el que esté en marcha.
+const proxyDir = () => path.join(app.getPath('userData'), 'proxies');
+function proxyPathFor(file) {
+  const st = fs.statSync(file);
+  const key = crypto.createHash('sha1').update(`${file}|${st.size}|${st.mtimeMs}`).digest('hex').slice(0, 24);
+  return path.join(proxyDir(), `${key}.mp4`);
+}
+function existingProxy(file) {
+  try {
+    const p = proxyPathFor(file);
+    return fs.existsSync(p) ? p : null;
+  } catch {
+    return null;
+  }
+}
+let proxyQueue = Promise.resolve();
+let proxyProc = null;
+const proxyJobs = new Map(); // original → promesa del proxy
+
+ipcMain.handle('proxy:make', (_e, filePath) => {
+  const file = path.resolve(filePath);
+  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  const ready = existingProxy(file);
+  if (ready) {
+    allowedFiles.add(ready);
+    return ready;
+  }
+  if (proxyJobs.has(file)) return proxyJobs.get(file);
+  const job = proxyQueue.then(async () => {
+    const out = proxyPathFor(file);
+    await fs.promises.mkdir(proxyDir(), { recursive: true });
+    const part = out.replace(/\.mp4$/, '.parcial.mp4');
+    const send = (percent) => mainWindow?.webContents.send('proxy:progress', { path: file, percent });
+    send(0);
+    const r = await ff.makeProxy(file, part, {
+      onSpawn: (p) => { proxyProc = p; },
+      onProgress: (f) => send(Math.round(f * 100)),
+    });
+    proxyProc = null;
+    if (r.code !== 0) {
+      fs.promises.unlink(part).catch(() => {});
+      throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+    }
+    await fs.promises.rename(part, out);
+    allowedFiles.add(out);
+    return out;
+  });
+  proxyQueue = job.catch(() => {});
+  proxyJobs.set(file, job);
+  job.catch(() => {}).finally(() => proxyJobs.delete(file));
+  return job;
+});
+
+ipcMain.handle('proxy:remove', async (_e, filePath) => {
+  const p = existingProxy(path.resolve(filePath));
+  if (p) await fs.promises.unlink(p).catch(() => {});
+  return true;
+});
+
+// Espacio que ocupan los proxies y borrado de todos (Herramientas).
+const proxyFiles = () => {
+  try {
+    return fs.readdirSync(proxyDir()).map((f) => path.join(proxyDir(), f));
+  } catch {
+    return [];
+  }
+};
+ipcMain.handle('proxy:usage', () => {
+  const files = proxyFiles().filter((f) => !f.endsWith('.parcial.mp4'));
+  return { count: files.length, bytes: files.reduce((sum, f) => sum + (fs.statSync(f).size || 0), 0) };
+});
+ipcMain.handle('proxy:clear', async () => {
+  for (const f of proxyFiles()) if (!f.endsWith('.parcial.mp4')) await fs.promises.unlink(f).catch(() => {});
+  return true;
 });
 
 ipcMain.handle('project:save', async (_e, data, filePath) => {
@@ -395,6 +476,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (renderProcess) renderProcess.cancel();
+  if (proxyProc) proxyProc.kill();
   // «Reiniciar y actualizar»: el instalador (sin preguntas) sustituye la aplicación y la vuelve a abrir.
   if (installOnClose && autoUpdater) autoUpdater.quitAndInstall(true, true);
   else if (process.platform !== 'darwin') app.quit();

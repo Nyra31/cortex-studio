@@ -2037,3 +2037,10 @@ kbd {
   text-overflow: ellipsis;
   text-shadow: 0 1px 2px #000;
 }
+/* Proxy de la vista previa en la ventana de medios */
+.media-item .badge.proxy {
+  right: auto;
+  left: 2px;
+  background: rgba(40, 90, 160, 0.9);
+}
+.media-item .badge.proxy.busy { background: rgba(160, 110, 30, 0.9); }

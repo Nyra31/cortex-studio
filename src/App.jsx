@@ -188,6 +188,89 @@ export default function App() {
     setTime(quantize(Math.max(0, (Math.round(t / step) + direction) * step), p.settings.fps));
   }, []);
 
+  // ---- Proxies de la vista previa ----
+  // Copias ligeras (H.264, ≤720 líneas) de los archivos que el reproductor de la vista previa no puede abrir o que
+  // pesan demasiado. proxies: ruta del original → ruta del proxy (no se guarda en el proyecto: al abrirlo, el
+  // análisis encuentra los que ya están hechos). proxyJobs: ruta → porcentaje de los que se están creando.
+  const [proxies, setProxies] = useState({});
+  const [proxyJobs, setProxyJobs] = useState({});
+  const proxyRef = useRef({ ready: {}, busy: new Set() });
+  const setProxy = useCallback((filePath, proxy) => {
+    const ready = { ...proxyRef.current.ready };
+    if (proxy) ready[filePath] = proxy;
+    else delete ready[filePath];
+    proxyRef.current.ready = ready;
+    setProxies(ready);
+  }, []);
+  const requestProxy = useCallback((filePath, message) => {
+    const { ready, busy } = proxyRef.current;
+    if (ready[filePath] || busy.has(filePath)) return;
+    busy.add(filePath);
+    setProxyJobs((j) => ({ ...j, [filePath]: 0 }));
+    if (message) setStatus(message);
+    api.makeProxy(filePath)
+      .then((proxy) => {
+        setProxy(filePath, proxy);
+        setStatus(`Proxy listo: «${baseName(filePath)}» ya se ve en la vista previa (el render usa el original).`);
+      })
+      .catch((err) => setStatus(`No se pudo crear el proxy de «${baseName(filePath)}»: ${err.message}`))
+      .finally(() => {
+        busy.delete(filePath);
+        setProxyJobs(({ [filePath]: _done, ...rest }) => rest);
+      });
+  }, [setProxy]);
+  useEffect(() => api.onProxyProgress?.(({ path: p, percent }) => setProxyJobs((j) => (p in j ? { ...j, [p]: percent } : j))), []);
+  const removeProxy = useCallback((filePath) => {
+    setProxy(filePath, null);
+    setTimeout(() => api.removeProxy(filePath), 1500); // cuando la vista previa haya soltado el archivo
+  }, [setProxy]);
+  // Resultado del análisis de un medio: apunta su proxy si ya existe o lo pide si la vista previa no puede
+  // reproducir el archivo. Devuelve los datos del medio (sin los del proxy).
+  const noteAnalyzed = useCallback(({ proxy, needsProxy, ...info }) => {
+    if (proxy) setProxy(info.path, proxy);
+    else if (needsProxy) requestProxy(info.path, `La vista previa no puede reproducir «${info.name}»: creando una copia ligera (proxy)…`);
+    return info;
+  }, [requestProxy, setProxy]);
+  // La vista previa no ha podido abrir un medio (códec que el equipo no admite, p. ej. algunos HEVC).
+  const onMediaError = useCallback((mediaId) => {
+    const m = live.current.project.media.find((x) => x.id === mediaId);
+    if (!m || m.isImage || isText(m) || m.missing) return;
+    requestProxy(m.path, `La vista previa no puede reproducir «${m.name}»: creando una copia ligera (proxy)…`);
+  }, [requestProxy]);
+  // Clic derecho en un medio de la ventana de medios.
+  const mediaMenu = useCallback((e, m) => {
+    const video = !m.isImage && !isText(m) && !m.missing;
+    const { ready, busy } = proxyRef.current;
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: 'Añadir en el cursor', action: () => setProject((p) => placeMedia(p, m, live.current.time, null)), disabled: m.missing },
+        'separator',
+        ready[m.path]
+          ? { label: 'Quitar el proxy (la vista previa usará el original)', action: () => removeProxy(m.path) }
+          : {
+            label: busy.has(m.path) ? 'Creando el proxy…' : 'Crear un proxy para la vista previa',
+            action: () => requestProxy(m.path, `Creando una copia ligera (proxy) de «${m.name}» para la vista previa…`),
+            disabled: !video || busy.has(m.path),
+          },
+        ...(!isText(m) ? [{ label: 'Abrir la ubicación del archivo', action: () => api.revealFile(m.path), disabled: m.missing }] : []),
+      ],
+    });
+  }, [removeProxy, requestProxy, setProject]);
+  const clearProxies = useCallback(async () => {
+    const { count, bytes } = await api.proxyUsage();
+    if (!count) {
+      window.alert('No hay proxies guardados.');
+      return;
+    }
+    const mb = (bytes / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 0 });
+    if (!window.confirm(`Hay ${count} proxies (${mb} MB). ¿Borrarlos? Se volverán a crear cuando hagan falta.`)) return;
+    proxyRef.current.ready = {};
+    setProxies({});
+    setTimeout(() => api.clearProxies().then(() => setStatus('Proxies borrados.')), 1500);
+  }, []);
+
   // ---- Medios ----
 
   const importPaths = useCallback(async (paths) => {
@@ -201,7 +284,7 @@ export default function App() {
       }
       setStatus(`Importando ${baseName(filePath)}…`);
       try {
-        const media = { id: uid('m'), ...(await api.analyzeMedia(filePath)) };
+        const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(filePath)) };
         setProject((p) => ({ ...p, media: [...p.media, media] }));
         imported.push(media);
       } catch {
@@ -210,7 +293,7 @@ export default function App() {
     }
     setStatus(failed.length ? `No se pudieron importar: ${failed.join(', ')}` : '');
     return imported;
-  }, [setProject]);
+  }, [noteAnalyzed, setProject]);
 
   const importDialog = useCallback(async () => {
     const paths = await api.pickMedia();
@@ -403,7 +486,7 @@ export default function App() {
         setStatus('No se ha grabado nada.');
         return;
       }
-      media = { id: uid('m'), ...(await api.analyzeMedia(result.path)) };
+      media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(result.path)) };
     } catch (err) {
       setStatus(`No se pudo guardar la grabación: ${err.message}`);
       return;
@@ -423,7 +506,7 @@ export default function App() {
     setProject({ ...next, events: [...next.events, ev] });
     setSelection([ev.id]);
     setStatus(`Grabación guardada en ${result.path}${busy ? ' (en una pista nueva: la pista armada ya tenía eventos en ese tramo)' : ''}`);
-  }, [setProject]);
+  }, [noteAnalyzed, setProject]);
   useEffect(() => {
     if (!playing && live.current.recording) finishRecording();
   }, [playing, finishRecording]);
@@ -783,7 +866,7 @@ export default function App() {
       }
       setStatus(`Cargando ${m.name}…`);
       try {
-        media.push({ ...(await api.analyzeMedia(m.path)), id: m.id });
+        media.push({ ...noteAnalyzed(await api.analyzeMedia(m.path)), id: m.id });
       } catch {
         media.push({ ...m, missing: true, hasVideo: true, hasAudio: true });
       }
@@ -802,7 +885,7 @@ export default function App() {
     const missing = media.filter((m) => m.missing).length;
     const what = recovered ? 'Proyecto recuperado (aún sin guardar)' : 'Proyecto abierto';
     setStatus(missing ? `${what}. Faltan ${missing} archivo(s) de medios.` : what);
-  }, [history]);
+  }, [history, noteAnalyzed]);
 
   const open = useCallback(async () => {
     if (!confirmDiscard()) return;
@@ -973,6 +1056,8 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: recording ? 'Terminar la grabación' : 'Grabar voz en off', shortcut: 'Ctrl+R', action: toggleRecording },
         { label: 'Opciones de grabación…', action: () => setRecordDialog(true), disabled: !!recording },
         'separator',
+        { label: 'Borrar los proxies de la vista previa…', action: clearProxies },
+        'separator',
         { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
         { label: 'Herramientas de desarrollo', shortcut: 'F12', action: api.toggleDevTools },
       ],
@@ -1129,6 +1214,9 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
               onDropFiles={dropFilesOnPool}
               onRemove={removeMediaItem}
               onAdd={addAtCursor}
+              proxies={proxies}
+              proxyJobs={proxyJobs}
+              onMenu={mediaMenu}
             />
           )}
           {leftTab === 'transitions' && <TransitionsPanel />}
@@ -1151,6 +1239,8 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             commands={previewCommands}
             onMessage={setStatus}
             onExportFrame={exportFrame}
+            proxies={proxies}
+            onMediaError={onMediaError}
           />
         </Dock>
       </div>

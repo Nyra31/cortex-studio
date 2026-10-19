@@ -76,7 +76,42 @@ async function probe(file) {
     fps: video ? parseRate(video.avg_frame_rate) || parseRate(video.r_frame_rate) : null,
     // Imágenes con transparencia (PNG con alfa…): sus efectos deben conservarla en el render.
     hasAlpha: !!video && /^(rgba|bgra|argb|abgr|ya|yuva|gbrap|pal8)/.test(video.pix_fmt || ''),
+    // La vista previa (Chromium) no lo puede reproducir: hace falta un proxy (ver makeProxy).
+    needsProxy: !isImage && needsProxy(info.format?.format_name || '', video?.codec_name, audio?.codec_name),
   };
+}
+
+// Formatos que reproduce el navegador de la vista previa. Lo demás (ProRes, DNxHD, MPEG-2, AVI, MPEG-TS, WMV,
+// AC-3, PCM fuera de WAV…) necesita un proxy. HEVC depende del equipo: si no se ve, la vista previa lo detecta
+// (error del reproductor) y pide el proxy entonces.
+const BROWSER_VIDEO = new Set(['h264', 'hevc', 'vp8', 'vp9', 'av1', 'theora']);
+const BROWSER_AUDIO = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac']);
+const BROWSER_CONTAINERS = ['mov', 'mp4', 'matroska', 'webm', 'ogg', 'wav', 'mp3', 'flac', 'aac'];
+function needsProxy(format, videoCodec, audioCodec) {
+  if (!BROWSER_CONTAINERS.some((c) => format.split(',').includes(c))) return true;
+  if (videoCodec && !BROWSER_VIDEO.has(videoCodec)) return true;
+  if (audioCodec && !BROWSER_AUDIO.has(audioCodec) && !(format === 'wav' && audioCodec.startsWith('pcm_'))) return true;
+  return false;
+}
+
+// Proxy para la vista previa: copia ligera en H.264 (como mucho 720 líneas, un fotograma clave cada 15 para
+// buscar rápido) y AAC, con los mismos tiempos que el original (empieza donde él y conserva los fotogramas).
+// El render usa siempre el original.
+async function makeProxy(file, out, { onProgress, onSpawn } = {}) {
+  const info = await probe(file);
+  const video = info.hasVideo
+    ? ['-map', '0:v:0', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-g', '15',
+      '-vf', "scale=-2:'trunc(min(720,ih)/2)*2'", '-fps_mode', 'passthrough']
+    : [];
+  const audio = info.hasAudio ? ['-map', '0:a:0', '-c:a', 'aac', '-b:a', '160k', '-ac', '2'] : [];
+  const args = ['-y', '-v', 'error', '-nostats', '-progress', 'pipe:1', '-i', file, ...video, ...audio, '-movflags', '+faststart', out];
+  return run(ffmpegPath, args, {
+    onSpawn,
+    onLine: (line) => {
+      const m = /^out_time_(?:us|ms)=(\d+)/.exec(line);
+      if (m && onProgress && info.duration) onProgress(Math.min(1, Number(m[1]) / 1e6 / info.duration));
+    },
+  });
 }
 
 async function thumbnail(file, info) {
@@ -628,4 +663,4 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
   }
 }
 
-module.exports = { analyze, render, buildRender, ffmpegPath, ffprobePath };
+module.exports = { analyze, render, buildRender, makeProxy, ffmpegPath, ffprobePath };
