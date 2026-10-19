@@ -1,6 +1,7 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Waveform from './Waveform.jsx';
 import Icon from './Icon.jsx';
+import Meter from './Meter.jsx';
 import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
   EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, moveTrack,
@@ -573,6 +574,7 @@ const TrackRow = memo(function TrackRow({
             <>
               <VolumeSlider value={track.volume ?? 0} onChange={(volume, record) => update({ volume }, record)} />
               <PanSlider value={track.pan ?? 0} onChange={(pan, record) => update({ pan }, record)} />
+              <Meter id={track.id} title="Nivel de la pista (izquierda arriba, derecha abajo)" />
             </>
           )}
         </div>
@@ -1508,6 +1510,8 @@ const Timeline = forwardRef(function Timeline({
       <div className="timeline-footer">
         {footer}
         <span className="footer-spacer" />
+        <span className="footer-info">Máster</span>
+        <Meter id="master" withLabel title="Nivel del máster: lo que sale por los altavoces (y en el render). Rojo: satura" />
         {region && (
           <span className="footer-info">
             Selección: <strong>{formatTimecode(region.start, fps)}</strong> – <strong>{formatTimecode(region.end, fps)}</strong>

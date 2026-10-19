@@ -1934,3 +1934,70 @@ kbd {
 .update-banner span {
   flex: 1;
 }
+
+/* Medidores de volumen: dos barras (izquierda y derecha), de −60 a 0 dBFS. */
+.meter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.meter-bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.track-main .meter {
+  margin-top: 3px;
+}
+.meter.big .meter-bars {
+  width: 150px;
+  flex: none;
+}
+.meter-bar {
+  position: relative;
+  height: 3px;
+  background: #151515;
+  overflow: hidden;
+}
+.meter.big .meter-bar {
+  height: 5px;
+}
+.meter-fill {
+  height: 100%;
+  width: 0;
+  background: #4caf50;
+}
+.meter-fill.hot {
+  background: #d8b23a;
+}
+.meter-fill.clip {
+  background: #e0574b;
+}
+.meter-hold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -2px;
+  background: #e8e8e8;
+  display: none;
+}
+.meter-db {
+  width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+.meter-clip {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: #3a1a18;
+  border: 1px solid #5a2a26;
+  cursor: pointer;
+}
+.meter-clip.on {
+  background: #e0574b;
+  border-color: #ff8a80;
+}

@@ -14,6 +14,7 @@ import { NO_CROP, panActive, panAt } from '../state/pan.js';
 import { trackMixAt } from '../state/envelopes.js';
 import { hasRamp, speedAt } from '../state/speed.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
+import { setMeterEngine } from '../preview/meters.js';
 
 // Para las pruebas automáticas: procesar un sonido con la misma cadena de efectos que la vista previa.
 window.cortexPruebas = { renderOfflineAudio, activeEffects };
@@ -285,7 +286,7 @@ export default function Preview({
     if (!engine) return;
     if (playing) engine.resume();
     const audioFor = (e) => {
-      const p = engine.player(players.get(e.id), mediaUrl(mediaById.get(e.mediaId).path), e.inPoint);
+      const p = engine.player(players.get(e.id), mediaUrl(mediaById.get(e.mediaId).path), e.inPoint, e.trackId);
       const effects = activeEffects(e.effects).filter((fx) => EFFECTS.get(fx.type).kind === 'audio');
       engine.setEffects(p, effects, { peak: eventPeak(mediaById.get(e.mediaId), e) });
       return p;
@@ -319,7 +320,9 @@ export default function Preview({
   useEffect(() => {
     audio.current = new AudioEngine();
     window.cortexPruebas.audio = audio.current;
+    setMeterEngine(audio.current);
     return () => {
+      setMeterEngine(null);
       audio.current.close();
       audio.current = null;
     };

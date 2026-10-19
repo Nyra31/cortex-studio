@@ -56,12 +56,61 @@ export class AudioEngine {
     this.ready = false; // procesadores propios (puerta de ruido, cambio de tono) cargados
     loadWorklets(this.ctx).then(() => (this.ready = true)).catch(() => {});
     this.players = new Map();
+    // Buses para los medidores: cada reproductor va al de su pista y las pistas al máster (sin cambiar el
+    // sonido). Cada bus mide sus dos canales con un analizador por canal.
+    this.master = this.measured(this.ctx.destination);
+    this.buses = new Map(); // id de pista → bus
+  }
+
+  measured(destination) {
+    const gain = this.ctx.createGain();
+    gain.channelCount = 2;
+    gain.channelCountMode = 'explicit';
+    gain.connect(destination);
+    const splitter = this.ctx.createChannelSplitter(2);
+    gain.connect(splitter);
+    const analysers = [0, 1].map((c) => {
+      const a = this.ctx.createAnalyser();
+      a.fftSize = 1024;
+      splitter.connect(a, c);
+      return a;
+    });
+    return { gain, analysers, data: new Float32Array(1024) };
+  }
+
+  bus(trackId) {
+    if (!this.buses.has(trackId)) this.buses.set(trackId, this.measured(this.master.gain));
+    return this.buses.get(trackId);
+  }
+
+  // Picos recientes (unos 20 ms) del máster y de cada pista: { master: [l, r], tracks: Map(id → [l, r]) }.
+  levels() {
+    const peak = (b) => b.analysers.map((a) => {
+      a.getFloatTimeDomainData(b.data);
+      let m = 0;
+      for (let i = 0; i < b.data.length; i++) {
+        const v = Math.abs(b.data[i]);
+        if (v > m) m = v;
+      }
+      return m;
+    });
+    const tracks = new Map();
+    for (const [id, b] of this.buses) tracks.set(id, peak(b));
+    return { master: peak(this.master), tracks };
   }
 
   // Reproductor para una clave (ver playerKeys en Preview) y un archivo; se crea la primera vez.
-  player(key, url, startAt = 0) {
+  player(key, url, startAt = 0, trackId = null) {
     let p = this.players.get(key);
-    if (p && p.url === url) return p;
+    if (p && p.url === url) {
+      if (p.trackId !== trackId) {
+        // El evento ha cambiado de pista: el sonido va al bus de la nueva.
+        p.merger.disconnect();
+        p.merger.connect(this.bus(trackId).gain);
+        p.trackId = trackId;
+      }
+      return p;
+    }
     if (p) this.remove(key);
     const el = new Audio();
     el.crossOrigin = 'anonymous'; // sin esto Web Audio recibiría silencio
@@ -87,8 +136,8 @@ export class AudioEngine {
     splitter.connect(right, 1);
     left.connect(merger, 0, 0);
     right.connect(merger, 0, 1);
-    merger.connect(this.ctx.destination);
-    p = { el, url, source, input, output, left, right, merger, pan: 0, chain: new AudioChain(this.ctx, input, output) };
+    merger.connect(this.bus(trackId).gain);
+    p = { el, url, source, input, output, left, right, merger, trackId, pan: 0, chain: new AudioChain(this.ctx, input, output) };
     this.players.set(key, p);
     return p;
   }
