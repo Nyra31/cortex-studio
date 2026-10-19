@@ -1889,3 +1889,34 @@ kbd {
 .preview:fullscreen .screen {
   cursor: none;
 }
+
+/* Rampa de velocidad: envolvente verde sobre el evento (como la de velocidad de VEGAS). Por encima de los
+   tiradores de recorte, pero solo la línea y los puntos reciben el ratón. */
+.speed-env {
+  position: absolute;
+  left: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.speed-env .ref {
+  stroke: rgba(120, 220, 120, 0.35);
+  stroke-dasharray: 3 3;
+}
+.speed-env .line {
+  fill: none;
+  stroke: #6ede6e;
+  stroke-width: 1.5;
+}
+.speed-env .hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 9;
+  pointer-events: stroke;
+  cursor: copy;
+}
+.speed-env circle {
+  fill: #6ede6e;
+  stroke: #1b3d1b;
+  pointer-events: all;
+  cursor: move;
+}

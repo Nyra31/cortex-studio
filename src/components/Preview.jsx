@@ -12,6 +12,7 @@ import { Compositor } from '../preview/compositor.js';
 import { drawText, isText } from '../state/text.js';
 import { NO_CROP, panActive, panAt } from '../state/pan.js';
 import { trackMixAt } from '../state/envelopes.js';
+import { hasRamp, speedAt } from '../state/speed.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
 
 // Para las pruebas automáticas: procesar un sonido con la misma cadena de efectos que la vista previa.
@@ -95,6 +96,7 @@ function playerKeys(events) {
         prev &&
         prev.mediaId === e.mediaId &&
         (prev.rate || 1) === (e.rate || 1) &&
+        !hasRamp(prev) && !hasRamp(e) &&
         Math.abs(prev.start + prev.duration - e.start) < 0.002 &&
         Math.abs(sourceTime(prev, prev.start + prev.duration) - e.inPoint) < 0.002;
       keys.set(e.id, continues ? keys.get(prev.id) : e.id);
@@ -109,9 +111,11 @@ function prepare(el, e, time) {
   if (!el.seeking && time < e.start && Math.abs(el.currentTime - e.inPoint) > 0.05) el.currentTime = e.inPoint;
 }
 
-// target: instante del medio; rate: velocidad del evento (el navegador conserva el tono, igual que atempo).
-function sync(el, target, playing, rate = 1) {
-  if (el.playbackRate !== rate) el.playbackRate = rate;
+// target: instante del medio; rate: velocidad del evento en ese instante (con rampa cambia en cada fotograma;
+// el navegador conserva el tono, igual que el render). El navegador admite de 0,0625 a 16.
+function sync(el, target, playing, speed = 1) {
+  const rate = Math.min(16, Math.max(0.0625, speed));
+  if (Math.abs(el.playbackRate - rate) > 1e-4) el.playbackRate = rate;
   if (playing) {
     if (!el.seeking && Math.abs(el.currentTime - target) > DRIFT) el.currentTime = target;
     if (el.paused) el.play().catch(() => {});
@@ -241,7 +245,7 @@ export default function Preview({
       if (!videoTracks.has(e.trackId) || !m || m.missing || m.isImage || !isNear(e)) continue;
       const key = players.get(e.id);
       const el = sourceFor(e, true);
-      if (visible.has(e.id)) sync(el, sourceTime(e, time), playing, e.rate || 1);
+      if (visible.has(e.id)) sync(el, sourceTime(e, time), playing, speedAt(e, time - e.start));
       else if (!busy.has(key) && !needed.has(key)) prepare(el, e, time);
       needed.add(key);
     }
@@ -292,7 +296,7 @@ export default function Preview({
       const p = audioFor(e);
       engine.setGain(p, gain);
       engine.setPan(p, pan);
-      if (playing) sync(p.el, sourceTime(e, time), true, e.rate || 1);
+      if (playing) sync(p.el, sourceTime(e, time), true, speedAt(e, time - e.start));
       else if (!p.el.paused) p.el.pause();
     }
     const audioTracks = new Set(project.tracks.filter((t) => t.type === 'audio' && isTrackActive(t, project.tracks)).map((t) => t.id));

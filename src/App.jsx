@@ -25,6 +25,7 @@ import {
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
 import { panActive, setPanValues } from './state/pan.js';
+import { hasRamp, shiftSpeed, sourceOffset } from './state/speed.js';
 import { Recorder, loadRecordSettings, micError } from './preview/recorder.js';
 
 const api = window.api;
@@ -587,8 +588,25 @@ export default function App() {
         'separator',
         {
           label: 'Velocidad normal (100 %)',
-          action: () => setProject((cur) => updateEvents(cur, ids, (e) => ({ duration: e.duration * (e.rate || 1), rate: 1 }))),
-          disabled: !selected.some((e) => (e.rate || 1) !== 1),
+          action: () => setProject((cur) => updateEvents(cur, ids, (e) => ({ duration: sourceOffset(e, e.duration), rate: 1, speed: null }))),
+          disabled: !selected.some((e) => (e.rate || 1) !== 1 || hasRamp(e)),
+        },
+        {
+          // Rampa: envolvente de velocidad en el evento y su grupo, que empieza plana (100 %) con un punto en cada extremo.
+          label: 'Rampa de velocidad (envolvente)',
+          checked: hasRamp(info.event),
+          disabled: !media || media.isImage,
+          action: () => setProject((cur) => {
+            const ev = info.event;
+            const on = !hasRamp(ev);
+            const points = [{ t: 0, v: 1 }, { t: ev.duration, v: 1 }];
+            return {
+              ...cur,
+              events: cur.events.map((x) => (x.id === ev.id || (ev.groupId && x.groupId === ev.groupId)
+                ? { ...x, speed: on ? shiftSpeed(points, x.start - ev.start) : null }
+                : x)),
+            };
+          }),
         },
         {
           label: 'Quitar fundidos',

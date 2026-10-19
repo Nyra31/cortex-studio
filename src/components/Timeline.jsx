@@ -8,6 +8,10 @@ import {
   fadeCurve, overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain,
 } from '../state/project.js';
 import { panActive } from '../state/pan.js';
+import {
+  MAX_SPEED, MIN_SPEED, addSpeedPoint, hasRamp, localForSource, moveSpeedPoint, rampAt, removeSpeedPoint, scaleSpeedTime, shiftSpeed,
+  sourceOffset,
+} from '../state/speed.js';
 import { ENVELOPE_KINDS, ENVELOPE_MAX_DB, addEnvelopePoint, envelopeValueAt } from '../state/envelopes.js';
 import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
 import { isText } from '../state/text.js';
@@ -198,10 +202,46 @@ function TransitionZone({ width, height, label, onReset }) {
   );
 }
 
+// Envolvente de velocidad del evento (rampa, en verde como en VEGAS): escala logarítmica de 10 % (abajo) a
+// 400 % (arriba), con la línea de 100 % de referencia. Doble clic en la línea: punto nuevo; los puntos se
+// arrastran (cerca de 100 % se pegan; Mayús: sin ajuste) y el clic derecho los elimina o los pone a 100 %.
+const LOG_MIN = Math.log(MIN_SPEED);
+const LOG_SPAN = Math.log(MAX_SPEED) - LOG_MIN;
+const speedY = (v, h) => 3 + (1 - (Math.log(v) - LOG_MIN) / LOG_SPAN) * (h - 6);
+const speedFromY = (y, h) => Math.exp(LOG_MIN + (1 - (y - 3) / (h - 6)) * LOG_SPAN);
+function SpeedEnvelope({ ev, width, height, pps, onPointDown, onLineDouble, onPointMenu }) {
+  const pts = ev.speed;
+  const times = [0, ...pts.map((p) => p.t).filter((t) => t > 0 && t < ev.duration), ev.duration];
+  const line = times.map((t) => `${t * pps},${speedY(rampAt(pts, t), height)}`).join(' ');
+  const y100 = speedY(1, height);
+  return (
+    <svg className="speed-env" width={width} height={height} style={{ top: TITLE_H }}>
+      <line className="ref" x1={0} y1={y100} x2={width} y2={y100} />
+      <polyline className="line" points={line} />
+      <polyline className="hit" points={line} onDoubleClick={(e) => onLineDouble(e, ev)}>
+        <title>Envolvente de velocidad (doble clic: añadir un punto)</title>
+      </polyline>
+      {pts.map((p, i) => (p.t >= -1e-6 && p.t <= ev.duration + 1e-6 ? (
+        <circle
+          key={i}
+          cx={Math.min(width - 4, Math.max(4, p.t * pps))} // los de los extremos, un poco hacia dentro
+          cy={speedY(p.v, height)}
+          r={4}
+          onPointerDown={(e) => onPointDown(e, ev, i)}
+          onContextMenu={(e) => onPointMenu(e, ev, i)}
+        >
+          <title>{`${Math.round(p.v * 100)} % (arrastra; clic derecho: eliminar o 100 %)`}</title>
+        </circle>
+      ) : null))}
+    </svg>
+  );
+}
+
 // fadeIn/fadeOut: fundidos efectivos (en audio incluyen los fundidos cruzados de los solapamientos).
 // overlapIn/overlapOut: segundos solapados con el evento anterior/siguiente de la pista.
 const EventView = memo(function EventView({
   ev, media, type, selected, pps, fadeIn, fadeOut, curveIn, curveOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onPan, onDouble,
+  onSpeedPointDown, onSpeedLineDouble, onSpeedPointMenu,
 }) {
   const width = Math.max(3, ev.duration * pps);
   const height = bodyHeight(type);
@@ -215,17 +255,18 @@ const EventView = memo(function EventView({
   const fadeHandleX = (x) => Math.min(width - 8, Math.max(0, x - 4));
   return (
     <div
-      className={`event ${type}${selected ? ' selected' : ''}${media?.missing ? ' missing' : ''}${rate !== 1 ? ' stretched' : ''}`}
+      className={`event ${type}${selected ? ' selected' : ''}${media?.missing ? ' missing' : ''}${rate !== 1 || hasRamp(ev) ? ' stretched' : ''}`}
       style={{ left: ev.start * pps, width }}
       onPointerDown={(e) => onDown(e, ev, 'move')}
       onContextMenu={(e) => onMenu(e, ev)}
-      onDoubleClick={(e) => !e.target.closest('.fade-handle, .gain-handle, .transition-zone, button') && onDouble(ev)}
+      onDoubleClick={(e) => !e.target.closest('.fade-handle, .gain-handle, .transition-zone, .speed-env, button') && onDouble(ev)}
       data-event={ev.id}
       title={media?.missing ? `Archivo no encontrado: ${media.path}` : media?.name}
     >
       <div className="event-title">
         {name}
         {rate !== 1 && <span className="event-rate"> · {formatRate(rate)}</span>}
+        {hasRamp(ev) && <span className="event-rate"> · rampa</span>}
         {type === 'audio' && volume !== 0 && <span className="event-gain"> · {formatVolume(volume)}</span>}
       </div>
       {type === 'video' && width > 70 && (
@@ -277,6 +318,7 @@ const EventView = memo(function EventView({
             inPoint={ev.inPoint}
             duration={ev.duration}
             rate={rate}
+            speed={ev.speed}
             width={width}
             height={height}
             gain={gain}
@@ -292,6 +334,12 @@ const EventView = memo(function EventView({
           />
         )}
       </div>
+      {hasRamp(ev) && (
+        <SpeedEnvelope
+          ev={ev} width={width} height={height} pps={pps}
+          onPointDown={onSpeedPointDown} onLineDouble={onSpeedLineDouble} onPointMenu={onSpeedPointMenu}
+        />
+      )}
       {overlapIn > 0 && (
         <TransitionZone
           width={Math.min(width, overlapIn * pps)}
@@ -474,6 +522,7 @@ function VolumeSlider({ value, onChange }) {
 const TrackRow = memo(function TrackRow({
   track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef, region, dragging,
   armed, recordingBox, onArm, onTrackDown, onTrackMenu, onEnvPointDown, onEnvLineDouble, onEnvPointMenu, onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onOpenPan, onEventDouble, onDrop, onUpdateTrack, onDelete,
+  onSpeedPointDown, onSpeedLineDouble, onSpeedPointMenu,
 }) {
   const update = (changes, record = true) => onUpdateTrack(track.id, changes, record);
   return (
@@ -562,6 +611,9 @@ const TrackRow = memo(function TrackRow({
               onText={onEditText}
               onPan={onOpenPan}
               onDouble={onEventDouble}
+              onSpeedPointDown={onSpeedPointDown}
+              onSpeedLineDouble={onSpeedLineDouble}
+              onSpeedPointMenu={onSpeedPointMenu}
             />
           );
         })}
@@ -926,9 +978,10 @@ const Timeline = forwardRef(function Timeline({
           let lo = MIN_EVENT - o.duration;
           let hi = Infinity;
           if (!mediaOf(o)?.isImage) {
-            const length = o.duration * (o.rate || 1); // segundos de medio que usa el evento
-            lo = Math.max(lo, length / MAX_RATE - o.duration);
-            hi = length / MIN_RATE - o.duration;
+            // La velocidad fija pasa a ser rate × duración / duración nueva: debe quedar entre MIN_RATE y MAX_RATE.
+            const k = o.duration * (o.rate || 1);
+            lo = Math.max(lo, k / MAX_RATE - o.duration);
+            hi = k / MIN_RATE - o.duration;
           }
           if (left) hi = Math.min(hi, o.start);
           dt = sign * Math.min(hi, Math.max(lo, sign * dt));
@@ -936,21 +989,25 @@ const Timeline = forwardRef(function Timeline({
         update = (o) => {
           const duration = o.duration + sign * dt;
           const rate = mediaOf(o)?.isImage ? 1 : (o.duration * (o.rate || 1)) / duration;
-          // Los fotogramas clave de la panorámica se estiran con el evento.
-          return { start: left ? o.start + dt : o.start, duration, rate, pan: scalePanTime(o.pan, duration / o.duration) };
+          // Los fotogramas clave de la panorámica y la rampa de velocidad se estiran con el evento.
+          return {
+            start: left ? o.start + dt : o.start, duration, rate,
+            pan: scalePanTime(o.pan, duration / o.duration), speed: scaleSpeedTime(o.speed, duration / o.duration),
+          };
         };
       } else if (mode === 'trimL') {
         dt = snapDelta(dt, [primary.start], me.shiftKey ? [] : points, threshold);
         for (const o of origin.values()) {
-          if (!mediaOf(o)?.isImage) dt = Math.max(dt, -o.inPoint / (o.rate || 1));
+          if (!mediaOf(o)?.isImage) dt = Math.max(dt, localForSource(o, -o.inPoint)); // no antes del principio del medio
           dt = Math.max(dt, -o.start);
           dt = Math.min(dt, o.duration - MIN_EVENT);
         }
         update = (o) => ({
           start: o.start + dt,
-          inPoint: mediaOf(o)?.isImage ? 0 : o.inPoint + dt * (o.rate || 1),
+          inPoint: mediaOf(o)?.isImage ? 0 : o.inPoint + sourceOffset(o, dt),
           duration: o.duration - dt,
           pan: shiftPan(o.pan, dt), // los fotogramas clave siguen a la imagen
+          speed: shiftSpeed(o.speed, dt),
         });
       } else if (mode === 'fadeIn' || mode === 'fadeOut') {
         update = (o) => {
@@ -967,7 +1024,7 @@ const Timeline = forwardRef(function Timeline({
         for (const o of origin.values()) {
           const m = mediaOf(o);
           dt = Math.max(dt, MIN_EVENT - o.duration);
-          if (m && !m.isImage && m.duration) dt = Math.min(dt, (m.duration - o.inPoint) / (o.rate || 1) - o.duration);
+          if (m && !m.isImage && m.duration) dt = Math.min(dt, localForSource(o, m.duration - o.inPoint) - o.duration);
         }
         update = (o) => ({ duration: o.duration + dt });
       }
@@ -1162,6 +1219,67 @@ const Timeline = forwardRef(function Timeline({
     setEnvelope(trackId, kind, (pts) => addEnvelopePoint(pts, t, envelopeValueAt(pts, kind, t)));
   }, [setEnvelope, snapTime, timeAt]);
 
+  // ---- Envolvente de velocidad del evento (rampa) ----
+  // Se aplica al evento y a su grupo (el sonido de un video sigue a la imagen), con los tiempos de cada uno.
+  const setSpeed = useCallback((ev, points, record = true) => {
+    setProject((p) => ({
+      ...p,
+      events: p.events.map((x) => (x.id === ev.id || (ev.groupId && x.groupId === ev.groupId)
+        ? { ...x, speed: points ? shiftSpeed(points, x.start - ev.start) : null }
+        : x)),
+    }), record);
+  }, [setProject]);
+  const onSpeedPointDown = useCallback((e, ev, index) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const h = bodyHeight(live.current.project.tracks.find((t) => t.id === ev.trackId)?.type || 'video');
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const p0 = ev.speed[index];
+    const y0 = speedY(p0.v, h);
+    let first = true;
+    const fps = live.current.project.settings.fps;
+    const move = (me) => {
+      const t = Math.round((p0.t + (me.clientX - startX) / live.current.pps) * fps) / fps;
+      let v = speedFromY(y0 + me.clientY - startY, h);
+      if (!me.shiftKey && Math.abs(speedY(v, h) - speedY(1, h)) < 5) v = 1;
+      v = Math.round(v * 100) / 100;
+      const points = moveSpeedPoint(ev.speed, index, Math.min(ev.duration, Math.max(0, t)), v);
+      setSpeed(ev, points, first);
+      first = false;
+      onMessage(`Velocidad: ${Math.round(points[index].v * 100)} % en ${formatTimecode(ev.start + points[index].t, fps)}`);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [onMessage, setSpeed]);
+  const onSpeedLineDouble = useCallback((e, ev) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.ownerSVGElement.getBoundingClientRect();
+    const fps = live.current.project.settings.fps;
+    const t = Math.round(((e.clientX - rect.left) / live.current.pps) * fps) / fps;
+    setSpeed(ev, addSpeedPoint(ev.speed, t, rampAt(ev.speed, t)));
+  }, [setSpeed]);
+  const onSpeedPointMenu = useCallback((e, ev, index) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onContextMenu({
+      kind: 'custom',
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: 'Eliminar el punto', action: () => setSpeed(ev, removeSpeedPoint(ev.speed, index)) },
+        { label: 'Poner a 100 %', action: () => setSpeed(ev, moveSpeedPoint(ev.speed, index, ev.speed[index].t, 1)) },
+        'separator',
+        { label: 'Quitar la rampa de velocidad', action: () => setSpeed(ev, null) },
+      ],
+    });
+  }, [onContextMenu, setSpeed]);
+
   const onEnvPointMenu = useCallback((e, trackId, kind, index) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1344,6 +1462,9 @@ const Timeline = forwardRef(function Timeline({
               onDrop={onDrop}
               onUpdateTrack={onUpdateTrack}
               onDelete={onDeleteTrack}
+              onSpeedPointDown={onSpeedPointDown}
+              onSpeedLineDouble={onSpeedLineDouble}
+              onSpeedPointMenu={onSpeedPointMenu}
             />
           ))}
           <div className="track-row empty" onDragOver={allowDrop} onDrop={(e) => onDrop(e, 'new')}>

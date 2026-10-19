@@ -175,6 +175,52 @@ function atempo(rate) {
 // y nuestra salida es 1 − curva(progreso): por eso rápido y lento se intercambian.
 const AFADE_IN = { linear: 'tri', fast: 'ipar', slow: 'qua', smooth: 'hsin', sharp: 'ihsin' };
 const AFADE_OUT = { linear: 'tri', fast: 'qua', slow: 'ipar', smooth: 'hsin', sharp: 'ihsin' };
+// Rampas de velocidad (ver src/state/speed.js). speedMap = tramos [{ t1, s0, a, m, base }] (t1 null = sin fin):
+// entre tramos la velocidad es a + m·(t − base) y los segundos de medio usados, s0 + a·(t − base) + m·(t − base)²/2.
+const segOf = (map, t) => map.find((k) => k.t1 === null || t < k.t1) || map[map.length - 1];
+const segValue = (k, t) => k.s0 + k.a * (t - k.base) + (k.m * (t - k.base) ** 2) / 2;
+// Segundos de medio usados desde el principio del evento hasta su tiempo local t.
+function srcOffset(e, t) {
+  if (!e.speedMap) return t * (e.rate || 1);
+  return segValue(segOf(e.speedMap, t), t);
+}
+function speedAtLocal(e, t) {
+  if (!e.speedMap) return e.rate || 1;
+  const k = segOf(e.speedMap, t);
+  return k.a + k.m * (t - k.base);
+}
+function localForSrc(e, s) {
+  if (!e.speedMap) return s / (e.rate || 1);
+  const k = e.speedMap.find((x) => x.t1 === null || s < segValue(x, x.t1)) || e.speedMap[e.speedMap.length - 1];
+  const d = s - k.s0;
+  return k.base + (2 * d) / (k.a + Math.sqrt(Math.max(0, k.a * k.a + 2 * k.m * d)));
+}
+// Expresión de FFmpeg del tiempo local para S (segundos de medio desde el principio del evento): la inversa
+// de srcOffset, tramo a tramo.
+function localExpr(map, S) {
+  const inv = (k) => {
+    const d = `(${S}-(${k.s0.toFixed(9)}))`;
+    if (Math.abs(k.m) < 1e-12) return `(${k.base.toFixed(9)}+${d}/${k.a.toFixed(9)})`;
+    return `(${k.base.toFixed(9)}+2*${d}/(${k.a.toFixed(9)}+sqrt(max(0,${(k.a * k.a).toFixed(9)}+${(2 * k.m).toFixed(9)}*${d}))))`;
+  };
+  let expr = inv(map[map.length - 1]);
+  for (let i = map.length - 2; i >= 0; i--) expr = `if(lt(${S},${segValue(map[i], map[i].t1).toFixed(9)}),${inv(map[i])},${expr})`;
+  return expr;
+}
+// Audio con rampa: rubberband cambia de velocidad cada 20 ms de medio (comandos de asendcmd), conservando el
+// tono como el navegador. No sirve atempo: pierde unos milisegundos de sonido en cada cambio y la rampa se
+// adelanta. Se le da algo más de medio al final (rubberband se come el último trozo) y luego se corta a la
+// duración exacta. Comprobado: los cambios de sonido caen a menos de 20 ms de su sitio.
+const RAMP_TAIL = 0.5;
+function audioRamp(e, i) {
+  const total = srcOffset(e, e.duration);
+  const steps = [];
+  for (let s = 0; s < total + RAMP_TAIL; s += 0.02) steps.push([s, speedAtLocal(e, localForSrc(e, s))]);
+  const name = `rubberband@r${i}`;
+  const cmds = steps.map(([s, v]) => `${s.toFixed(3)} ${name} tempo ${v.toFixed(6)}`).join(';');
+  return `,asendcmd=c='${cmds}',${name}=tempo=${steps[0][1].toFixed(6)}`;
+}
+
 function audioFades(e) {
   let out = '';
   if (e.fadeIn > 0) out += `,afade=t=in:st=0:d=${num(e.fadeIn)}:curve=${AFADE_IN[e.curveIn] || 'tri'}`;
@@ -265,17 +311,29 @@ function buildRender(project, settings, outPath) {
   // speed: velocidad del evento (inPoint es tiempo del medio; start y dur, de la línea de tiempo).
   // pan: panorámica/recorte del evento ({ keyframes, crop, w, h }, ver src/state/pan.js) y origin, el
   // principio del evento (los fotogramas clave cuentan desde ahí).
-  const addVideoInput = (m, inPoint, start, dur, fx = null, speed = 1, pan = null, origin = start) => {
+  // ev: el evento (inPoint, start, rate, speedMap, fx, pan); start y dur: el trozo de la línea de tiempo.
+  const addVideoInput = (m, ev, start, dur) => {
+    const { fx = null, pan = null } = ev;
+    const origin = ev.start;
+    const speed = ev.rate || 1;
     const { first, count } = frameSpan(start, dur);
     const length = (count + 1) / rate;
+    let pts = 'setpts=PTS-STARTPTS';
     if (m.isImage) {
-      speed = 1;
       inputs.push('-loop', '1', '-framerate', fps, '-t', num(length), '-i', m.path);
     } else {
-      const seek = Math.max(0, inPoint + (first / rate - start) * speed);
-      inputs.push('-ss', num(seek), '-t', num(length * speed), '-i', m.path);
+      const local0 = first / rate - origin; // tiempo local del evento en el primer fotograma del trozo
+      const s0 = srcOffset(ev, local0);
+      const seek = Math.max(0, ev.inPoint + s0);
+      inputs.push('-ss', num(seek), '-t', num(srcOffset(ev, local0 + length) - s0), '-i', m.path);
+      if (ev.speedMap) {
+        // Rampa: cada fotograma del medio va al instante local en que se llega a él (inversa exacta).
+        const S = `(${(seek - ev.inPoint).toFixed(9)}+(PTS-STARTPTS)*TB)`;
+        pts = `setpts='(${localExpr(ev.speedMap, S)}-(${local0.toFixed(9)}))/TB'`;
+      } else if (speed !== 1) {
+        pts = `setpts=(PTS-STARTPTS)/${speed.toFixed(6)}`;
+      }
     }
-    const pts = speed === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${speed.toFixed(6)}`;
     const i = n++;
     const tail =
       `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},` +
@@ -351,7 +409,7 @@ function buildRender(project, settings, outPath) {
     .filter((e) => tracks.get(e.trackId).type === 'video')
     .sort((a, b) => tracks.get(b.trackId).index - tracks.get(a.trackId).index || a.start - b.start);
   for (const e of videoEvents) {
-    const v = addVideoInput(media.get(e.mediaId), e.inPoint, e.start, e.duration, e.fx, e.rate || 1, e.pan, e.start);
+    const v = addVideoInput(media.get(e.mediaId), e, e.start, e.duration);
     filters.push(`${v.chain}${videoFades(e)},${placeAt(v.first)}[v${v.i}]`);
     overlayAt(`v${v.i}`, v.first, v.count);
 
@@ -359,12 +417,8 @@ function buildRender(project, settings, outPath) {
     if (tr) {
       // Final del evento que sale y principio del que entra, mezclados con xfade.
       const from = eventsById.get(tr.from);
-      const fromRate = from.rate || 1;
-      const a = addVideoInput(
-        media.get(from.mediaId), from.inPoint + (tr.start - from.start) * fromRate, tr.start, tr.duration, from.fx, fromRate,
-        from.pan, from.start,
-      );
-      const b = addVideoInput(media.get(e.mediaId), e.inPoint, tr.start, tr.duration, e.fx, e.rate || 1, e.pan, e.start);
+      const a = addVideoInput(media.get(from.mediaId), from, tr.start, tr.duration);
+      const b = addVideoInput(media.get(e.mediaId), e, tr.start, tr.duration);
       filters.push(
         `${a.chain},format=yuv420p[ta${a.i}]`,
         `${b.chain},format=yuv420p[tb${b.i}]`,
@@ -392,11 +446,12 @@ function buildRender(project, settings, outPath) {
     const gain = (tracks.get(e.trackId).gain ?? 1) * (e.gain ?? 1);
     if (!m.hasAudio || gain === 0) continue;
     const speed = e.rate || 1;
-    inputs.push('-ss', num(e.inPoint), '-t', num(e.duration * speed), '-i', m.path);
+    inputs.push('-ss', num(e.inPoint), '-t', num(srcOffset(e, e.duration) + (e.speedMap ? RAMP_TAIL : 0)), '-i', m.path);
     const i = n++;
     const delay = Math.round(e.start * 1000);
     const format = 'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo';
-    let head = `[${i}:a]asetpts=PTS-STARTPTS,${format}${atempo(speed)}`;
+    let head = `[${i}:a]asetpts=PTS-STARTPTS,${format}${e.speedMap ? audioRamp(e, i) : atempo(speed)}`;
+    if (e.speedMap) head += `,atrim=duration=${num(e.duration)},asetpts=PTS-STARTPTS`;
     if (e.afx) {
       // Efectos del evento (subgrafo calculado en la interfaz). Las colas (eco, reverberación) se cortan
       // al final del evento, igual que en la vista previa.

@@ -2,6 +2,7 @@
 import { DEFAULT_TRANSITION } from './transitions.js';
 import { effectsGraph } from './effects.js';
 import { isText, textPng } from './text.js';
+import { hasRamp, shiftSpeed, sourceOffset, speedPayload } from './speed.js';
 import { panActive, panExpr, scalePanTime, shiftPan } from './pan.js';
 import { trackMixExpr } from './envelopes.js';
 
@@ -15,14 +16,15 @@ import { trackMixExpr } from './envelopes.js';
 //   tracks: [{ id, type: 'video' | 'audio', name, muted, solo, volume, pan, envelopes }],  // ordenadas de arriba a abajo
 //           volume en dB; pan de −1 (izquierda) a 1 (derecha); envelopes: envolventes de volumen y panorámica (envelopes.js)
 //   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, fadeInCurve, fadeOutCurve,
-//              transition, effects, rate, pan }],
+//              transition, effects, rate, speed, pan }],
 // }
 // pan: panorámica/recorte con fotogramas clave (ver pan.js), solo en eventos de video; null o ausente = ninguna.
 // effects: cadena [{ id, type, enabled, params }] aplicada en orden; efectos de video en los eventos de video
 // y de audio en los de audio (ver effects.js y audio-effects.js).
 // Tiempos en segundos. volume del evento en dB (solo afecta al audio); fadeIn/fadeOut = duración de los fundidos.
-// rate = velocidad de reproducción (1 = normal, 2 = el doble de rápido). duration es lo que ocupa en la línea
-// de tiempo; del medio se usan duration × rate segundos a partir de inPoint (ver sourceTime).
+// rate = velocidad de reproducción (1 = normal, 2 = el doble de rápido) y speed = rampa de velocidad (envolvente
+// que la multiplica, ver speed.js). duration es lo que ocupa en la línea de tiempo; del medio se usan
+// sourceOffset(e, duration) segundos (duration × rate sin rampa) a partir de inPoint (ver sourceTime).
 // Si un evento empieza encima del final de otro de su misma pista, el solapamiento es una transición:
 // en video, la de `transition` del evento que entra (null = disolución cruzada); en audio, un fundido cruzado.
 
@@ -135,7 +137,7 @@ export function eventPeak(media, e) {
   if (!media?.peaks?.length) return 0;
   const pps = media.peaksPerSecond;
   const from = Math.max(0, Math.floor(e.inPoint * pps));
-  const to = Math.min(media.peaks.length, Math.ceil((e.inPoint + e.duration * (e.rate || 1)) * pps));
+  const to = Math.min(media.peaks.length, Math.ceil((e.inPoint + sourceOffset(e, e.duration)) * pps));
   let max = 0;
   for (let i = from; i < to; i++) if (media.peaks[i] > max) max = media.peaks[i];
   return max / 255;
@@ -143,6 +145,7 @@ export function eventPeak(media, e) {
 
 export const EVENT_DEFAULTS = {
   volume: 0, fadeIn: 0, fadeOut: 0, fadeInCurve: 'linear', fadeOutCurve: 'linear', transition: null, effects: [], rate: 1,
+  speed: null, // rampa de velocidad (envolvente, ver speed.js)
 };
 
 // Curvas de los fundidos, como en VEGAS. «Rápido»: el cambio ocurre sobre todo al principio del fundido;
@@ -168,7 +171,8 @@ export function fadeCurve(curve, p) {
 export { shiftPan, scalePanTime };
 
 // Instante del medio que se ve o se oye en el instante t de la línea de tiempo.
-export const sourceTime = (e, t) => e.inPoint + (t - e.start) * (e.rate || 1);
+export const sourceTime = (e, t) => e.inPoint + sourceOffset(e, t - e.start);
+export { hasRamp };
 export const formatRate = (rate) => `${Math.round(rate * 100)} %`;
 
 // Tamaño de una imagen de mw×mh encajada (sin recortar) en un cuadro de W×H, en píxeles pares.
@@ -338,6 +342,7 @@ export function splitEvents(project, t, selection) {
     added.push({
       ...e, id: uid('e'), start: t, inPoint: sourceTime(e, t), duration: e.duration - left, groupId, fadeIn: 0, transition: null,
       pan: shiftPan(e.pan, left), // los fotogramas clave siguen a la imagen
+      speed: shiftSpeed(e.speed, left),
     });
     return { ...e, duration: left, fadeOut: 0 };
   });
@@ -639,6 +644,7 @@ export function renderPayload(project, size = project.settings, range = null) {
       gain: volumeToGain(e.volume ?? 0),
       fx: fxOf({ ...e, effects }),
       pan: panOf(e),
+      speedMap: speedPayload(e),
       afx: afxOf({ ...e, effects }),
     })),
     transitions: transitions.filter((tr) => kept.has(tr.from) && kept.has(tr.to)),
