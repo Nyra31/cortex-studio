@@ -94,6 +94,29 @@ function needsProxy(format, videoCodec, audioCodec) {
   return false;
 }
 
+// Tira de miniaturas para dibujar a lo largo de los eventos de video: una imagen JPEG con `count` miniaturas de
+// tw×th en `cols` columnas; la i es el fotograma del instante i·step del medio. Hasta 200 (cada 0,5 s como poco).
+// En los videos largos solo se decodifican los fotogramas clave (mucho más rápido; la miniatura puede ser de
+// un fotograma algo anterior). Devuelve los datos de la tira (sin la ruta).
+const STRIP_H = 72;
+async function filmstrip(file, out) {
+  const info = await probe(file);
+  if (!info.hasVideo || info.isImage || !info.duration) throw new Error('No es un video');
+  const step = Math.max(0.5, info.duration / 200);
+  const count = Math.max(1, Math.ceil(info.duration / step));
+  const th = STRIP_H;
+  const tw = Math.max(2, Math.round((th * info.width) / info.height / 2) * 2);
+  const cols = Math.min(count, 10);
+  const rows = Math.ceil(count / cols);
+  const fast = info.duration > 120 ? ['-skip_frame', 'nokey'] : [];
+  const r = await run(ffmpegPath, [
+    '-y', '-v', 'error', ...fast, '-i', file, '-an', '-sn',
+    '-vf', `fps=1/${step},scale=${tw}:${th},setsar=1,tile=${cols}x${rows}`, '-frames:v', '1', '-q:v', '5', out,
+  ]);
+  if (r.code !== 0 || !fs.existsSync(out)) throw new Error(r.stderr.trim().split('\n').pop() || 'No se pudo hacer la tira');
+  return { step, count, tw, th, cols };
+}
+
 // Un fotograma del medio en `time` (s, búsqueda exacta) como PNG del tamaño original (ya girado si el video es
 // vertical), para congelar fotograma.
 async function extractFrame(file, time, out) {
@@ -670,4 +693,4 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
   }
 }
 
-module.exports = { analyze, render, buildRender, makeProxy, extractFrame, ffmpegPath, ffprobePath };
+module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, ffmpegPath, ffprobePath };

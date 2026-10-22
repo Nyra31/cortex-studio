@@ -2006,7 +2006,9 @@ kbd {
 .track-blend select {
   flex: 1;
   min-width: 0;
-  height: 18px;
+  height: 20px;
+  padding: 0 2px;
+  line-height: 16px;
   font-size: 11px;
   background: #1b1b1b;
   color: var(--text);
@@ -2044,3 +2046,13 @@ kbd {
   background: rgba(40, 90, 160, 0.9);
 }
 .media-item .badge.proxy.busy { background: rgba(160, 110, 30, 0.9); }
+/* Miniaturas a lo largo de los eventos de video */
+.filmstrip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  width: 100%;
+  pointer-events: none;
+  opacity: 0.85;
+}

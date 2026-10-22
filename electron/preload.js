@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   displayCount: () => ipcRenderer.invoke('screen:count'),
   extractFrame: (filePath, time, projectPath) => ipcRenderer.invoke('media:frame', filePath, time, projectPath),
+  filmstrip: (filePath) => ipcRenderer.invoke('media:filmstrip', filePath),
   // Proxies de la vista previa.
   makeProxy: (filePath) => ipcRenderer.invoke('proxy:make', filePath),
   removeProxy: (filePath) => ipcRenderer.invoke('proxy:remove', filePath),

@@ -195,6 +195,36 @@ ipcMain.handle('media:frame', async (_e, filePath, time, projectPath) => {
   return out;
 });
 
+// Tira de miniaturas de un video para la línea de tiempo (ver filmstrip en ffmpeg.js), en userData/miniaturas
+// (JPEG + JSON con sus medidas, mismo nombre que el proxy). Se hacen de una en una.
+let stripQueue = Promise.resolve();
+ipcMain.handle('media:filmstrip', (_e, filePath) => {
+  const file = path.resolve(filePath);
+  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  const job = stripQueue.then(async () => {
+    const dir = path.join(app.getPath('userData'), 'miniaturas');
+    const base = path.join(dir, path.basename(proxyPathFor(file), '.mp4'));
+    const jpg = `${base}.jpg`;
+    try {
+      const meta = JSON.parse(await fs.promises.readFile(`${base}.json`, 'utf8'));
+      if (fs.existsSync(jpg)) {
+        allowedFiles.add(jpg);
+        return { ...meta, path: jpg };
+      }
+    } catch {
+      // no está hecha
+    }
+    await fs.promises.mkdir(dir, { recursive: true });
+    const meta = await ff.filmstrip(file, `${base}.parcial.jpg`);
+    await fs.promises.rename(`${base}.parcial.jpg`, jpg);
+    await fs.promises.writeFile(`${base}.json`, JSON.stringify(meta));
+    allowedFiles.add(jpg);
+    return { ...meta, path: jpg };
+  });
+  stripQueue = job.catch(() => {});
+  return job;
+});
+
 // ---- Proxies de la vista previa (ver makeProxy en ffmpeg.js) ----
 // Se guardan en userData/proxies con un nombre que depende de la ruta, el tamaño y la fecha del original (si el
 // archivo cambia, se hace otro). Se crean de uno en uno; al salir se para el que esté en marcha.

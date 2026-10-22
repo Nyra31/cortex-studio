@@ -1,5 +1,6 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Waveform from './Waveform.jsx';
+import Filmstrip from './Filmstrip.jsx';
 import Icon from './Icon.jsx';
 import Meter from './Meter.jsx';
 import { formatRuler, formatTimecode, quantize } from '../util/time.js';
@@ -265,7 +266,7 @@ function SpeedEnvelope({ ev, width, height, pps, onPointDown, onLineDouble, onPo
 // fadeIn/fadeOut: fundidos efectivos (en audio incluyen los fundidos cruzados de los solapamientos).
 // overlapIn/overlapOut: segundos solapados con el evento anterior/siguiente de la pista.
 const EventView = memo(function EventView({
-  ev, media, type, selected, pps, fadeIn, fadeOut, curveIn, curveOut, transIn, transOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onPan, onDouble,
+  ev, media, strip, type, selected, pps, fadeIn, fadeOut, curveIn, curveOut, transIn, transOut, overlapIn, overlapOut, transition, onDown, onReset, onMenu, onFx, onText, onPan, onDouble,
   onSpeedPointDown, onSpeedLineDouble, onSpeedPointMenu,
 }) {
   const width = Math.max(3, ev.duration * pps);
@@ -274,7 +275,9 @@ const EventView = memo(function EventView({
   const gain = type === 'audio' ? volumeToGain(volume) : 1;
   const gainY = (1 - gain) * height;
   const showEnvelope = fadeIn > 0 || fadeOut > 0 || gain < 1;
-  const bodyStyle = type === 'video' && media?.thumb ? { backgroundImage: `url(${media.thumb})` } : undefined;
+  // Video con tira de miniaturas: se dibujan a lo largo del evento (Filmstrip); si no, la miniatura del medio repetida.
+  const showStrip = type === 'video' && strip && !media?.isImage;
+  const bodyStyle = type === 'video' && media?.thumb && !showStrip ? { backgroundImage: `url(${media.thumb})` } : undefined;
   const name = media ? media.name : '?';
   const rate = ev.rate || 1;
   const fadeHandleX = (x) => Math.min(width - 8, Math.max(0, x - 4));
@@ -336,6 +339,9 @@ const EventView = memo(function EventView({
         </button>
       )}
       <div className="event-body" style={bodyStyle}>
+        {showStrip && (
+          <Filmstrip strip={strip} inPoint={ev.inPoint} duration={ev.duration} rate={rate} speed={ev.speed} width={width} height={height} />
+        )}
         {type === 'audio' && media?.peaks && (
           <Waveform
             peaks={media.peaks}
@@ -572,7 +578,7 @@ function VolumeSlider({ value, onChange }) {
 }
 
 const TrackRow = memo(function TrackRow({
-  track, number, color, inactive, events, resolved, mediaById, selectedSet, pps, laneWidth, rowRef, region, dragging,
+  track, number, color, inactive, events, resolved, mediaById, strips, selectedSet, pps, laneWidth, rowRef, region, dragging,
   armed, recordingBox, onArm, onTrackDown, onTrackMenu, onEnvPointDown, onEnvLineDouble, onEnvPointMenu, onLaneDown, onEventDown, onEventReset, onEventMenu, onLaneMenu, onOpenFx, onEditText, onOpenPan, onEventDouble, onDrop, onUpdateTrack, onDelete,
   onSpeedPointDown, onSpeedLineDouble, onSpeedPointMenu,
 }) {
@@ -655,6 +661,7 @@ const TrackRow = memo(function TrackRow({
               key={ev.id}
               ev={ev}
               media={mediaById.get(ev.mediaId)}
+              strip={strips[mediaById.get(ev.mediaId)?.path]}
               type={track.type}
               selected={selectedSet.has(ev.id)}
               pps={pps}
@@ -707,7 +714,7 @@ const TrackRow = memo(function TrackRow({
 const Timeline = forwardRef(function Timeline({
   project, setProject, selection, setSelection, time, seek, playing, region, setRegion, ripple,
   pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, onEditText, onOpenPan, onAddTrack, footer,
-  armedTrackId, onArmTrack, recording,
+  armedTrackId, onArmTrack, recording, strips = {},
 }, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -1582,6 +1589,7 @@ const Timeline = forwardRef(function Timeline({
               events={eventsByTrack.get(track.id)}
               resolved={resolved}
               mediaById={mediaById}
+              strips={strips}
               selectedSet={selectedSet}
               pps={pps}
               laneWidth={laneWidth}

@@ -121,7 +121,7 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 - [x] Deslizar el contenido del evento (slip, Alt + arrastrar; `slip` en `onEventDown`)
 - [x] Sustituir el medio de un evento (Ctrl + soltar un medio sobre él; `replaceMedia`)
 - [x] Congelar fotograma en el cursor (Ctrl+Mayús+F; `freezeFrame` en `project.js` + `media:frame` → PNG en `Fotogramas`)
-- [ ] Miniaturas a lo largo de los eventos de video
+- [x] Miniaturas a lo largo de los eventos de video (`filmstrip` en `ffmpeg.js` → sprite JPEG en `userData/miniaturas`, `media:filmstrip`, `strips` en `App`, `Filmstrip.jsx`)
 - [ ] Calidad de la vista previa (borrador/buena/máxima) y guías (zona segura, cuadrícula)
 - [ ] Normalizar la sonoridad en el render (LUFS)
 - [ ] Recopilar medios (copiar proyecto y archivos a una carpeta)

@@ -194,6 +194,7 @@ export default function App() {
   // pesan demasiado. proxies: ruta del original → ruta del proxy (no se guarda en el proyecto: al abrirlo, el
   // análisis encuentra los que ya están hechos). proxyJobs: ruta → porcentaje de los que se están creando.
   const [proxies, setProxies] = useState({});
+  const [strips, setStrips] = useState({}); // ruta del video → tira de miniaturas (ver Filmstrip)
   const [proxyJobs, setProxyJobs] = useState({});
   const proxyRef = useRef({ ready: {}, busy: new Set() });
   const setProxy = useCallback((filePath, proxy) => {
@@ -228,6 +229,10 @@ export default function App() {
   // Resultado del análisis de un medio: apunta su proxy si ya existe o lo pide si la vista previa no puede
   // reproducir el archivo. Devuelve los datos del medio (sin los del proxy).
   const noteAnalyzed = useCallback(({ proxy, needsProxy, ...info }) => {
+    // Tira de miniaturas para la línea de tiempo (en segundo plano; la primera vez tarda un poco).
+    if (info.hasVideo && !info.isImage) {
+      api.filmstrip(info.path).then((strip) => setStrips((s) => ({ ...s, [info.path]: strip }))).catch(() => {});
+    }
     if (proxy) setProxy(info.path, proxy);
     else if (needsProxy) requestProxy(info.path, `La vista previa no puede reproducir «${info.name}»: creando una copia ligera (proxy)…`);
     return info;
@@ -1283,6 +1288,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       <div className="splitter" onPointerDown={startResize} />
       <Timeline
         ref={timelineRef}
+        strips={strips}
         project={project}
         setProject={setProject}
         selection={selection}
