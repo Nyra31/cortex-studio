@@ -130,7 +130,7 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 - [x] Ducking automático (bajar la música con la voz) (`duckingEnvelope` en `envelopes.js`: voz detectada con los picos de la forma de onda; crea la envolvente de volumen; menú de la cabecera de pista)
 - [x] Monitores de video (histograma, forma de onda, vectorscopio) (`Scopes.jsx`; `Compositor.readScope` copia el lienzo a 512 px con `blitFramebuffer` + `readPixels` justo después de `render`; `preview/scopes.js` une los dos y limita a ~15/s reproduciendo)
 - [x] Animaciones de texto (entrada/salida) y plantillas de títulos (`TEXT_ANIMS`, `textAnimAt`, `drawText(…, anim)`, `TEXT_TEMPLATES` en `text.js`; vista previa: un lienzo por evento animado redibujado en cada fotograma; render: `textSequence` → PNG con su duración → demuxer concat (`m.sequence` en `ffmpeg.js`); comprobado: vista previa = render)
-- [ ] Subtítulos (pista, importar/exportar SRT, quemar en el render)
+- [x] Subtítulos (pista, importar/exportar SRT, quemar en el render) (`src/state/subtitles.js`: `project.subtitles = { cues, style, preview }`, formato `.cortex` versión 10; `SubtitlesPanel.jsx`, `SubtitleStrip` en la regla; vista previa: capa encima de todo; `renderPayload(…, { subtitles: 'burn' | 'soft' | 'none' })`: quemados = pista de video `__subtitulos` con un PNG por subtítulo, aparte = `subtitlesSrt` → `-c:s mov_text`/`webvtt`; caja de texto `box`/`boxColor` en `drawText`)
 - [ ] Corrección de color avanzada (curvas, ruedas de color, LUT .cube)
 
 ## Al terminar una función

@@ -15,6 +15,8 @@ import { quantize } from './util/time.js';
 import RenderDialog from './components/RenderDialog.jsx';
 import QueueDialog from './components/QueueDialog.jsx';
 import Scopes from './components/Scopes.jsx';
+import SubtitlesPanel from './components/SubtitlesPanel.jsx';
+import { addCue } from './state/subtitles.js';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import RecordDialog from './components/RecordDialog.jsx';
@@ -68,7 +70,13 @@ export default function App() {
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
-  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects' | 'scopes'
+  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects' | 'subtitles' | 'scopes'
+  const [focusCue, setFocusCue] = useState(null); // subtítulo cuyo texto se va a editar en su pestaña
+  const clearFocusCue = useCallback(() => setFocusCue(null), []);
+  const editSubtitle = useCallback((id) => {
+    setLeftTab('subtitles');
+    setFocusCue(id);
+  }, []);
   const [fxEventId, setFxEventId] = useState(null); // evento cuya ventana de efectos está abierta
   const [textMediaId, setTextMediaId] = useState(null); // medio de texto cuya ventana de edición está abierta
   const [panEventId, setPanEventId] = useState(null); // evento cuya ventana de panorámica/recorte está abierta
@@ -1155,6 +1163,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: 'Transiciones', shortcut: 'Alt+7', action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
         { label: 'Efectos de video', shortcut: 'Alt+8', action: () => setLeftTab('effects'), checked: leftTab === 'effects' },
         { label: 'Efectos de audio', action: () => setLeftTab('audioEffects'), checked: leftTab === 'audioEffects' },
+        { label: 'Subtítulos', action: () => setLeftTab('subtitles'), checked: leftTab === 'subtitles' },
         { label: 'Monitores de video', shortcut: 'Ctrl+Alt+2', action: () => setLeftTab('scopes'), checked: leftTab === 'scopes' },
         'separator',
         { label: 'Ir al inicio', shortcut: 'Inicio', action: () => seek(0) },
@@ -1169,6 +1178,15 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       label: 'Insertar',
       items: [
         { label: 'Medio de texto', action: insertText },
+        {
+          label: 'Subtítulo',
+          action: () => {
+            const { region: r, time: t } = live.current;
+            const res = addCue(live.current.project, r ? r.start : t, r ? r.end : t + 2, '');
+            setProject(res.project);
+            editSubtitle(res.cue.id);
+          },
+        },
         'separator',
         { label: 'Marcador', shortcut: 'M', action: insertMarker },
         { label: 'Región (de la selección de tiempo)', shortcut: 'R', action: insertRegion, disabled: !region },
@@ -1333,6 +1351,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             { id: 'transitions', title: 'Transiciones' },
             { id: 'effects', title: 'Efectos de video' },
             { id: 'audioEffects', title: 'Efectos de audio' },
+            { id: 'subtitles', title: 'Subtítulos' },
             { id: 'scopes', title: 'Monitores de video' },
           ]}
           active={leftTab}
@@ -1355,6 +1374,19 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           {leftTab === 'effects' && <EffectsPanel key="video" kind="video" />}
           {leftTab === 'audioEffects' && <EffectsPanel key="audio" kind="audio" />}
           {leftTab === 'scopes' && <Scopes />}
+          {leftTab === 'subtitles' && (
+            <SubtitlesPanel
+              project={project}
+              setProject={setProject}
+              time={time}
+              seek={seek}
+              region={region}
+              focusId={focusCue}
+              onFocused={clearFocusCue}
+              onMessage={setStatus}
+              defaultName={baseName(projectPath)}
+            />
+          )}
         </Dock>
         <Dock title="Vista previa de video" className="preview-dock">
           <Preview
@@ -1381,6 +1413,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       <Timeline
         ref={timelineRef}
         strips={strips}
+        onEditSubtitle={editSubtitle}
         project={project}
         setProject={setProject}
         selection={selection}
@@ -1454,7 +1487,8 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       </div>
       {renderOpen && (
         <RenderDialog
-          makePayload={(size, range) => renderPayload(project, size, range)}
+          makePayload={(size, range, opts) => renderPayload(project, size, range, opts)}
+          hasSubtitles={(project.subtitles?.cues || []).some((c) => c.text.trim())}
           settings={project.settings}
           region={region}
           regions={project.regions || []}

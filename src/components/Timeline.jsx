@@ -19,6 +19,7 @@ import {
 } from '../state/envelopes.js';
 import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
 import { isText } from '../state/text.js';
+import { removeCue, updateCue } from '../state/subtitles.js';
 import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
 
 export const MEDIA_MIME = 'application/x-cortex-media';
@@ -108,6 +109,31 @@ function MarkStrip({ markers, regions, pps, editing, onDown, onDouble, onMenu, o
   );
 }
 
+// Franja de subtítulos (debajo de la de marcadores, solo si hay alguno): cada uno se arrastra para moverlo y por
+// sus bordes para cambiar su entrada y su salida; doble clic edita su texto en la pestaña «Subtítulos».
+function SubtitleStrip({ cues, pps, onDown, onDouble, onMenu }) {
+  if (!cues?.length) return null;
+  return (
+    <div className="sub-strip">
+      {cues.map((c) => (
+        <div
+          key={c.id}
+          className="sub-cue"
+          style={{ left: c.start * pps, width: Math.max(2, (c.end - c.start) * pps) }}
+          title={`${c.text || '(sin texto)'}\n(arrastra para moverlo; doble clic: editar el texto)`}
+          onPointerDown={(e) => onDown(e, c, 'move')}
+          onDoubleClick={() => onDouble(c)}
+          onContextMenu={(e) => onMenu(e, c)}
+        >
+          <div className="mark-edge start" onPointerDown={(e) => onDown(e, c, 'start')} />
+          <div className="mark-edge end" onPointerDown={(e) => onDown(e, c, 'end')} />
+          <span>{c.text.split('\n')[0] || '…'}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MarkInput({ value, onDone }) {
   return (
     <input
@@ -131,7 +157,7 @@ function MarkInput({ value, onDone }) {
 }
 
 const Ruler = memo(function Ruler({
-  pps, fps, time, scrollLeft, viewWidth, laneWidth, region, onPointerDown, onRegionDown, markers, regions, markProps,
+  pps, fps, time, scrollLeft, viewWidth, laneWidth, region, onPointerDown, onRegionDown, markers, regions, markProps, cues, subProps,
 }) {
   const step = majorStep(pps);
   const minor = step / 5;
@@ -158,6 +184,7 @@ const Ruler = memo(function Ruler({
         <RegionBar region={region} pps={pps} fps={fps} onDown={onRegionDown} />
       </div>
       <MarkStrip markers={markers} regions={regions} pps={pps} {...markProps} />
+      <SubtitleStrip cues={cues} pps={pps} {...subProps} />
       {ticks}
       <div className="cursor-head" style={{ left: time * pps }} title="Arrastra para ajustar el cursor (Mayús: sin ajuste)" />
     </div>
@@ -714,7 +741,7 @@ const TrackRow = memo(function TrackRow({
 const Timeline = forwardRef(function Timeline({
   project, setProject, selection, setSelection, time, seek, playing, region, setRegion, ripple,
   pps, setPps, snap, onDropFiles, onMessage, onContextMenu, onOpenFx, onEditText, onOpenPan, onAddTrack, footer,
-  armedTrackId, onArmTrack, recording, strips = {},
+  armedTrackId, onArmTrack, recording, strips = {}, onEditSubtitle = () => {},
 }, ref) {
   const scrollRef = useRef(null);
   const contentRef = useRef(null);
@@ -895,6 +922,54 @@ const Timeline = forwardRef(function Timeline({
   const markProps = useMemo(() => ({
     editing: editingMark, onDown: onMarkDown, onDouble: onMarkDouble, onMenu: onMarkMenu, onRename: onMarkRename,
   }), [editingMark, onMarkDown, onMarkDouble, onMarkMenu, onMarkRename]);
+
+  // Subtítulos en la franja de la regla: arrastrar (moverlo o sus bordes, con ajuste) y un clic lleva el cursor.
+  const onSubDown = useCallback((e, cue, part) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const startX = e.clientX;
+    const t0 = timeAt(e.clientX);
+    let moved = false;
+    const frame = 1 / live.current.project.settings.fps;
+    const move = (me) => {
+      if (!moved && Math.abs(me.clientX - startX) < 3) return;
+      const first = !moved;
+      moved = true;
+      const dt = timeAt(me.clientX) - t0;
+      let changes;
+      if (part === 'move') {
+        const len = cue.end - cue.start;
+        const start = Math.max(0, snapTime(cue.start + dt, me.shiftKey));
+        changes = { start, end: start + len };
+      } else if (part === 'start') {
+        changes = { start: Math.max(0, Math.min(cue.end - frame, snapTime(cue.start + dt, me.shiftKey))) };
+      } else {
+        changes = { end: Math.max(cue.start + frame, snapTime(cue.end + dt, me.shiftKey)) };
+      }
+      setProject((p) => updateCue(p, cue.id, changes), first);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (!moved) seek(cue.start);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [seek, setProject, snapTime, timeAt]);
+  const onSubMenu = useCallback((e, cue) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onContextMenu({
+      kind: 'custom',
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: 'Editar el texto', action: () => onEditSubtitle(cue.id) },
+        { label: 'Eliminar el subtítulo', action: () => setProject((p) => removeCue(p, cue.id)) },
+      ],
+    });
+  }, [onContextMenu, onEditSubtitle, setProject]);
+  const subProps = useMemo(() => ({ onDown: onSubDown, onDouble: (c) => onEditSubtitle(c.id), onMenu: onSubMenu }), [onSubDown, onSubMenu, onEditSubtitle]);
 
   // Doble clic en un evento: la selección de tiempo pasa a ser el tramo del evento (como en VEGAS).
   const onEventDouble = useCallback((ev) => setRegion({ start: ev.start, end: ev.start + ev.duration }), [setRegion]);
@@ -1588,6 +1663,8 @@ const Timeline = forwardRef(function Timeline({
               markers={project.markers || EMPTY}
               regions={project.regions || EMPTY}
               markProps={markProps}
+              cues={project.subtitles?.cues}
+              subProps={subProps}
               region={region}
               onRegionDown={onRegionDown}
               time={time}

@@ -6,6 +6,7 @@ import { hasTextAnim, isText, textPng, textSequence } from './text.js';
 import { hasRamp, localForSource, shiftSpeed, sourceOffset, speedPayload } from './speed.js';
 import { panActive, panAt, panExpr, scalePanTime, shiftPan } from './pan.js';
 import { trackMixExpr, trackOpacityExpr } from './envelopes.js';
+import { SUB_STYLE, emptySubtitles, subtitleParams, toSrt } from './subtitles.js';
 
 //
 // project = {
@@ -109,6 +110,15 @@ function shiftMarks(project, shiftOf) {
       ? { ...t, envelopes: Object.fromEntries(Object.entries(t.envelopes).map(([k, pts]) => [k, moveEnv(pts)])) }
       : t)),
     markers: (project.markers || []).map((m) => ({ ...m, time: Math.max(0, m.time + shiftOf(m.time)) })),
+    ...(project.subtitles && {
+      subtitles: {
+        ...project.subtitles,
+        cues: project.subtitles.cues.map((c) => {
+          const d = shiftOf(c.start);
+          return { ...c, start: Math.max(0, c.start + d), end: Math.max(0, c.start + d) + (c.end - c.start) };
+        }),
+      },
+    }),
     regions: (project.regions || []).map((r) => {
       const d = shiftOf(r.start);
       const e = shiftOf(r.end);
@@ -707,13 +717,14 @@ export function deleteTrack(project, trackId) {
 export function serializeProject(project, view = null) {
   return {
     format: 'cortex-studio',
-    version: 9,
+    version: 10,
     settings: project.settings,
     media: project.media.map(({ id, path, name, kind, text }) => (kind === 'text' ? { id, kind, name, text } : { id, path, name })),
     tracks: project.tracks,
     events: project.events,
     markers: project.markers || [],
     regions: project.regions || [],
+    subtitles: project.subtitles || emptySubtitles(),
     ...(view && { view }),
   };
 }
@@ -738,6 +749,7 @@ export function loadProject(data, media) {
     events: data.events.map((e) => ({ ...EVENT_DEFAULTS, ...e })),
     markers: data.markers || [],
     regions: data.regions || [],
+    subtitles: data.subtitles ? { ...emptySubtitles(), ...data.subtitles, style: { ...SUB_STYLE, ...data.subtitles.style } } : emptySubtitles(),
   };
 }
 
@@ -746,9 +758,28 @@ export function loadProject(data, media) {
 // Los eventos de video con efectos llevan fx = { w, h, graph, alpha }: el tamaño encajado y el
 // subgrafo de FFmpeg de su cadena de efectos (ver effects.js). Los textos van dibujados como PNG (png).
 // range = { start, end }: renderizar solo ese tramo (la selección de tiempo); los eventos de fuera se quitan.
-export function renderPayload(project, size = project.settings, range = null) {
+// opts.subtitles: 'burn' (quemados en la imagen: una pista de video más, encima de todo, con un PNG por subtítulo),
+// 'soft' (pista de subtítulos aparte: subtitlesSrt) o 'none'.
+export function renderPayload(project, size = project.settings, range = null, opts = {}) {
   const { fades, transitions } = resolveTimeline(project);
   const inRange = (e) => !range || (e.start < range.end && e.start + e.duration > range.start);
+  const cues = (project.subtitles?.cues || []).filter((c) => c.text.trim() && (!range || (c.start < range.end && c.end > range.start)));
+  const burn = opts.subtitles === 'burn' && cues.length > 0;
+  const subTrack = { id: '__subtitulos', type: 'video', muted: false, solo: false, volume: 0 };
+  const subEvents = burn
+    ? cues.map((c) => ({ ...EVENT_DEFAULTS, id: `sub~${c.id}`, trackId: subTrack.id, mediaId: `sub~${c.id}`, start: c.start, duration: c.end - c.start, inPoint: 0, groupId: null }))
+    : [];
+  if (burn) {
+    project = {
+      ...project,
+      tracks: [subTrack, ...project.tracks],
+      events: [...project.events, ...subEvents],
+      media: [
+        ...project.media,
+        ...cues.map((c) => ({ id: `sub~${c.id}`, kind: 'text', name: 'Subtítulo', text: subtitleParams(project.subtitles.style, c.text), isImage: true, hasVideo: true, hasAudio: false })),
+      ],
+    };
+  }
   const events = project.events.filter(inRange);
   const kept = new Set(events.map((e) => e.id));
   const used = new Set(events.map((e) => e.mediaId));
@@ -818,5 +849,6 @@ export function renderPayload(project, size = project.settings, range = null) {
     })),
     transitions: transitions.filter((tr) => kept.has(tr.from) && kept.has(tr.to)),
     range,
+    subtitlesSrt: opts.subtitles === 'soft' && cues.length ? toSrt(cues, range ? range.start : 0, range ? range.end - range.start : Infinity) : null,
   };
 }

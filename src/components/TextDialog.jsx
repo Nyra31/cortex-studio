@@ -171,7 +171,13 @@ export default function TextDialog({ media, height, onChange, onClose }) {
           </div>
         ))}
 
-        <div className="text-section">Fondo</div>
+        <div className="text-section">Caja detrás del texto</div>
+        <div className="text-row">
+          {range('box', 'Opacidad', 0, 1, 0.01, pct)}
+          <input type="color" title="Color de la caja" value={t.boxColor} {...live('boxColor')} />
+        </div>
+
+        <div className="text-section">Fondo de todo el cuadro</div>
         <div className="text-row">
           {range('backgroundOpacity', 'Opacidad', 0, 1, 0.01, pct)}
           <input type="color" title="Color del fondo" value={t.background} {...live('background')} />

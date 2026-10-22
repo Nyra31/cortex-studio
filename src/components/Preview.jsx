@@ -13,6 +13,7 @@ import { drawText, hasTextAnim, isText, textAnimAt } from '../state/text.js';
 import { NO_CROP, panActive, panAt } from '../state/pan.js';
 import { trackMixAt, trackOpacityAt } from '../state/envelopes.js';
 import { publishScope, scopeNeedsFrame, scopeWanted } from '../preview/scopes.js';
+import { cueAt, subtitleParams } from '../state/subtitles.js';
 import { hasRamp, speedAt } from '../state/speed.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
 import { setMeterEngine } from '../preview/meters.js';
@@ -194,6 +195,7 @@ export default function Preview({
   const sourcesRef = useRef(null);
   const videoEls = useRef(new Map()); // reproductor (ver playerKeys) → <video> (silenciado: el sonido sale de las pistas de audio)
   const imageEls = useRef(new Map()); // id de medio → <img>
+  const subCanvas = useRef(null); // lienzo del subtítulo en curso
   const textEls = useRef(new Map()); // id de medio de texto → <canvas> (se redibuja si cambia el texto)
   const audio = useRef(null); // AudioEngine
   const draw = useRef({ dirty: 0, playing: false, layers: [], frame: null });
@@ -355,6 +357,21 @@ export default function Preview({
           panB: panLayer(l.to, time),
         },
     );
+    // Subtítulo en curso, encima de todo (el mismo dibujo que el render cuando se queman).
+    const subs = project.subtitles;
+    const cue = subs && subs.preview !== false ? cueAt(subs, time) : null;
+    if (cue?.text.trim()) {
+      const canvas = (subCanvas.current ||= Object.assign(document.createElement('canvas'), { cortexVersion: 0 }));
+      const key = `${width}x${height}:${JSON.stringify(subs.style)}:${cue.text}`;
+      if (canvas.cortexKey !== key) {
+        canvas.width = width;
+        canvas.height = height;
+        drawText(canvas.getContext('2d'), subtitleParams(subs.style, cue.text), width, height);
+        canvas.cortexKey = key;
+        canvas.cortexVersion++;
+      }
+      draw.current.layers.push({ a: canvas, opacity: 1 });
+    }
     draw.current.frame = { width, height };
     draw.current.playing = playing;
     invalidate();

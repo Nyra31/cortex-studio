@@ -15,6 +15,7 @@ const defaults = (t = TEMPLATES[0]) => ({
   quality: t.quality || { mode: 'crf', level: 'normal' },
   audioKbps: t.audioKbps || 192,
   loudness: t.loudness ?? null,
+  subtitles: 'burn',
 });
 // Normalizar la sonoridad del render (LUFS integrados), como piden las plataformas.
 const LOUDNESS = [
@@ -37,7 +38,7 @@ function loadSettings() {
 // tamaño al que se monta el proyecto (los efectos y los textos dependen de él); range = tramo o null.
 // region: selección de tiempo ({ start, end }) o null; regions: regiones con nombre del proyecto.
 // onEnqueue(trabajos, empezar): añade trabajos a la cola de render (ver QueueDialog).
-export default function RenderDialog({ makePayload, settings, region, regions = [], projectLength, defaultName, onClose, onEnqueue }) {
+export default function RenderDialog({ makePayload, settings, region, regions = [], projectLength, defaultName, onClose, onEnqueue, hasSubtitles = false }) {
   // Qué renderizar: 'all', 'selection' o el id de una región. Como en VEGAS: con selección, se ofrece esa parte.
   const [what, setWhat] = useState(region ? 'selection' : 'all');
   const range = what === 'all' || what === 'eachRegion' ? null : what === 'selection' ? region : regions.find((r) => r.id === what) || null;
@@ -85,6 +86,10 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
     return mb >= 1000 ? `${(mb / 1000).toFixed(1).replace('.', ',')} GB` : `${Math.max(0.1, mb).toFixed(1).replace('.', ',')} MB`;
   })();
 
+  // Subtítulos: quemados en la imagen, como pista aparte (MP4, MOV y WebM) o fuera. Sin imagen, nunca.
+  const softOk = ['mp4-h264', 'mp4-h265', 'mov-prores', 'webm'].includes(format.id);
+  const wanted = opts.subtitles || 'burn';
+  const subtitleMode = !hasSubtitles || !format.video ? 'none' : wanted === 'soft' && !softOk ? 'burn' : wanted;
   const renderSettings = {
     width: inner.w,
     height: inner.h,
@@ -102,7 +107,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
   const job = (r, target, name) => ({
     name,
     outPath: target,
-    payload: makePayload({ width: inner.w, height: inner.h }, r ? { start: r.start, end: r.end } : null),
+    payload: makePayload({ width: inner.w, height: inner.h }, r ? { start: r.start, end: r.end } : null, { subtitles: subtitleMode }),
     settings: renderSettings,
   });
   // Añadir a la cola lo elegido (con «cada región», un archivo por región en la carpeta del primero).
@@ -134,7 +139,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
     const off = window.api.onRenderProgress(setProgress);
     try {
       const result = await window.api.startRender(
-        makePayload({ width: inner.w, height: inner.h }, range ? { start: range.start, end: range.end } : null),
+        makePayload({ width: inner.w, height: inner.h }, range ? { start: range.start, end: range.end } : null, { subtitles: subtitleMode }),
         renderSettings,
         target,
       );
@@ -236,6 +241,16 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
                     <span className="field-label">Audio</span>
                     <select value={opts.audioKbps} onChange={(e) => change({ audioKbps: Number(e.target.value) })}>
                       {AUDIO_KBPS.map((k) => <option key={k} value={k}>{k} kbps</option>)}
+                    </select>
+                  </label>
+                )}
+                {hasSubtitles && format.video && (
+                  <label title="Quemados: forman parte de la imagen. Como pista aparte: el reproductor los puede activar y desactivar.">
+                    <span className="field-label">Subtítulos</span>
+                    <select value={subtitleMode} onChange={(e) => change({ subtitles: e.target.value })}>
+                      <option value="burn">Quemados en la imagen</option>
+                      <option value="soft" disabled={!softOk}>Como pista aparte (se activan en el reproductor){softOk ? '' : ': no en este formato'}</option>
+                      <option value="none">No incluir</option>
                     </select>
                   </label>
                 )}

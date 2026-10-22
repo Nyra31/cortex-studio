@@ -694,12 +694,19 @@ function buildRender(project, settings, outPath) {
   }
   if (format.gif || format.still) filters.push('[aout]anullsink'); // el GIF y la imagen no llevan sonido
 
+  // Subtítulos como pista aparte (project.subtitlesFile: SRT escrito por render): MP4 y MOV los llevan como
+  // mov_text y WebM como WebVTT; los demás formatos, no.
+  const subCodec = { 'mp4-h264': 'mov_text', 'mp4-h265': 'mov_text', 'mov-prores': 'mov_text', webm: 'webvtt' }[settings.format];
+  const subs = project.subtitlesFile && subCodec ? n++ : null;
+  if (subs !== null) inputs.push('-i', project.subtitlesFile);
+
   const args = [
     '-y', '-nostdin', '-v', 'error', '-progress', 'pipe:1', '-nostats',
     ...inputs,
     '-filter_complex_script', null, // se completa con la ruta del archivo temporal
     ...(format.audioOnly ? [] : ['-map', '[vout]']),
     ...(format.gif || format.still ? [] : ['-map', '[aout]']),
+    ...(subs !== null ? ['-map', `${subs}:s`, '-c:s', subCodec, '-metadata:s:s:0', 'language=spa'] : []),
     ...(format.video ? [...format.video(settings.quality), '-r', fps] : format.gif ? ['-r', fps] : []),
     ...(format.audio ? format.audio(settings.audioKbps || 192) : []),
     '-t', num(duration), ...format.extra,
@@ -737,8 +744,14 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
     return { ...m, png: undefined, path: file, isImage: true };
   }));
   // Una pasada de FFmpeg; el progreso va de `from` a from + share.
+  let subtitlesFile = null;
+  if (project.subtitlesSrt) {
+    subtitlesFile = path.join(os.tmpdir(), `cortex-subtitulos-${stamp}.srt`);
+    await fs.promises.writeFile(subtitlesFile, project.subtitlesSrt, 'utf8');
+    temp.push(subtitlesFile);
+  }
   const pass = async (opts, out, from, share, edit = (a) => a) => {
-    const { args, filterGraph, duration } = buildRender({ ...project, media }, opts, out);
+    const { args, filterGraph, duration } = buildRender({ ...project, media, subtitlesFile: opts.format === 'wav' ? null : subtitlesFile }, opts, out);
     const scriptPath = path.join(os.tmpdir(), `cortex-filtros-${stamp}-${temp.length}.txt`);
     temp.push(scriptPath);
     await fs.promises.writeFile(scriptPath, filterGraph, 'utf8');

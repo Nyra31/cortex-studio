@@ -177,6 +177,27 @@ ipcMain.handle('media:analyze', async (_e, filePath) => {
   return { ...info, proxy };
 });
 
+// Subtítulos: leer un SRT/WebVTT (devuelve { path, text } o null) y guardar uno.
+ipcMain.handle('subtitles:import', async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: 'Importar subtítulos',
+    properties: ['openFile'],
+    filters: [{ name: 'Subtítulos (SRT, WebVTT)', extensions: ['srt', 'vtt'] }],
+  });
+  if (res.canceled || !res.filePaths.length) return null;
+  return { path: res.filePaths[0], text: await fs.promises.readFile(res.filePaths[0], 'utf8') };
+});
+ipcMain.handle('subtitles:export', async (_e, text, defaultName) => {
+  const res = await dialog.showSaveDialog(mainWindow, {
+    title: 'Exportar subtítulos',
+    defaultPath: defaultName || 'Subtítulos.srt',
+    filters: [{ name: 'Subtítulos SRT', extensions: ['srt'] }],
+  });
+  if (res.canceled || !res.filePath) return null;
+  await fs.promises.writeFile(res.filePath, `﻿${text}`, 'utf8'); // con BOM: así lo leen bien los reproductores
+  return res.filePath;
+});
+
 // Detectar escenas: cortes de plano entre start y start + length (s del medio); devuelve los instantes desde start.
 ipcMain.handle('media:scenes', async (event, filePath, start, length) => {
   const file = path.resolve(filePath);

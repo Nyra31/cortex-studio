@@ -26,6 +26,8 @@ export const TEXT_DEFAULTS = {
   shadowOffset: 0.06,
   background: '#000000',
   backgroundOpacity: 0, // fondo de todo el cuadro (0 = transparente, se ve lo de debajo)
+  box: 0, // caja detrás del texto (opacidad; 0 = sin caja) y su color
+  boxColor: '#000000',
   animIn: 'none', // animación de entrada (TEXT_ANIMS) y su duración en s
   animInDur: 0.6,
   animOut: 'none',
@@ -225,6 +227,18 @@ export function drawText(ctx, params, W, H, anim = null) {
     });
   };
   if (!moved) target.globalAlpha = alpha;
+  // Caja detrás del bloque de texto (para subtítulos y rótulos legibles sobre cualquier fondo).
+  if (p.box > 0) {
+    const bx = px * 0.35;
+    const by = px * 0.12;
+    target.save();
+    target.globalAlpha *= p.box;
+    target.fillStyle = p.boxColor;
+    target.beginPath();
+    target.roundRect(cx - blockW / 2 - bx, top - by, blockW + bx * 2, blockH + by * 2, px * 0.12);
+    target.fill();
+    target.restore();
+  }
   if (p.shadow) {
     const shift = W * 3 + 1000;
     target.save();
