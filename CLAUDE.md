@@ -128,7 +128,7 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 - [x] Cola de render (`queue` en `App` + efecto que lanza el siguiente; `QueueDialog.jsx`; `enqueue` y «cada región» en `RenderDialog`)
 - [x] Detección de escenas (dividir en cada cambio de plano) (`detectScenes` en `ffmpeg.js`: `select=gt(scene,0.3)` + `metadata=print` a un archivo temporal, con `cwd` en la carpeta temporal; `splitAtSourceTimes` en `project.js`)
 - [x] Ducking automático (bajar la música con la voz) (`duckingEnvelope` en `envelopes.js`: voz detectada con los picos de la forma de onda; crea la envolvente de volumen; menú de la cabecera de pista)
-- [ ] Monitores de video (histograma, forma de onda, vectorscopio)
+- [x] Monitores de video (histograma, forma de onda, vectorscopio) (`Scopes.jsx`; `Compositor.readScope` copia el lienzo a 512 px con `blitFramebuffer` + `readPixels` justo después de `render`; `preview/scopes.js` une los dos y limita a ~15/s reproduciendo)
 - [ ] Animaciones de texto (entrada/salida) y plantillas de títulos
 - [ ] Subtítulos (pista, importar/exportar SRT, quemar en el render)
 - [ ] Corrección de color avanzada (curvas, ruedas de color, LUT .cube)

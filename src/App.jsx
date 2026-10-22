@@ -14,6 +14,7 @@ import Timeline, { MAX_PPS, MIN_PPS, gridStep } from './components/Timeline.jsx'
 import { quantize } from './util/time.js';
 import RenderDialog from './components/RenderDialog.jsx';
 import QueueDialog from './components/QueueDialog.jsx';
+import Scopes from './components/Scopes.jsx';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import RecordDialog from './components/RecordDialog.jsx';
@@ -67,7 +68,7 @@ export default function App() {
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
-  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects'
+  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects' | 'scopes'
   const [fxEventId, setFxEventId] = useState(null); // evento cuya ventana de efectos está abierta
   const [textMediaId, setTextMediaId] = useState(null); // medio de texto cuya ventana de edición está abierta
   const [panEventId, setPanEventId] = useState(null); // evento cuya ventana de panorámica/recorte está abierta
@@ -1154,6 +1155,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: 'Transiciones', shortcut: 'Alt+7', action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
         { label: 'Efectos de video', shortcut: 'Alt+8', action: () => setLeftTab('effects'), checked: leftTab === 'effects' },
         { label: 'Efectos de audio', action: () => setLeftTab('audioEffects'), checked: leftTab === 'audioEffects' },
+        { label: 'Monitores de video', shortcut: 'Ctrl+Alt+2', action: () => setLeftTab('scopes'), checked: leftTab === 'scopes' },
         'separator',
         { label: 'Ir al inicio', shortcut: 'Inicio', action: () => seek(0) },
         { label: 'Ir al final', shortcut: 'Fin', action: () => seek(duration) },
@@ -1216,6 +1218,8 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       action = exportFrame;
     } else if (ctrl && e.shiftKey && key === 'f') {
       action = freezeFrame;
+    } else if (ctrl && e.altKey && e.code === 'Digit2') {
+      action = () => setLeftTab('scopes'); // como en VEGAS
     } else if (ctrl) {
       action = {
         z: e.shiftKey ? history.redo : history.undo,
@@ -1329,6 +1333,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             { id: 'transitions', title: 'Transiciones' },
             { id: 'effects', title: 'Efectos de video' },
             { id: 'audioEffects', title: 'Efectos de audio' },
+            { id: 'scopes', title: 'Monitores de video' },
           ]}
           active={leftTab}
           onTab={setLeftTab}
@@ -1349,6 +1354,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           {leftTab === 'transitions' && <TransitionsPanel />}
           {leftTab === 'effects' && <EffectsPanel key="video" kind="video" />}
           {leftTab === 'audioEffects' && <EffectsPanel key="audio" kind="audio" />}
+          {leftTab === 'scopes' && <Scopes />}
         </Dock>
         <Dock title="Vista previa de video" className="preview-dock">
           <Preview

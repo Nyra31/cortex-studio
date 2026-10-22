@@ -2104,3 +2104,16 @@ kbd {
 .queue-item.done .queue-status { color: #8fd18f; }
 .queue-actions { display: flex; gap: 4px; }
 .progress.small { height: 6px; margin-top: 4px; }
+/* Monitores de video */
+.scopes {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.scope-canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: block;
+}

@@ -12,6 +12,7 @@ import { Compositor } from '../preview/compositor.js';
 import { drawText, isText } from '../state/text.js';
 import { NO_CROP, panActive, panAt } from '../state/pan.js';
 import { trackMixAt, trackOpacityAt } from '../state/envelopes.js';
+import { publishScope, scopeNeedsFrame, scopeWanted } from '../preview/scopes.js';
 import { hasRamp, speedAt } from '../state/speed.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
 import { setMeterEngine } from '../preview/meters.js';
@@ -416,9 +417,11 @@ export default function Preview({
     let raf;
     const loop = () => {
       const d = draw.current;
-      if (d.frame && (d.playing || d.dirty > 0)) {
+      if (d.frame && (d.playing || d.dirty > 0 || scopeNeedsFrame())) {
         d.dirty = Math.max(0, d.dirty - 1);
         compositor.render(d.frame, d.layers);
+        // Monitores de video abiertos: copia pequeña del fotograma recién dibujado.
+        if (scopeWanted(d.playing)) publishScope(compositor.readScope(512));
       }
       raf = requestAnimationFrame(loop);
     };

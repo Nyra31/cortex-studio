@@ -433,6 +433,39 @@ void main() { outColor = fx(vUv); }`;
     return { tex: this.applyEffects(src.tex, effects, w, h), scale };
   }
 
+  // Copia reducida (maxW de ancho) del fotograma que se acaba de dibujar en el lienzo, para los monitores de video:
+  // { w, h, data } en RGBA con la fila 0 abajo. Hay que llamarla justo después de render (el lienzo no conserva
+  // el dibujo).
+  readScope(maxW = 256) {
+    const gl = this.gl;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const w = Math.min(maxW, W);
+    const h = Math.max(1, Math.round((H * w) / W));
+    let t = this.scopeTarget;
+    if (!t || t.w !== w || t.h !== h) {
+      if (t) {
+        gl.deleteFramebuffer(t.fbo);
+        gl.deleteTexture(t.tex);
+      }
+      gl.activeTexture(gl.TEXTURE0 + SCRATCH);
+      const tex = setupTexture(gl);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      t = { fbo, tex, w, h, data: new Uint8Array(w * h * 4) };
+      this.scopeTarget = t;
+    }
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, t.fbo);
+    gl.blitFramebuffer(0, 0, W, H, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, t.data);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { w, h, data: t.data };
+  }
+
   // Programa auxiliar (fusión o copia) que lee texturas del tamaño del lienzo por gl_FragCoord.
   auxProgram(key, fragment) {
     this.aux ||= new Map();
