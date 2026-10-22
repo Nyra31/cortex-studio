@@ -4,7 +4,7 @@ Editor de video de escritorio (Electron 44 + React 18 + Vite 5 + FFmpeg). Toda l
 
 Repositorio: https://github.com/Nyra31/cortex-studio (rama `main`, etiqueta `v0.1.0` = primera versión con instalador).
 
-Releases: cada versión publicada tiene etiqueta `vX.Y.Z`, su sección en `CHANGELOG.md` (las notas de la release salen de ahí) y una release en GitHub con `Cortex-Studio-Setup-X.Y.Z.exe`, **`Cortex-Studio-Setup-X.Y.Z.exe.blockmap` y `latest.yml`** adjuntos (los tres de `release/`; sin `latest.yml` las actualizaciones automáticas no ven la versión). Pasos: subir `version` en `package.json`, `npm run dist`, commit, etiqueta, push y crear la release (no borrador) subiendo los tres archivos (con `gh` si está instalado; si no, con la API de GitHub usando el token de `git credential fill`). El repositorio es **público** desde la v0.6.0 (licencia GPL-3.0, `LICENSE`).
+Releases: cada versión publicada tiene etiqueta `vX.Y.Z`, su sección en `CHANGELOG.md` (las notas de la release salen de ahí) y una release en GitHub con `Cortex-Studio-Setup-X.Y.Z.exe`, **`Cortex-Studio-Setup-X.Y.Z.exe.blockmap` y `latest.yml`** adjuntos (los tres de `release/`; sin `latest.yml` las actualizaciones automáticas no ven la versión). Pasos: subir `version` en `package.json`, `npm run dist`, commit, etiqueta, push y crear la release (no borrador) subiendo los tres archivos (`node scripts/publicar-release.mjs`: crea la release con las notas de `CHANGELOG.md` y sube los tres archivos usando el token de `git credential fill`; no hace falta `gh`). El repositorio es **público** desde la v0.6.0 (licencia GPL-3.0, `LICENSE`).
 
 ## Comandos
 
@@ -16,7 +16,7 @@ npm run icon     # regenera build/icon.png (scripts/make-icon.js)
 ```
 
 No hay tests ni linter. Para comprobar un cambio: `npm run build` (debe compilar sin errores) y probar la app con `npm start`.
-Pruebas automáticas (no están en el repo; se escriben en una carpeta temporal): un script de Electron que sustituye `dialog.showOpenDialog` para abrir un `.cortex` de prueba, hace `require('electron/main.js')` y maneja la app con `webContents.executeJavaScript` y `sendInputEvent`. Lanzar con `node_modules/electron/dist/electron.exe script.js` tras `vite build`, y pasar antes `node --check` al script (un error de sintaxis abre un diálogo de error en la pantalla del usuario). Para comparar la vista previa WebGL con el render, usar `capturePage(rect)` (leer el lienzo desde la página da negro). Si la captura sale con un fotograma viejo (la ventana no se está pintando), antes `win.focus()` + `webContents.invalidate()` y esperar un poco. **La ventana de las pruebas se abre en el monitor secundario** (el usuario trabaja en el principal): antes de `require('electron/main.js')`, `app.on('browser-window-created', (_e, w) => w.setBounds(secundaria.workArea))` con la pantalla de `screen.getAllDisplays()` que no es la principal (si solo hay una, donde esté); además `webContents.setBackgroundThrottling(false)`.
+Pruebas automáticas (las de cada función no están en el repo; se escriben en una carpeta temporal partiendo de `scripts/pruebas/captura.js`, que ya hace todo lo de este párrafo y abre en el monitor secundario con `scripts/pruebas/secundaria.js`): un script de Electron que sustituye `dialog.showOpenDialog` para abrir un `.cortex` de prueba, hace `require('electron/main.js')` y maneja la app con `webContents.executeJavaScript` y `sendInputEvent`. Lanzar con `node_modules/electron/dist/electron.exe script.js` tras `vite build`, y pasar antes `node --check` al script (un error de sintaxis abre un diálogo de error en la pantalla del usuario). Para comparar la vista previa WebGL con el render, usar `capturePage(rect)` (leer el lienzo desde la página da negro). Si la captura sale con un fotograma viejo (la ventana no se está pintando), antes `win.focus()` + `webContents.invalidate()` y esperar un poco. **La ventana de las pruebas se abre en el monitor secundario** (el usuario trabaja en el principal): antes de `require('electron/main.js')`, `app.on('browser-window-created', (_e, w) => w.setBounds(secundaria.workArea))` con la pantalla de `screen.getAllDisplays()` que no es la principal (si solo hay una, donde esté); además `webContents.setBackgroundThrottling(false)`.
 Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está definida en la terminal (VS Code la define): `npm start`/`npm run dev` ya la quitan con `scripts/electron.js`; al lanzar `electron.exe` a mano en las pruebas hay que quitarla (`unset`).
 
 ## Arquitectura
@@ -78,6 +78,8 @@ Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está defi
 - Responder siempre en español; commits en español, en frases cortas en infinitivo o nominales (p. ej. «Instalador de Windows con electron-builder»).
 - El usuario trabaja desde varios dispositivos: lo importante para continuar debe quedar en este archivo y en el repo (la memoria local de Claude no se comparte entre equipos).
 - `gh` (GitHub CLI) puede no estar instalado; git funciona con Git Credential Manager.
+- Al abrir Cortex Studio para probar algo, hacerlo **siempre en el monitor secundario** (`scripts/pruebas/secundaria.js`): el usuario trabaja en el principal y no quiere que le tapen la pantalla.
+- Los `git push` a veces tardan varios minutos: lanzarlos en segundo plano y esperar el aviso.
 
 ## Para empezar en otro equipo
 
@@ -117,7 +119,7 @@ Hechas las tres fases de «transiciones y efectos de sonido y video como los de 
 
 Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opacidad, modos de fusión, transiciones en los fundidos, guardar la selección de tiempo y proxies). Pendiente: firma (v1.0).
 
-**Para la v0.7 (el usuario quiere todas antes de publicarla; marcar [x] al terminar cada una):**
+**Lista de la v0.7 (todo hecho y publicado en la v0.7.0; se deja como referencia de dónde está cada cosa):**
 - [x] Deslizar el contenido del evento (slip, Alt + arrastrar; `slip` en `onEventDown`)
 - [x] Sustituir el medio de un evento (Ctrl + soltar un medio sobre él; `replaceMedia`)
 - [x] Congelar fotograma en el cursor (Ctrl+Mayús+F; `freezeFrame` en `project.js` + `media:frame` → PNG en `Fotogramas`)
