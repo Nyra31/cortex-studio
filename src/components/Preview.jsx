@@ -14,6 +14,7 @@ import { NO_CROP, panActive, panAt } from '../state/pan.js';
 import { trackMixAt, trackOpacityAt } from '../state/envelopes.js';
 import { publishScope, scopeNeedsFrame, scopeWanted } from '../preview/scopes.js';
 import { cueAt, subtitleParams } from '../state/subtitles.js';
+import { setLutListener } from '../preview/effects-gl.js';
 import { hasRamp, speedAt } from '../state/speed.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
 import { setMeterEngine } from '../preview/meters.js';
@@ -235,6 +236,13 @@ export default function Preview({
   const invalidate = () => {
     draw.current.dirty = Math.max(draw.current.dirty, 3);
   };
+  // Al terminar de leer una LUT (efecto LUT), se vuelve a dibujar.
+  useEffect(() => {
+    setLutListener(() => {
+      draw.current.dirty = Math.max(draw.current.dirty, 3);
+    });
+    return () => setLutListener(null);
+  }, []);
 
   // Elemento que da la imagen de un evento: un <video> propio por evento o un <img> compartido por medio.
   const sourceFor = (e, create) => {

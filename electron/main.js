@@ -198,6 +198,20 @@ ipcMain.handle('subtitles:export', async (_e, text, defaultName) => {
   return res.filePath;
 });
 
+// LUT .cube del efecto LUT: elegir un archivo y leerlo (solo .cube) para la vista previa.
+ipcMain.handle('lut:pick', async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: 'Elegir una LUT',
+    properties: ['openFile'],
+    filters: [{ name: 'LUT 3D (.cube)', extensions: ['cube'] }],
+  });
+  return res.canceled || !res.filePaths.length ? null : res.filePaths[0];
+});
+ipcMain.handle('lut:read', async (_e, filePath) => {
+  if (path.extname(filePath).toLowerCase() !== '.cube') throw new Error('No es un archivo .cube');
+  return fs.promises.readFile(filePath, 'utf8');
+});
+
 // Detectar escenas: cortes de plano entre start y start + length (s del medio); devuelve los instantes desde start.
 ipcMain.handle('media:scenes', async (event, filePath, start, length) => {
   const file = path.resolve(filePath);

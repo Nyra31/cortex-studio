@@ -150,6 +150,10 @@ export default function App() {
       setPlayToken((n) => n + 1);
     }
   }, []);
+  // Para las pruebas automáticas (llevar el cursor a un instante exacto).
+  useEffect(() => {
+    if (window.cortexPruebas) window.cortexPruebas.seek = seek;
+  }, [seek]);
 
   // Con selección de tiempo, si el cursor está fuera de ella, se reproduce desde su principio (como en VEGAS).
   const play = useCallback(() => {

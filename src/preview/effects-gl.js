@@ -5,7 +5,7 @@
 // Pasada = { code, uniforms }: code es el cuerpo de `vec4 fx(vec2 uv)`; puede leer uPrev (resultado de
 // la pasada anterior), uSrc (imagen que entró al efecto) y uSize (tamaño en px). Los colores van sin
 // premultiplicar y el canal alfa se conserva (lo crea el croma).
-import { blurSigma, pixelBlock, sepiaMatrix } from '../state/effects.js';
+import { blurSigma, curveTable, gradeChannels, pixelBlock, sepiaMatrix } from '../state/effects.js';
 
 // Conversión RGB ↔ YUV de rango limitado (BT.601), la que usa FFmpeg al pasar una imagen a yuv420p:
 // los filtros eq, hue y vignette trabajan sobre esos valores.
@@ -54,7 +54,105 @@ const blurPasses = (sx, sy) =>
       uniforms: { uSigma: sigma, uDir: dir },
     }));
 
+// LUT .cube de la vista previa: se leen (por el proceso principal) la primera vez y se guardan como textura 2D de
+// (N·N)×N (el corte b va en x a partir de b·N). Mientras se carga, el efecto no hace nada; al terminar se avisa
+// (setLutListener) para volver a dibujar.
+const luts = new Map(); // ruta → { size, data: Uint8Array RGBA } | 'cargando' | 'error'
+let lutListener = null;
+export const setLutListener = (fn) => {
+  lutListener = fn;
+};
+export function parseCube(text) {
+  let size = 0;
+  const values = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (/^LUT_3D_SIZE/i.test(line)) size = Number(line.split(/\s+/)[1]);
+    else if (/^[-+\d.]/.test(line)) {
+      const v = line.split(/\s+/).map(Number);
+      if (v.length >= 3) values.push(v[0], v[1], v[2]);
+    }
+  }
+  if (!size || values.length < size * size * size * 3) throw new Error('No es una LUT 3D .cube válida');
+  const data = new Uint8Array(size * size * size * 4);
+  for (let b = 0; b < size; b++) {
+    for (let g = 0; g < size; g++) {
+      for (let r = 0; r < size; r++) {
+        const i = (r + g * size + b * size * size) * 3;
+        const o = (g * size * size + b * size + r) * 4; // fila g, columna b·N + r
+        data[o] = Math.round(Math.min(1, Math.max(0, values[i])) * 255);
+        data[o + 1] = Math.round(Math.min(1, Math.max(0, values[i + 1])) * 255);
+        data[o + 2] = Math.round(Math.min(1, Math.max(0, values[i + 2])) * 255);
+        data[o + 3] = 255;
+      }
+    }
+  }
+  return { size, data };
+}
+function lutFor(file) {
+  const entry = luts.get(file);
+  if (entry && typeof entry === 'object') return entry;
+  if (!entry) {
+    luts.set(file, 'cargando');
+    window.api.readLut(file)
+      .then((text) => luts.set(file, parseCube(text)))
+      .catch(() => luts.set(file, 'error'))
+      .finally(() => lutListener?.());
+  }
+  return null;
+}
+// Curvas en la vista previa: 65 valores por canal (todos, R, G, B), interpolados en el shader.
+const CURVE_STEPS = 65;
+
 const PASSES = {
+  colorwheels: (p) => {
+    const { lift, gamma, gain } = gradeChannels(p);
+    return [{
+      code: `
+        vec4 c = texture(uPrev, uv);
+        vec3 v = clamp(c.rgb + uLift * (1.0 - c.rgb), 0.0, 1.0);
+        v = clamp(pow(v, uInvGamma) * uGain, 0.0, 1.0);
+        return vec4(uSat == 1.0 ? v : hueFilter(v, 0.0, uSat, 0.0), c.a);`,
+      uniforms: { uLift: lift, uInvGamma: gamma.map((g) => 1 / g), uGain: gain, uSat: p.saturation },
+    }];
+  },
+  curves: (p) => {
+    const tables = [p.master, p.red, p.green, p.blue].map((s) => curveTable(s, CURVE_STEPS));
+    const lut = new Float32Array(CURVE_STEPS * 4);
+    for (let i = 0; i < CURVE_STEPS; i++) for (let k = 0; k < 4; k++) lut[i * 4 + k] = tables[k][i];
+    return [{
+      code: `
+        vec4 c = texture(uPrev, uv);
+        vec3 v = vec3(curveAt(1, c.r), curveAt(2, c.g), curveAt(3, c.b));
+        return vec4(curveAt(0, v.r), curveAt(0, v.g), curveAt(0, v.b), c.a);`,
+      helpers: `
+        float curveAt(int k, float x) {
+          float f = clamp(x, 0.0, 1.0) * ${CURVE_STEPS - 1}.0;
+          int i = int(min(floor(f), ${CURVE_STEPS - 2}.0));
+          return mix(uCurve[i][k], uCurve[i + 1][k], f - float(i));
+        }`,
+      uniforms: { uCurve: { vec4s: lut } },
+    }];
+  },
+  lut: (p) => {
+    const lut = p.file && p.intensity > 0 ? lutFor(p.file) : null;
+    if (!lut) return [];
+    return [{
+      code: `
+        vec4 c = texture(uPrev, uv);
+        float n = uLutSize;
+        vec3 s = clamp(c.rgb, 0.0, 1.0) * (n - 1.0);
+        float b0 = floor(s.b);
+        float b1 = min(b0 + 1.0, n - 1.0);
+        vec2 rg = (s.rg + 0.5) / vec2(n * n, n);
+        vec3 c0 = texture(uTex, rg + vec2(b0 / n, 0.0)).rgb;
+        vec3 c1 = texture(uTex, rg + vec2(b1 / n, 0.0)).rgb;
+        return vec4(mix(c.rgb, mix(c0, c1, s.b - b0), uIntensity), c.a);`,
+      uniforms: { uLutSize: lut.size, uIntensity: p.intensity },
+      texture: { key: p.file, width: lut.size * lut.size, height: lut.size, data: lut.data },
+    }];
+  },
   brightness: (p) => [{
     code: `
       vec4 c = texture(uPrev, uv);

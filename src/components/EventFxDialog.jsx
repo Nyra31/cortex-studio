@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ColorWheel, CurveEditor } from './ColorControls.jsx';
 import Icon from './Icon.jsx';
 import {
   EFFECTS, addFxKey, canAnimate, effectDefaults, effectGroups, fxKeyAt, fxParamsAt, hasKeyframes, isAnimatable, moveFxKey, newEffect,
@@ -194,7 +195,37 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
           ) : (
             <p className="pan-hint">Este efecto no se puede animar con fotogramas clave.</p>
           ))}
-          {def.params.map((p) => (
+          {def.params.some((p) => p.type === 'curve') && (
+            <CurveEditor
+              values={values}
+              onChange={(id, value, record) => setParam(id, value, record)}
+            />
+          )}
+          {def.params.filter((p) => !p.hidden && p.type !== 'curve').map((p) => (p.wheel ? (
+            <div key={p.id} className="fx-param wheel-param">
+              <span className="fx-param-label">{p.label}</span>
+              <ColorWheel
+                x={values[p.id]}
+                y={values[p.wheel]}
+                onChange={(x, y, record) => changeSelected((fx) => setFxValues(fx, local, { [p.id]: x, [p.wheel]: y }, fps), record)}
+              />
+            </div>
+          ) : p.type === 'file' ? (
+            <div key={p.id} className="fx-param">
+              <span className="fx-param-label">{p.label}</span>
+              <button
+                onClick={async () => {
+                  const file = await window.api.pickLut();
+                  if (file) setParam(p.id, file, true);
+                }}
+              >
+                Elegir…
+              </button>
+              <span className="fx-param-value fx-file" title={values[p.id] || ''}>
+                {values[p.id] ? values[p.id].split(/[\\/]/).pop() : 'ninguno'}
+              </span>
+            </div>
+          ) : (
             <label key={p.id} className="fx-param" title={kfs.length && !canAnimate(def, p) ? 'Este valor no se anima: vale para todo el evento' : undefined}>
               <span className="fx-param-label">{p.label}</span>
               {p.type === 'range' && (
@@ -232,7 +263,7 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
                 />
               )}
             </label>
-          ))}
+          )))}
         </div>
       ) : (
         <div className="fx-empty">

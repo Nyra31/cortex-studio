@@ -2217,3 +2217,32 @@ kbd {
   padding: 3px 5px;
 }
 .sub-delete { width: 22px; padding: 0; }
+/* Corrector de color, curvas y LUT */
+.wheel-param { align-items: center; }
+.color-wheel {
+  position: relative;
+  flex: none;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(128, 128, 128, 1) 0%, rgba(128, 128, 128, 0) 72%),
+    conic-gradient(from 90deg, #ff4040, #ff40ff, #4040ff, #40ffff, #40ff40, #ffff40, #ff4040);
+  border: 1px solid #555;
+  cursor: crosshair;
+  touch-action: none;
+}
+.color-wheel-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 2px #000;
+  pointer-events: none;
+}
+.curve-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.curve-tabs { display: flex; gap: 4px; }
+.curve-area { background: #151515; border: 1px solid #3a3a3a; touch-action: none; }
+.curve-grid line, .curve-diagonal { stroke: rgba(255, 255, 255, 0.1); }
+.curve-point { fill: #fff; stroke: #000; cursor: grab; }
+.fx-file { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

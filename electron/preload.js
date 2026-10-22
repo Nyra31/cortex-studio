@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('scenes:progress', handler);
     return () => ipcRenderer.removeListener('scenes:progress', handler);
   },
+  pickLut: () => ipcRenderer.invoke('lut:pick'),
+  readLut: (filePath) => ipcRenderer.invoke('lut:read', filePath),
   importSubtitles: () => ipcRenderer.invoke('subtitles:import'),
   exportSubtitles: (text, defaultName) => ipcRenderer.invoke('subtitles:export', text, defaultName),
   extractFrame: (filePath, time, projectPath) => ipcRenderer.invoke('media:frame', filePath, time, projectPath),

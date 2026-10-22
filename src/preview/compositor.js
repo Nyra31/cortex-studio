@@ -363,7 +363,11 @@ export class Compositor {
   fxProgram(pass) {
     const gl = this.gl;
     const names = Object.keys(pass.uniforms);
-    const key = pass.code + names.map((name) => `${name}:${uniformType(pass.uniforms[name])}`).join();
+    const decl = (name) => {
+      const v = pass.uniforms[name];
+      return v?.vec4s ? `uniform vec4 ${name}[${v.vec4s.length / 4}];` : `uniform ${uniformType(v)} ${name};`;
+    };
+    const key = pass.code + (pass.helpers || '') + names.map(decl).join() + (pass.texture ? 'tex' : '');
     let entry = this.fxPrograms.get(key);
     if (!entry) {
       const fragment = `#version 300 es
@@ -373,19 +377,36 @@ out vec4 outColor;
 uniform sampler2D uPrev;
 uniform sampler2D uSrc;
 uniform vec2 uSize;
-${names.map((name) => `uniform ${uniformType(pass.uniforms[name])} ${name};`).join('\n')}
+${pass.texture ? 'uniform sampler2D uTex;' : ''}
+${names.map(decl).join('\n')}
 ${GLSL_HELPERS}
+${pass.helpers || ''}
 vec4 fx(vec2 uv) {
 ${pass.code}
 }
 void main() { outColor = fx(vUv); }`;
       const program = link(gl, FX_VERTEX, fragment);
       const loc = {};
-      for (const name of ['uPrev', 'uSrc', 'uSize', ...names]) loc[name] = gl.getUniformLocation(program, name);
+      for (const name of ['uPrev', 'uSrc', 'uSize', 'uTex', ...names]) loc[name] = gl.getUniformLocation(program, name);
       entry = { program, loc };
       this.fxPrograms.set(key, entry);
     }
     return entry;
+  }
+
+  // Textura de datos de una pasada ({ key, width, height, data RGBA }), creada la primera vez.
+  passTexture({ key, width, height, data }) {
+    this.dataTextures ||= new Map();
+    let tex = this.dataTextures.get(key);
+    if (!tex) {
+      const gl = this.gl;
+      gl.activeTexture(gl.TEXTURE0 + SCRATCH);
+      tex = setupTexture(gl);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      gl.activeTexture(gl.TEXTURE4);
+      this.dataTextures.set(key, tex);
+    }
+    return tex;
   }
 
   // Aplica la cadena de efectos a una textura, a w×h píxeles (la imagen encajada). Devuelve la textura resultante.
@@ -409,8 +430,18 @@ void main() { outColor = fx(vUv); }`;
         gl.uniform1i(loc.uSrc, 3);
         gl.uniform2f(loc.uSize, w, h);
         for (const [name, value] of Object.entries(pass.uniforms)) {
+          if (value?.vec4s) {
+            gl.uniform4fv(loc[name], value.vec4s);
+            continue;
+          }
           const v = Array.isArray(value) ? value : [value];
           gl[`uniform${v.length}fv`](loc[name], v);
+        }
+        // Textura propia de la pasada (la LUT): en la unidad 4, guardada por su clave.
+        if (pass.texture) {
+          gl.activeTexture(gl.TEXTURE4);
+          gl.bindTexture(gl.TEXTURE_2D, this.passTexture(pass.texture));
+          gl.uniform1i(loc.uTex, 4);
         }
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         current = target.tex;

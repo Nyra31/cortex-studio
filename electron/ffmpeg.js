@@ -744,6 +744,12 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
     return { ...m, png: undefined, path: file, isImage: true };
   }));
   // Una pasada de FFmpeg; el progreso va de `from` a from + share.
+  // LUT de los efectos: copias en la carpeta temporal, donde trabaja FFmpeg (el filtro las nombra sin ruta).
+  for (const lut of project.luts || []) {
+    const dest = path.join(os.tmpdir(), lut.name);
+    await fs.promises.copyFile(lut.path, dest);
+    temp.push(dest);
+  }
   let subtitlesFile = null;
   if (project.subtitlesSrt) {
     subtitlesFile = path.join(os.tmpdir(), `cortex-subtitulos-${stamp}.srt`);
@@ -757,6 +763,7 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
     await fs.promises.writeFile(scriptPath, filterGraph, 'utf8');
     args[args.indexOf(null)] = scriptPath;
     return run(ffmpegPath, edit(args), {
+      cwd: os.tmpdir(),
       onSpawn,
       onLine: (line) => {
         const m = /^out_time_(?:us|ms)=(\d+)/.exec(line);

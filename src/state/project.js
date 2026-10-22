@@ -1,6 +1,6 @@
 // Modelo del proyecto y operaciones de edición (funciones puras).
 import { DEFAULT_TRANSITION } from './transitions.js';
-import { effectsGraph, fxParamsAt, scaleFxKeys, shiftFxKeys } from './effects.js';
+import { effectsGraph, fxParamsAt, lutName, scaleFxKeys, shiftFxKeys } from './effects.js';
 export { scaleFxKeys, shiftFxKeys };
 import { hasTextAnim, isText, textPng, textSequence } from './text.js';
 import { hasRamp, localForSource, shiftSpeed, sourceOffset, speedPayload } from './speed.js';
@@ -849,6 +849,10 @@ export function renderPayload(project, size = project.settings, range = null, op
     })),
     transitions: transitions.filter((tr) => kept.has(tr.from) && kept.has(tr.to)),
     range,
+    // LUT de los efectos LUT: el proceso principal las copia a la carpeta temporal con su nombre (lutName).
+    luts: [...new Set(events.flatMap((e) => (e.effects || [])
+      .filter((fx) => fx.type === 'lut' && fx.enabled !== false && fx.params?.file)
+      .map((fx) => fx.params.file)))].map((file) => ({ path: file, name: lutName(file) })),
     subtitlesSrt: opts.subtitles === 'soft' && cues.length ? toSrt(cues, range ? range.start : 0, range ? range.end - range.start : Infinity) : null,
   };
 }

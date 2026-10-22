@@ -35,6 +35,97 @@ export const blurSigma = (amount, h) => amount * h * 0.03;
 // a menos resolución quede igual; el render lo redondea a píxeles enteros).
 export const pixelBlock = (size, h) => Math.max(1, h * (0.005 + size * 0.1));
 
+// ---- Corrector de color de tres vías, curvas y LUT ----
+
+// Ruedas de color: el punto (x, y) de la rueda (radio 1) es un desplazamiento de color de media cero: hacia el rojo
+// (ángulo 0), el verde (120°) o el azul (240°), con la fuerza de su distancia al centro.
+export function wheelShift(x, y) {
+  const r = Math.min(1, Math.hypot(x, y));
+  const a = Math.atan2(y, x);
+  return [0, 1, 2].map((k) => r * Math.cos(a - (k * 2 * Math.PI) / 3));
+}
+// Valores por canal (R, G, B) del corrector: sombras (lift: se suma, sobre todo a lo oscuro), medios (gamma:
+// exponente) y luces (gain: multiplica).
+export function gradeChannels(p) {
+  const L = wheelShift(p.liftX, p.liftY);
+  const G = wheelShift(p.gammaX, p.gammaY);
+  const K = wheelShift(p.gainX, p.gainY);
+  return {
+    lift: L.map((s) => p.lift + 0.25 * s),
+    gamma: G.map((s) => 2 ** (p.gamma + 0.5 * s)),
+    gain: K.map((s) => 1 + p.gain + 0.5 * s),
+  };
+}
+
+// Curvas: puntos «x/y x/y …» (de 0 a 1, como el filtro curves de FFmpeg) → tabla de n valores de 0 a 1 con la
+// misma spline cúbica natural que usa FFmpeg (antes del primer punto y después del último, su valor).
+export function parseCurve(s) {
+  const pts = String(s || '').trim().split(/\s+/).map((t) => t.split('/').map(Number))
+    .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y))
+    .map(([x, y]) => ({ x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) }))
+    .sort((a, b) => a.x - b.x);
+  return pts.length ? pts : [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+}
+export const curveString = (pts) => pts.map((p) => `${p.x.toFixed(3)}/${p.y.toFixed(3)}`).join(' ');
+export function curveTable(s, n = 256) {
+  const pts = parseCurve(s);
+  const m = pts.length;
+  const out = new Float32Array(n);
+  if (m === 1) return out.fill(pts[0].y);
+  // Segundas derivadas (spline natural: 0 en los extremos), sistema tridiagonal.
+  const h = pts.slice(0, -1).map((p, i) => pts[i + 1].x - p.x || 1e-6);
+  const d = new Float64Array(m);
+  if (m > 2) {
+    const a = new Float64Array(m);
+    const b = new Float64Array(m);
+    const c = new Float64Array(m);
+    const r = new Float64Array(m);
+    b[0] = 1;
+    b[m - 1] = 1;
+    for (let i = 1; i < m - 1; i++) {
+      a[i] = h[i - 1];
+      b[i] = 2 * (h[i - 1] + h[i]);
+      c[i] = h[i];
+      r[i] = 6 * ((pts[i + 1].y - pts[i].y) / h[i] - (pts[i].y - pts[i - 1].y) / h[i - 1]);
+    }
+    for (let i = 1; i < m; i++) {
+      const w = a[i] / b[i - 1];
+      b[i] -= w * c[i - 1];
+      r[i] -= w * r[i - 1];
+    }
+    d[m - 1] = r[m - 1] / b[m - 1];
+    for (let i = m - 2; i >= 0; i--) d[i] = (r[i] - c[i] * d[i + 1]) / b[i];
+  }
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    const x = i / (n - 1);
+    let y;
+    if (x <= pts[0].x) y = pts[0].y;
+    else if (x >= pts[m - 1].x) y = pts[m - 1].y;
+    else {
+      while (k < m - 2 && x > pts[k + 1].x) k++;
+      const t = x - pts[k].x;
+      const hk = h[k];
+      const a3 = (d[k + 1] - d[k]) / (6 * hk);
+      const a2 = d[k] / 2;
+      const a1 = (pts[k + 1].y - pts[k].y) / hk - (hk * (2 * d[k] + d[k + 1])) / 6;
+      y = pts[k].y + a1 * t + a2 * t * t + a3 * t * t * t;
+    }
+    out[i] = Math.min(1, Math.max(0, y));
+  }
+  return out;
+}
+const IDENTITY_CURVE = '0/0 1/1';
+const isIdentityCurve = (s) => curveString(parseCurve(s)) === curveString(parseCurve(IDENTITY_CURVE));
+
+// LUT .cube: el render la copia a la carpeta temporal con este nombre (FFmpeg trabaja allí), para no tener que
+// escapar la ruta dentro del filtro.
+export function lutName(file) {
+  let h = 2166136261;
+  for (const ch of String(file)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  return `cortex-lut-${h.toString(16)}.cube`;
+}
+
 export const EFFECT_GROUPS = [
   {
     name: 'Color',
@@ -62,6 +153,69 @@ export const EFFECT_GROUPS = [
             ctx.keep || p.red !== 1 || p.green !== 1 || p.blue !== 1 ? `colorchannelmixer=rr=${n(p.red)}:gg=${n(p.green)}:bb=${n(p.blue)}` : '',
             ctx.keep || p.saturation !== 1 ? `hue=s=${n(p.saturation)}` : '',
           ].filter(Boolean).join(','),
+      },
+      {
+        // Como el «Corrector de color (tres vías)» de VEGAS: una rueda y un nivel para sombras, medios y luces.
+        id: 'colorwheels',
+        name: 'Corrector de color (tres vías)',
+        animatable: false, // las expresiones de lutrgb llevan comas y no se pueden mandar como comando
+        params: [
+          { id: 'liftX', label: 'Sombras', type: 'range', min: -1, max: 1, step: 0.01, default: 0, wheel: 'liftY' },
+          { id: 'liftY', type: 'range', min: -1, max: 1, step: 0.01, default: 0, hidden: true },
+          { id: 'lift', label: 'Nivel de sombras', type: 'range', min: -0.5, max: 0.5, step: 0.005, default: 0, format: pct },
+          { id: 'gammaX', label: 'Medios', type: 'range', min: -1, max: 1, step: 0.01, default: 0, wheel: 'gammaY' },
+          { id: 'gammaY', type: 'range', min: -1, max: 1, step: 0.01, default: 0, hidden: true },
+          { id: 'gamma', label: 'Nivel de medios', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
+          { id: 'gainX', label: 'Luces', type: 'range', min: -1, max: 1, step: 0.01, default: 0, wheel: 'gainY' },
+          { id: 'gainY', type: 'range', min: -1, max: 1, step: 0.01, default: 0, hidden: true },
+          { id: 'gain', label: 'Nivel de luces', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
+          { id: 'saturation', label: 'Saturación', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
+        ],
+        ffmpeg: (p) => {
+          const { lift, gamma, gain } = gradeChannels(p);
+          const graded = [lift, gamma, gain].some((v, j) => v.some((x) => x !== [0, 1, 1][j]));
+          const expr = (c) => `'255*clip(pow(clip(val/255+${n(lift[c])}*(1-val/255),0,1),${n(1 / gamma[c])})*${n(gain[c])},0,1)'`;
+          return [
+            graded ? `lutrgb=r=${expr(0)}:g=${expr(1)}:b=${expr(2)}` : '',
+            p.saturation !== 1 ? `hue=s=${n(p.saturation)}` : '',
+          ].filter(Boolean).join(',');
+        },
+      },
+      {
+        id: 'curves',
+        name: 'Curvas',
+        animatable: false,
+        params: [
+          { id: 'master', label: 'Todos', type: 'curve', default: IDENTITY_CURVE },
+          { id: 'red', label: 'Rojo', type: 'curve', default: IDENTITY_CURVE },
+          { id: 'green', label: 'Verde', type: 'curve', default: IDENTITY_CURVE },
+          { id: 'blue', label: 'Azul', type: 'curve', default: IDENTITY_CURVE },
+        ],
+        ffmpeg: (p) => {
+          const parts = [['m', p.master], ['r', p.red], ['g', p.green], ['b', p.blue]]
+            .filter(([, s]) => !isIdentityCurve(s))
+            .map(([k, s]) => `${k}='${curveString(parseCurve(s))}'`);
+          return parts.length ? `curves=${parts.join(':')}` : '';
+        },
+      },
+      {
+        id: 'lut',
+        name: 'LUT (.cube)',
+        animatable: false,
+        params: [
+          { id: 'file', label: 'Archivo', type: 'file', default: '', filter: { name: 'LUT 3D (.cube)', extensions: ['cube'] } },
+          { id: 'intensity', label: 'Intensidad', type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct },
+        ],
+        // Con intensidad parcial, la imagen con la LUT se mezcla con la original.
+        graph: (p, ctx, inL, outL, tag) => {
+          if (!p.file || !p.intensity) return `[${inL}]null[${outL}]`;
+          const lut = `lut3d=file=${lutName(p.file)}:interp=trilinear`;
+          if (p.intensity >= 1) return `[${inL}]${lut}[${outL}]`;
+          return (
+            `[${inL}]format=gbrap,split[${tag}a][${tag}b];[${tag}b]${lut}[${tag}c];` +
+            `[${tag}c][${tag}a]blend=all_mode=normal:all_opacity=${n(p.intensity)}[${outL}]`
+          );
+        },
       },
       {
         id: 'hsl',
