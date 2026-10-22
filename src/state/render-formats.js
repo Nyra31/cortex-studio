@@ -43,10 +43,10 @@ export const AUDIO_KBPS = [96, 128, 192, 256, 320];
 // Plantillas: formato, tamaño, velocidad de fotogramas, calidad y audio.
 export const TEMPLATES = [
   { id: 'project', name: 'Proyecto: MP4 H.264, calidad alta', format: 'mp4-h264', size: 'p100', fps: null, quality: { mode: 'crf', level: 'high' }, audioKbps: 192 },
-  { id: 'yt1080', name: 'YouTube 1080p (H.264, 12 Mbps)', format: 'mp4-h264', size: '1920x1080', fps: null, quality: { mode: 'bitrate', mbps: 12 }, audioKbps: 256 },
-  { id: 'yt4k', name: 'YouTube 4K (H.264, 45 Mbps)', format: 'mp4-h264', size: '3840x2160', fps: null, quality: { mode: 'bitrate', mbps: 45 }, audioKbps: 256 },
-  { id: 'vertical', name: 'Vertical 1080 × 1920: TikTok, Reels, Shorts (H.264, 10 Mbps)', format: 'mp4-h264', size: '1080x1920', fps: null, quality: { mode: 'bitrate', mbps: 10 }, audioKbps: 192 },
-  { id: 'square', name: 'Cuadrado 1080 × 1080: Instagram (H.264, 8 Mbps)', format: 'mp4-h264', size: '1080x1080', fps: null, quality: { mode: 'bitrate', mbps: 8 }, audioKbps: 192 },
+  { id: 'yt1080', name: 'YouTube 1080p (H.264, 12 Mbps)', format: 'mp4-h264', size: '1920x1080', fps: null, quality: { mode: 'bitrate', mbps: 12 }, audioKbps: 256, loudness: -14 },
+  { id: 'yt4k', name: 'YouTube 4K (H.264, 45 Mbps)', format: 'mp4-h264', size: '3840x2160', fps: null, quality: { mode: 'bitrate', mbps: 45 }, audioKbps: 256, loudness: -14 },
+  { id: 'vertical', name: 'Vertical 1080 × 1920: TikTok, Reels, Shorts (H.264, 10 Mbps)', format: 'mp4-h264', size: '1080x1920', fps: null, quality: { mode: 'bitrate', mbps: 10 }, audioKbps: 192, loudness: -14 },
+  { id: 'square', name: 'Cuadrado 1080 × 1080: Instagram (H.264, 8 Mbps)', format: 'mp4-h264', size: '1080x1080', fps: null, quality: { mode: 'bitrate', mbps: 8 }, audioKbps: 192, loudness: -14 },
   { id: 'hevc', name: 'Archivo pequeño: MP4 H.265, calidad normal', format: 'mp4-h265', size: 'p100', fps: null, quality: { mode: 'crf', level: 'normal' }, audioKbps: 192 },
   { id: 'web720', name: 'Web ligera 720p (WebM VP9)', format: 'webm', size: '1280x720', fps: null, quality: { mode: 'crf', level: 'normal' }, audioKbps: 128 },
   { id: 'prores', name: 'ProRes 422 HQ para seguir editando (MOV)', format: 'mov-prores', size: 'p100', fps: null },

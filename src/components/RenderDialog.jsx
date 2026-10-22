@@ -14,7 +14,15 @@ const defaults = (t = TEMPLATES[0]) => ({
   fps: t.fps ?? null,
   quality: t.quality || { mode: 'crf', level: 'normal' },
   audioKbps: t.audioKbps || 192,
+  loudness: t.loudness ?? null,
 });
+// Normalizar la sonoridad del render (LUFS integrados), como piden las plataformas.
+const LOUDNESS = [
+  { value: '', label: 'Sin normalizar' },
+  { value: '-14', label: '−14 LUFS: YouTube, Spotify, redes sociales' },
+  { value: '-16', label: '−16 LUFS: pódcast, Apple' },
+  { value: '-23', label: '−23 LUFS: televisión (EBU R128)' },
+];
 function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -46,7 +54,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
   const change = (changes) => setOpts((o) => ({ ...o, ...changes, template: 'custom' }));
   const applyTemplate = (id) => {
     const t = TEMPLATES.find((x) => x.id === id);
-    if (t) setOpts((o) => ({ ...defaults(t), custom: o.custom }));
+    if (t) setOpts((o) => ({ ...defaults(t), custom: o.custom, loudness: t.loudness !== undefined ? t.loudness : o.loudness }));
   };
 
   useEffect(() => {
@@ -96,6 +104,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
           format: format.id,
           quality: opts.quality,
           audioKbps: opts.audioKbps,
+          loudness: format.id !== 'gif' ? opts.loudness : null,
         },
         target,
       );
@@ -197,6 +206,14 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
                     <span className="field-label">Audio</span>
                     <select value={opts.audioKbps} onChange={(e) => change({ audioKbps: Number(e.target.value) })}>
                       {AUDIO_KBPS.map((k) => <option key={k} value={k}>{k} kbps</option>)}
+                    </select>
+                  </label>
+                )}
+                {format.id !== 'gif' && (
+                  <label title="Sube o baja el volumen de todo el render para que suene tan fuerte como pide la plataforma (mide antes el sonido: tarda un poco más)">
+                    <span className="field-label">Sonoridad</span>
+                    <select value={opts.loudness ?? ''} onChange={(e) => change({ loudness: e.target.value ? Number(e.target.value) : null })}>
+                      {LOUDNESS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
                     </select>
                   </label>
                 )}

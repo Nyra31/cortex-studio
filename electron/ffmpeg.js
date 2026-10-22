@@ -642,11 +642,23 @@ function buildRender(project, settings, outPath) {
     mix.push(`[a${i}]`);
   }
   const cut = rangeStart ? `,atrim=start=${rangeStart.toFixed(6)},asetpts=PTS-STARTPTS` : '';
+  // Normalizar la sonoridad (settings.loudness = LUFS integrados): loudnorm con lo medido en la primera pasada
+  // (settings.loudnessMeasured, ver render) y linear=true, que solo sube o baja el volumen (sin comprimir) si el
+  // pico verdadero queda por debajo de −1,5 dBTP. Sin medidas es la propia pasada de medida (print_format=json).
+  const norm = settings.loudness && !format.gif && !format.still;
+  const mixOut = norm ? 'amixed' : 'aout';
   filters.push(
     mix.length === 1
-      ? `[abase]anull${cut}[aout]`
-      : `${mix.join('')}amix=inputs=${mix.length}:duration=first:normalize=0${cut}[aout]`,
+      ? `[abase]anull${cut}[${mixOut}]`
+      : `${mix.join('')}amix=inputs=${mix.length}:duration=first:normalize=0${cut}[${mixOut}]`,
   );
+  if (norm) {
+    const m = settings.loudnessMeasured;
+    const measured = m
+      ? `:measured_I=${m.input_i}:measured_TP=${m.input_tp}:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}:offset=${m.target_offset}:linear=true:print_format=none`
+      : ':print_format=json';
+    filters.push(`[amixed]loudnorm=I=${settings.loudness}:TP=-1.5:LRA=11${measured},aresample=48000[aout]`);
+  }
   if (format.gif || format.still) filters.push('[aout]anullsink'); // el GIF y la imagen no llevan sonido
 
   const args = [
@@ -674,20 +686,40 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
     temp.push(file);
     return { ...m, png: undefined, path: file, isImage: true };
   }));
-  const { args, filterGraph, duration } = buildRender({ ...project, media }, settings, outPath);
-  const scriptPath = path.join(os.tmpdir(), `cortex-filtros-${stamp}.txt`);
-  temp.push(scriptPath);
-  await fs.promises.writeFile(scriptPath, filterGraph, 'utf8');
-  args[args.indexOf(null)] = scriptPath;
-  try {
-    const result = await run(ffmpegPath, args, {
+  // Una pasada de FFmpeg; el progreso va de `from` a from + share.
+  const pass = async (opts, out, from, share, edit = (a) => a) => {
+    const { args, filterGraph, duration } = buildRender({ ...project, media }, opts, out);
+    const scriptPath = path.join(os.tmpdir(), `cortex-filtros-${stamp}-${temp.length}.txt`);
+    temp.push(scriptPath);
+    await fs.promises.writeFile(scriptPath, filterGraph, 'utf8');
+    args[args.indexOf(null)] = scriptPath;
+    return run(ffmpegPath, edit(args), {
       onSpawn,
       onLine: (line) => {
         const m = /^out_time_(?:us|ms)=(\d+)/.exec(line);
-        if (m && onProgress) onProgress(Math.min(1, Number(m[1]) / 1e6 / duration));
+        if (m && onProgress) onProgress(from + share * Math.min(1, Number(m[1]) / 1e6 / duration));
       },
     });
-    return result;
+  };
+  try {
+    let opts = settings;
+    let from = 0;
+    if (settings.loudness && settings.format !== 'gif') {
+      // Primera pasada: solo el sonido (como un WAV) a ninguna parte, para medir su sonoridad.
+      const measure = await pass({ ...settings, format: 'wav' }, '-', 0, 0.2, (a) => {
+        const b = [...a];
+        b[b.indexOf('error')] = 'info'; // loudnorm escribe la medida como información
+        b.splice(b.length - 1, 0, '-f', 'null');
+        return b;
+      });
+      if (measure.code !== 0) return measure;
+      const json = /\{[^{}]*"input_i"[^{}]*\}/.exec(measure.stderr);
+      const m = json && JSON.parse(json[0]);
+      // Sin sonido (−inf) no hay nada que normalizar.
+      opts = m && Number.isFinite(Number(m.input_i)) ? { ...settings, loudnessMeasured: m } : { ...settings, loudness: null };
+      from = 0.2;
+    }
+    return await pass(opts, outPath, from, 1 - from);
   } finally {
     for (const file of temp) fs.promises.unlink(file).catch(() => {});
   }
