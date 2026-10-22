@@ -4,7 +4,7 @@ Editor de video de escritorio (Electron 44 + React 18 + Vite 5 + FFmpeg). Toda l
 
 Repositorio: https://github.com/Nyra31/cortex-studio (rama `main`, etiqueta `v0.1.0` = primera versión con instalador).
 
-Releases: cada versión publicada tiene etiqueta `vX.Y.Z` y una release en GitHub con `Cortex-Studio-Setup-X.Y.Z.exe`, **`Cortex-Studio-Setup-X.Y.Z.exe.blockmap` y `latest.yml`** adjuntos (los tres de `release/`; sin `latest.yml` las actualizaciones automáticas no ven la versión). Pasos: subir `version` en `package.json`, `npm run dist`, commit, etiqueta, push y crear la release (no borrador) subiendo los tres archivos (con `gh` si está instalado; si no, con la API de GitHub usando el token de `git credential fill`). El repositorio es **público** desde la v0.6.0 (licencia GPL-3.0, `LICENSE`).
+Releases: cada versión publicada tiene etiqueta `vX.Y.Z`, su sección en `CHANGELOG.md` (las notas de la release salen de ahí) y una release en GitHub con `Cortex-Studio-Setup-X.Y.Z.exe`, **`Cortex-Studio-Setup-X.Y.Z.exe.blockmap` y `latest.yml`** adjuntos (los tres de `release/`; sin `latest.yml` las actualizaciones automáticas no ven la versión). Pasos: subir `version` en `package.json`, `npm run dist`, commit, etiqueta, push y crear la release (no borrador) subiendo los tres archivos (con `gh` si está instalado; si no, con la API de GitHub usando el token de `git credential fill`). El repositorio es **público** desde la v0.6.0 (licencia GPL-3.0, `LICENSE`).
 
 ## Comandos
 
@@ -135,4 +135,4 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 
 ## Al terminar una función
 
-Actualizar el README (lista de funciones, atajos, limitaciones) y la tabla de atajos de `ShortcutsDialog.jsx` si se añaden teclas.
+Actualizar `docs/MANUAL.md` (descripción de la función, atajos, limitaciones), añadirla a `CHANGELOG.md` en una sección «Sin publicar» (al publicar, pasa a ser la de la versión, con fecha) y la tabla de atajos de `ShortcutsDialog.jsx` si se añaden teclas. El README es corto a propósito (qué es, descarga, funciones en seis líneas, desarrollo, licencia): tocarlo solo si cambia algo de eso.
