@@ -16,7 +16,7 @@ npm run icon     # regenera build/icon.png (scripts/make-icon.js)
 ```
 
 No hay tests ni linter. Para comprobar un cambio: `npm run build` (debe compilar sin errores) y probar la app con `npm start`.
-Pruebas automáticas (no están en el repo; se escriben en una carpeta temporal): un script de Electron que sustituye `dialog.showOpenDialog` para abrir un `.cortex` de prueba, hace `require('electron/main.js')` y maneja la app con `webContents.executeJavaScript` y `sendInputEvent`. Lanzar con `node_modules/electron/dist/electron.exe script.js` tras `vite build`, y pasar antes `node --check` al script (un error de sintaxis abre un diálogo de error en la pantalla del usuario). Para comparar la vista previa WebGL con el render, usar `capturePage(rect)` (leer el lienzo desde la página da negro).
+Pruebas automáticas (no están en el repo; se escriben en una carpeta temporal): un script de Electron que sustituye `dialog.showOpenDialog` para abrir un `.cortex` de prueba, hace `require('electron/main.js')` y maneja la app con `webContents.executeJavaScript` y `sendInputEvent`. Lanzar con `node_modules/electron/dist/electron.exe script.js` tras `vite build`, y pasar antes `node --check` al script (un error de sintaxis abre un diálogo de error en la pantalla del usuario). Para comparar la vista previa WebGL con el render, usar `capturePage(rect)` (leer el lienzo desde la página da negro). Si la captura sale con un fotograma viejo (la ventana no se está pintando), antes `win.focus()` + `webContents.invalidate()` y esperar un poco.
 Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está definida en la terminal (VS Code la define): `npm start`/`npm run dev` ya la quitan con `scripts/electron.js`; al lanzar `electron.exe` a mano en las pruebas hay que quitarla (`unset`).
 
 ## Arquitectura
@@ -125,7 +125,7 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 - [x] Calidad de la vista previa (borrador/buena/máxima) y guías (zona segura, cuadrícula) (`QUALITY_SCALE`, `Guides` en `Preview.jsx`; `localStorage` `cortex-preview`)
 - [x] Normalizar la sonoridad en el render (LUFS) (`settings.loudness`; `render` mide primero con loudnorm `print_format=json` en un pase solo de audio y luego aplica `linear=true` con lo medido; comprobado: −14,0 y −23,0 exactos)
 - [x] Recopilar medios (copiar proyecto y archivos a una carpeta) (`project:collect` en `main.js`, `collect` en `App`; `writeProject`/`readProject` guardan y usan `rel`, la ruta relativa de cada medio; la clave de proxies y miniaturas ya no depende de la carpeta: nombre|tamaño|fecha)
-- [ ] Cola de render
+- [x] Cola de render (`queue` en `App` + efecto que lanza el siguiente; `QueueDialog.jsx`; `enqueue` y «cada región» en `RenderDialog`)
 - [ ] Detección de escenas (dividir en cada cambio de plano)
 - [ ] Ducking automático (bajar la música con la voz)
 - [ ] Monitores de video (histograma, forma de onda, vectorscopio)

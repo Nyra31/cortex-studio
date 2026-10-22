@@ -36,10 +36,11 @@ function loadSettings() {
 // calidad y qué renderizar. makePayload(size, range): datos para el proceso principal, calculados para el
 // tamaño al que se monta el proyecto (los efectos y los textos dependen de él); range = tramo o null.
 // region: selección de tiempo ({ start, end }) o null; regions: regiones con nombre del proyecto.
-export default function RenderDialog({ makePayload, settings, region, regions = [], projectLength, defaultName, onClose }) {
+// onEnqueue(trabajos, empezar): añade trabajos a la cola de render (ver QueueDialog).
+export default function RenderDialog({ makePayload, settings, region, regions = [], projectLength, defaultName, onClose, onEnqueue }) {
   // Qué renderizar: 'all', 'selection' o el id de una región. Como en VEGAS: con selección, se ofrece esa parte.
   const [what, setWhat] = useState(region ? 'selection' : 'all');
-  const range = what === 'all' ? null : what === 'selection' ? region : regions.find((r) => r.id === what) || null;
+  const range = what === 'all' || what === 'eachRegion' ? null : what === 'selection' ? region : regions.find((r) => r.id === what) || null;
   const [opts, setOpts] = useState(loadSettings);
   const [phase, setPhase] = useState('settings'); // settings | rendering | done | error
   const [progress, setProgress] = useState(0);
@@ -49,7 +50,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
   const format = formatInfo(opts.format);
   const fps = opts.fps ?? settings.fps;
   const { out, inner, bands } = outputSize(opts.size, opts.custom, settings);
-  const length = range ? range.end - range.start : projectLength;
+  const length = what === 'eachRegion' ? regions.reduce((s, r) => s + r.end - r.start, 0) : range ? range.end - range.start : projectLength;
   // Cambiar algo a mano deja la plantilla como «personalizada».
   const change = (changes) => setOpts((o) => ({ ...o, ...changes, template: 'custom' }));
   const applyTemplate = (id) => {
@@ -84,9 +85,48 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
     return mb >= 1000 ? `${(mb / 1000).toFixed(1).replace('.', ',')} GB` : `${Math.max(0.1, mb).toFixed(1).replace('.', ',')} MB`;
   })();
 
+  const renderSettings = {
+    width: inner.w,
+    height: inner.h,
+    outWidth: out.w,
+    outHeight: out.h,
+    fps,
+    format: format.id,
+    quality: opts.quality,
+    audioKbps: opts.audioKbps,
+    loudness: format.id !== 'gif' ? opts.loudness : null,
+  };
+  const baseFile = defaultName.replace(/\.[^.]+$/, '');
+  const regionLabel = (r) => (r.name ? r.name : `Región ${r.number}`);
+  // Trabajo para la cola: el proyecto tal como está ahora (se puede seguir editando mientras se renderiza).
+  const job = (r, target, name) => ({
+    name,
+    outPath: target,
+    payload: makePayload({ width: inner.w, height: inner.h }, r ? { start: r.start, end: r.end } : null),
+    settings: renderSettings,
+  });
+  // Añadir a la cola lo elegido (con «cada región», un archivo por región en la carpeta del primero).
+  async function enqueue(startNow) {
+    if (what === 'eachRegion') {
+      const first = await window.api.pickRenderPath(`${baseFile} - ${regionLabel(regions[0])}.${format.ext}`, { name: format.name, ext: format.ext });
+      if (!first) return;
+      const dir = first.slice(0, Math.max(first.lastIndexOf('\\'), first.lastIndexOf('/')) + 1);
+      const safe = (s) => s.replace(/[\\/:*?"<>|]/g, '_');
+      onEnqueue(regions.map((r, i) => job(r, i === 0 ? first : `${dir}${safe(`${baseFile} - ${regionLabel(r)}`)}.${format.ext}`, `Región ${r.number}${r.name ? ` «${r.name}»` : ''}`)), startNow);
+    } else {
+      const target = await window.api.pickRenderPath(`${baseFile}.${format.ext}`, { name: format.name, ext: format.ext });
+      if (!target) return;
+      onEnqueue([job(range, target, what === 'all' ? 'Todo el proyecto' : what === 'selection' ? 'Selección de tiempo' : `Región ${range.number}`)], startNow);
+    }
+    onClose();
+  }
+
   async function start() {
-    const name = defaultName.replace(/\.[^.]+$/, '');
-    const target = await window.api.pickRenderPath(`${name}.${format.ext}`, { name: format.name, ext: format.ext });
+    if (what === 'eachRegion') {
+      enqueue(true);
+      return;
+    }
+    const target = await window.api.pickRenderPath(`${baseFile}.${format.ext}`, { name: format.name, ext: format.ext });
     if (!target) return;
     setOutPath(target);
     setProgress(0);
@@ -95,17 +135,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
     try {
       const result = await window.api.startRender(
         makePayload({ width: inner.w, height: inner.h }, range ? { start: range.start, end: range.end } : null),
-        {
-          width: inner.w,
-          height: inner.h,
-          outWidth: out.w,
-          outHeight: out.h,
-          fps,
-          format: format.id,
-          quality: opts.quality,
-          audioKbps: opts.audioKbps,
-          loudness: format.id !== 'gif' ? opts.loudness : null,
-        },
+        renderSettings,
         target,
       );
       if (result.ok) setPhase('done');
@@ -237,6 +267,12 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
                     {`Región ${r.number}${r.name ? ` «${r.name}»` : ''} (${formatTimecode(r.start, settings.fps)} – ${formatTimecode(r.end, settings.fps)})`}
                   </label>
                 ))}
+                {regions.length > 1 && (
+                  <label>
+                    <input type="radio" checked={what === 'eachRegion'} onChange={() => setWhat('eachRegion')} />
+                    {`Cada región en su archivo (${regions.length} archivos, con la cola de render)`}
+                  </label>
+                )}
               </div>
 
               <div className="render-summary">
@@ -276,6 +312,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
           {phase === 'settings' && (
             <>
               <button onClick={onClose}>Cancelar</button>
+              <button onClick={() => enqueue(false)} title="Guarda este render (con el proyecto tal como está ahora) para hacerlo después con otros: Archivo → Cola de render">Añadir a la cola</button>
               <button className="primary" onClick={start}>Elegir destino y renderizar</button>
             </>
           )}

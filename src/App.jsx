@@ -13,6 +13,7 @@ import Transport from './components/Transport.jsx';
 import Timeline, { MAX_PPS, MIN_PPS, gridStep } from './components/Timeline.jsx';
 import { quantize } from './util/time.js';
 import RenderDialog from './components/RenderDialog.jsx';
+import QueueDialog from './components/QueueDialog.jsx';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import RecordDialog from './components/RecordDialog.jsx';
@@ -59,6 +60,10 @@ export default function App() {
   const [rippleMode, setRippleMode] = useState('tracks'); // modo que se usa al activarla
   const [upperHeight, setUpperHeight] = useState(Math.round(window.innerHeight * 0.44));
   const [renderOpen, setRenderOpen] = useState(false);
+  // Cola de render: trabajos { id, name, outPath, payload, settings, status, progress, error } (no se guarda).
+  const [queue, setQueue] = useState([]);
+  const [queueRunning, setQueueRunning] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
@@ -188,6 +193,31 @@ export default function App() {
     setPlaying(false);
     setTime(quantize(Math.max(0, (Math.round(t / step) + direction) * step), p.settings.fps));
   }, []);
+
+  // ---- Cola de render ----
+  const setJob = useCallback((id, changes) => setQueue((q) => q.map((j) => (j.id === id ? { ...j, ...changes } : j))), []);
+  const enqueueRenders = useCallback((jobs, startNow) => {
+    setQueue((q) => [...q, ...jobs.map((j) => ({ ...j, id: uid('r'), status: 'waiting', progress: 0, error: null }))]);
+    if (startNow) setQueueRunning(true);
+    setStatus(startNow ? `Renderizando ${jobs.length} archivo(s) con la cola de render.` : `Añadido a la cola de render (Archivo → Cola de render…).`);
+  }, []);
+  // Con la cola en marcha, se renderiza el siguiente trabajo en espera; al acabarse, se para.
+  useEffect(() => {
+    if (!queueRunning || queue.some((j) => j.status === 'rendering')) return;
+    const next = queue.find((j) => j.status === 'waiting');
+    if (!next) {
+      setQueueRunning(false);
+      const failed = queue.filter((j) => j.status === 'error').length;
+      setStatus(failed ? `Cola de render terminada con ${failed} error(es).` : 'Cola de render terminada.');
+      return;
+    }
+    setJob(next.id, { status: 'rendering', progress: 0 });
+    const off = api.onRenderProgress((p) => setJob(next.id, { progress: p }));
+    api.startRender(next.payload, next.settings, next.outPath)
+      .then((res) => setJob(next.id, res.ok ? { status: 'done', progress: 1 } : res.canceled ? { status: 'canceled' } : { status: 'error', error: res.error || 'Error desconocido' }))
+      .catch((err) => setJob(next.id, { status: 'error', error: err.message }))
+      .finally(off);
+  }, [queue, queueRunning, setJob]);
 
   // ---- Proxies de la vista previa ----
   // Copias ligeras (H.264, ≤720 líneas) de los archivos que el reproductor de la vista previa no puede abrir o que
@@ -1051,6 +1081,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         'separator',
         { label: 'Importar medios…', shortcut: 'Ctrl+I', action: importDialog },
         { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
+        { label: `Cola de render…${queue.length ? ` (${queue.filter((j) => j.status === 'waiting' || j.status === 'rendering').length})` : ''}`, action: () => setQueueOpen(true) },
         { label: 'Exportar el fotograma como imagen…', shortcut: 'Ctrl+Mayús+E', action: exportFrame, disabled: duration <= 0 },
         'separator',
         { label: 'Propiedades del proyecto…', shortcut: 'Alt+Intro', action: openProperties },
@@ -1147,7 +1178,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
 
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
-  const modalOpen = renderOpen || projectDialog !== null || shortcutsOpen || recordDialog;
+  const modalOpen = renderOpen || queueOpen || projectDialog !== null || shortcutsOpen || recordDialog;
   const floatingOpen = !!fxEventId || !!textMediaId || !!panEventId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
@@ -1382,6 +1413,11 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           {status || 'Listo'}
           {update.status === 'downloading' && ` · Descargando la versión ${update.version} (${Math.round(update.percent || 0)} %)`}
           {update.status === 'ready' && updateHidden && ` · Versión ${update.version} lista: se instalará al cerrar`}
+          {queueRunning && (() => {
+            const current = queue.find((j) => j.status === 'rendering');
+            const done = queue.filter((j) => j.status === 'done').length;
+            return ` · Cola de render: ${done + 1}/${queue.length}${current ? ` (${Math.floor(current.progress * 100)} %)` : ''}`;
+          })()}
         </span>
         <span>
           {baseName(projectPath)}
@@ -1397,6 +1433,22 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           projectLength={duration}
           defaultName={`${baseName(projectPath)}.mp4`}
           onClose={() => setRenderOpen(false)}
+          onEnqueue={enqueueRenders}
+        />
+      )}
+      {queueOpen && (
+        <QueueDialog
+          queue={queue}
+          running={queueRunning}
+          onStart={() => setQueueRunning(true)}
+          onStop={() => {
+            setQueueRunning(false);
+            api.cancelRender();
+          }}
+          onRemove={(id) => setQueue((q) => q.filter((j) => j.id !== id))}
+          onRetry={(id) => setJob(id, { status: 'waiting', progress: 0, error: null })}
+          onClearDone={() => setQueue((q) => q.filter((j) => j.status !== 'done'))}
+          onClose={() => setQueueOpen(false)}
         />
       )}
       {projectDialog && (

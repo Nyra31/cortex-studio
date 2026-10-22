@@ -2079,3 +2079,28 @@ kbd {
 .preview-guides * { vector-effect: non-scaling-stroke; stroke-width: 1; }
 .preview-guides .safe { stroke: rgba(255, 255, 255, 0.55); stroke-dasharray: 4 3; }
 .preview-guides .thirds { stroke: rgba(255, 220, 120, 0.5); }
+/* Cola de render */
+.modal.queue-dialog { width: 640px; }
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.queue-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 3px;
+}
+.queue-main { flex: 1; min-width: 0; }
+.queue-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.queue-status { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+.queue-item.error .queue-status { color: #ff8a80; }
+.queue-item.done .queue-status { color: #8fd18f; }
+.queue-actions { display: flex; gap: 4px; }
+.progress.small { height: 6px; margin-top: 4px; }
