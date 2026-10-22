@@ -6,7 +6,7 @@
 // en amplitud para el volumen); antes del primero y después del último se mantiene su valor. La envolvente se
 // suma a la panorámica fija de la pista y multiplica su volumen o la opacidad de sus eventos.
 // Ley de panorámica «balance»: hacia la derecha se baja el canal izquierdo y al revés.
-import { MIN_VOLUME_DB, fadeCurve, volumeToGain } from './project.js';
+import { MIN_VOLUME_DB, eventFades, fadeAt, fadeCurve, sourceTime, volumeToGain } from './project.js';
 
 export const ENVELOPE_MAX_DB = 6;
 export const ENVELOPE_KINDS = {
@@ -85,6 +85,47 @@ export const setEnvelopeCurve = (points, index, c) =>
     const { c: _old, ...rest } = p;
     return c && c !== 'linear' ? { ...rest, c } : rest;
   });
+
+// Ducking automático: envolvente de volumen para una pista (la música) que baja `depth` dB mientras suena la voz
+// de la pista voiceTrackId. La voz se detecta con los picos de la forma de onda de sus eventos (con su volumen y
+// fundidos): por encima de `threshold` dBFS hay voz; las pausas de menos de `hold` s no cuentan. Baja en `attack`
+// s antes de que empiece y sube en `release` s después, con curva suave. Devuelve los puntos (o null sin voz).
+export function duckingEnvelope(project, voiceTrackId, { depth = -12, threshold = -36, attack = 0.25, release = 0.6, hold = 0.8 } = {}) {
+  const STEP = 0.02;
+  const limit = 255 * 10 ** (threshold / 20);
+  const media = new Map(project.media.map((m) => [m.id, m]));
+  const regions = [];
+  for (const e of [...project.events].filter((x) => x.trackId === voiceTrackId).sort((a, b) => a.start - b.start)) {
+    const m = media.get(e.mediaId);
+    if (!m?.peaks) continue;
+    const fades = eventFades(e);
+    for (let t = e.start; t < e.start + e.duration; t += STEP) {
+      const src = sourceTime(e, t);
+      const level = (m.peaks[Math.floor(src * m.peaksPerSecond)] ?? 0) * volumeToGain(e.volume ?? 0)
+        * fadeAt(t - e.start, e.duration, { ...fades, curveIn: e.fadeInCurve, curveOut: e.fadeOutCurve });
+      if (level < limit) continue;
+      const last = regions[regions.length - 1];
+      if (last && t - last[1] <= hold) last[1] = t + STEP;
+      else regions.push([t, t + STEP]);
+    }
+  }
+  // Tramos cuya subida llegaría después de la bajada del siguiente: uno solo (se queda abajo entre los dos).
+  const voiced = [];
+  for (const r of regions.filter(([a, b]) => b - a >= 0.15)) {
+    const last = voiced[voiced.length - 1];
+    if (last && r[0] - attack <= last[1] + release) last[1] = r[1];
+    else voiced.push([...r]);
+  }
+  if (!voiced.length) return null;
+  const points = [{ t: 0, v: 0 }];
+  for (const [a, b] of voiced) {
+    const down = Math.max(0.001, a - attack);
+    if (down > points[points.length - 1].t) points.push({ t: down, v: 0, c: 'smooth' });
+    else points[points.length - 1].c = 'smooth';
+    points.push({ t: Math.max(down + 0.01, a), v: depth }, { t: b, v: depth, c: 'smooth' }, { t: b + release, v: 0 });
+  }
+  return points;
+}
 
 // ---- Render (FFmpeg) ----
 

@@ -15,7 +15,7 @@ import {
   sourceOffset,
 } from '../state/speed.js';
 import {
-  ENVELOPE_CURVES, ENVELOPE_KINDS, ENVELOPE_MAX_DB, addEnvelopePoint, envelopeAt, envelopeKinds, envelopeValueAt, setEnvelopeCurve,
+  ENVELOPE_CURVES, ENVELOPE_KINDS, ENVELOPE_MAX_DB, addEnvelopePoint, duckingEnvelope, envelopeAt, envelopeKinds, envelopeValueAt, setEnvelopeCurve,
 } from '../state/envelopes.js';
 import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
 import { isText } from '../state/text.js';
@@ -1461,6 +1461,24 @@ const Timeline = forwardRef(function Timeline({
           action: () => toggle(kind),
         })),
         'separator',
+        // Ducking: la envolvente de volumen de esta pista baja mientras suena la voz de otra pista de audio.
+        ...(track.type === 'audio'
+          ? live.current.project.tracks
+            .filter((t) => t.type === 'audio' && t.id !== trackId)
+            .map((voice) => ({
+              label: `Bajar el volumen cuando suene «${voice.name}» (ducking)`,
+              action: () => {
+                const points = duckingEnvelope(live.current.project, voice.id);
+                if (!points) {
+                  onMessage(`No se ha encontrado voz en «${voice.name}».`);
+                  return;
+                }
+                setEnvelope(trackId, 'volume', () => points);
+                onMessage(`Ducking: envolvente de volumen creada (−12 dB mientras suena «${voice.name}»). Sus puntos se pueden ajustar.`);
+              },
+            }))
+            .concat(live.current.project.tracks.some((t) => t.type === 'audio' && t.id !== trackId) ? ['separator'] : [])
+          : []),
         // Modo de fusión de la pista de video con las de debajo (como el modo de composición de VEGAS).
         ...(track.type === 'video'
           ? [
@@ -1478,7 +1496,7 @@ const Timeline = forwardRef(function Timeline({
         { label: 'Eliminar la pista', action: () => onDeleteTrackRef.current(trackId) },
       ],
     });
-  }, [onContextMenu, setEnvelope, setProject]);
+  }, [onContextMenu, onMessage, setEnvelope, setProject]);
   const onDeleteTrackRef = useRef(null);
 
   const onUpdateTrack = useCallback((trackId, changes, record) => {
