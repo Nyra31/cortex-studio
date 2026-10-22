@@ -226,12 +226,13 @@ ipcMain.handle('media:filmstrip', (_e, filePath) => {
 });
 
 // ---- Proxies de la vista previa (ver makeProxy en ffmpeg.js) ----
-// Se guardan en userData/proxies con un nombre que depende de la ruta, el tamaño y la fecha del original (si el
-// archivo cambia, se hace otro). Se crean de uno en uno; al salir se para el que esté en marcha.
+// Se guardan en userData/proxies con un nombre que depende del nombre, el tamaño y la fecha del original (si el
+// archivo cambia, se hace otro; una copia con la misma fecha, como las de «Recopilar medios», usa el mismo). Se
+// crean de uno en uno; al salir se para el que esté en marcha.
 const proxyDir = () => path.join(app.getPath('userData'), 'proxies');
 function proxyPathFor(file) {
   const st = fs.statSync(file);
-  const key = crypto.createHash('sha1').update(`${file}|${st.size}|${st.mtimeMs}`).digest('hex').slice(0, 24);
+  const key = crypto.createHash('sha1').update(`${path.basename(file).toLowerCase()}|${st.size}|${Math.round(st.mtimeMs)}`).digest('hex').slice(0, 24);
   return path.join(proxyDir(), `${key}.mp4`);
 }
 function existingProxy(file) {
@@ -314,15 +315,103 @@ ipcMain.handle('project:save', async (_e, data, filePath) => {
     if (res.canceled || !res.filePath) return null;
     target = res.filePath;
   }
+  await writeProject(target, data);
+  return target;
+});
+
+// Escribe un proyecto. Cada medio guarda también su ruta relativa a la carpeta del proyecto (`rel`): si al abrirlo
+// la absoluta no existe (otro equipo, carpeta movida), se usa esa (ver readProject).
+async function writeProject(target, data) {
+  const dir = path.dirname(target);
+  const media = (data.media || []).map((m) => (m.path ? { ...m, rel: path.relative(dir, m.path) } : m));
   // Copia de seguridad, como el .veg.bak de VEGAS: la versión anterior del archivo queda en «.bak».
   try {
     await fs.promises.copyFile(target, `${target}.bak`);
   } catch {
     // archivo nuevo: no hay versión anterior
   }
-  await fs.promises.writeFile(target, JSON.stringify(data, null, 2), 'utf8');
-  return target;
+  await fs.promises.writeFile(target, JSON.stringify({ ...data, media }, null, 2), 'utf8');
+}
+// Recopilar medios: copia todos los archivos del proyecto a «Medios» dentro de la carpeta elegida y guarda allí el
+// proyecto apuntando a las copias (que conservan la fecha del original). Los que ya están dentro de la carpeta no se
+// copian, y una copia anterior igual (mismo tamaño y fecha) se reutiliza. Progreso por `collect:progress`.
+// Devuelve { path, map (original → copia), missing } o null si se cancela.
+ipcMain.handle('project:collect', async (event, data, currentPath) => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: 'Recopilar medios: elige o crea la carpeta del proyecto',
+    properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
+  });
+  if (res.canceled || !res.filePaths.length) return null;
+  const dir = res.filePaths[0];
+  const target = path.join(dir, currentPath ? path.basename(currentPath) : 'Proyecto.cortex');
+  const mediaDir = path.join(dir, 'Medios');
+  await fs.promises.mkdir(mediaDir, { recursive: true });
+  const files = [...new Set((data.media || []).filter((m) => m.path).map((m) => path.resolve(m.path)))];
+  const map = {};
+  const missing = [];
+  const taken = new Set();
+  const stats = new Map();
+  for (const f of files) {
+    try {
+      stats.set(f, await fs.promises.stat(f));
+    } catch {
+      missing.push(f);
+    }
+  }
+  const total = [...stats.values()].reduce((s, st) => s + st.size, 0) || 1;
+  let done = 0;
+  for (const [file, st] of stats) {
+    const inside = !path.relative(dir, file).startsWith('..') && !path.isAbsolute(path.relative(dir, file));
+    if (inside) {
+      map[file] = file;
+      continue;
+    }
+    // Nombre libre en «Medios» (o el de una copia anterior idéntica).
+    const ext = path.extname(file);
+    const stem = path.basename(file, ext);
+    let dest = null;
+    for (let i = 1; !dest; i++) {
+      const candidate = path.join(mediaDir, i === 1 ? `${stem}${ext}` : `${stem} (${i})${ext}`);
+      if (taken.has(candidate.toLowerCase())) continue;
+      let same = false;
+      let exists = false;
+      try {
+        const other = await fs.promises.stat(candidate);
+        exists = true;
+        same = other.size === st.size && Math.round(other.mtimeMs) === Math.round(st.mtimeMs);
+      } catch {
+        // libre
+      }
+      if (!exists || same) dest = candidate;
+    }
+    taken.add(dest.toLowerCase());
+    event.sender.send('collect:progress', { name: path.basename(file), percent: Math.round((done / total) * 100) });
+    if (!fs.existsSync(dest)) {
+      await fs.promises.copyFile(file, `${dest}.parcial`);
+      await fs.promises.rename(`${dest}.parcial`, dest);
+      await fs.promises.utimes(dest, st.atimeMs / 1000, st.mtimeMs / 1000);
+    }
+    done += st.size;
+    allowedFiles.add(dest);
+    map[file] = dest;
+  }
+  const media = data.media.map((m) => (m.path && map[path.resolve(m.path)] ? { ...m, path: map[path.resolve(m.path)] } : m));
+  await writeProject(target, { ...data, media });
+  return { path: target, map, missing };
 });
+
+async function readProject(filePath) {
+  const data = JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
+  const dir = path.dirname(filePath);
+  if (Array.isArray(data.media)) {
+    data.media = data.media.map((m) => {
+      if (!m.path || !m.rel || fs.existsSync(m.path)) return m;
+      const near = path.resolve(dir, m.rel);
+      return fs.existsSync(near) ? { ...m, path: near } : m;
+    });
+  }
+  return data;
+}
 
 // Guardado automático: { savedAt, projectPath, data }. Se escribe en un temporal y se renombra, para que
 // un cierre a medias no deje la copia rota.
@@ -350,7 +439,7 @@ ipcMain.handle('project:open', async () => {
   });
   if (res.canceled || !res.filePaths.length) return null;
   const filePath = res.filePaths[0];
-  return { path: filePath, data: JSON.parse(await fs.promises.readFile(filePath, 'utf8')) };
+  return { path: filePath, data: await readProject(filePath) };
 });
 
 // type = { name, ext } del formato elegido en la ventana de render.

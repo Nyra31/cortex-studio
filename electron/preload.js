@@ -29,6 +29,12 @@ contextBridge.exposeInMainWorld('api', {
   displayCount: () => ipcRenderer.invoke('screen:count'),
   extractFrame: (filePath, time, projectPath) => ipcRenderer.invoke('media:frame', filePath, time, projectPath),
   filmstrip: (filePath) => ipcRenderer.invoke('media:filmstrip', filePath),
+  collectProject: (data, currentPath) => ipcRenderer.invoke('project:collect', data, currentPath),
+  onCollectProgress: (callback) => {
+    const handler = (_e, info) => callback(info);
+    ipcRenderer.on('collect:progress', handler);
+    return () => ipcRenderer.removeListener('collect:progress', handler);
+  },
   // Proxies de la vista previa.
   makeProxy: (filePath) => ipcRenderer.invoke('proxy:make', filePath),
   removeProxy: (filePath) => ipcRenderer.invoke('proxy:remove', filePath),

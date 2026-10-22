@@ -887,6 +887,38 @@ export default function App() {
     }
   }, [projectPath]);
 
+  // Recopilar medios: copia el proyecto y todos sus archivos a una carpeta (para llevarlo a otro equipo o guardarlo
+  // completo) y sigue trabajando con esa copia, como «Guardar como» con «Copiar medios» de VEGAS.
+  const collect = useCallback(async () => {
+    const { project: current, projectPath: file } = live.current;
+    const off = api.onCollectProgress(({ name, percent }) => setStatus(`Recopilando medios: ${percent} % (${name})…`));
+    let res;
+    try {
+      res = await api.collectProject(serializeProject(current, viewState()), file);
+    } catch (err) {
+      window.alert(`No se pudieron recopilar los medios: ${err.message}`);
+      return;
+    } finally {
+      off();
+    }
+    if (!res) {
+      setStatus('');
+      return;
+    }
+    const moved = (p) => res.map[p] ?? p;
+    const next = { ...current, media: current.media.map((m) => (m.path ? { ...m, path: moved(m.path) } : m)) };
+    history.reset(next);
+    setSavedProject(next);
+    setProjectPath(res.path);
+    // Proxies y miniaturas sirven igual para las copias (misma clave: nombre, tamaño y fecha).
+    const remap = (obj) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [moved(k), v]));
+    proxyRef.current.ready = remap(proxyRef.current.ready);
+    setProxies(proxyRef.current.ready);
+    setStrips(remap);
+    api.clearAutosave();
+    setStatus(`Proyecto y medios copiados en ${res.path}${res.missing.length ? ` (faltan ${res.missing.length} archivo(s) que no se encontraron)` : ''}. Ahora trabajas con esa copia.`);
+  }, [history]);
+
   // Carga un proyecto leído de disco (o una copia de recuperación: recovered = true, queda como modificado
   // y, al guardar, se guarda en su archivo de siempre).
   const loadData = useCallback(async (data, filePath, recovered = false) => {
@@ -1015,6 +1047,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: 'Abrir…', shortcut: 'Ctrl+O', action: open },
         { label: 'Guardar', shortcut: 'Ctrl+S', action: () => save(false) },
         { label: 'Guardar como…', shortcut: 'Ctrl+Mayús+S', action: () => save(true) },
+        { label: 'Recopilar medios y guardar en una carpeta…', action: collect },
         'separator',
         { label: 'Importar medios…', shortcut: 'Ctrl+I', action: importDialog },
         { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
