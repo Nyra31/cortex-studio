@@ -20,7 +20,7 @@ import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
   EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, loadView, mediaLength, pasteEvents,
-  placeMedia, projectDuration, removeMedia, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
+  freezeFrame as freezeFrameAt, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
   moveTrack, splitRange, trimToCursor, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
@@ -30,6 +30,7 @@ import { transitionLabel } from './state/transitions.js';
 import { Recorder, loadRecordSettings, micError } from './preview/recorder.js';
 
 const api = window.api;
+const FREEZE_S = 2; // duración del fotograma congelado
 const AUTOSAVE_MS = 60 * 1000; // guardado automático (copia de recuperación) cada minuto si hay cambios
 
 // Escala con la que la imagen del evento llena todo el cuadro (sin bandas), para «Llenar el cuadro».
@@ -344,6 +345,35 @@ export default function App() {
     if (next === p) setStatus('Para recortar hasta el cursor, el cursor tiene que estar dentro del evento seleccionado.');
     else setProject(next);
   }, [setProject]);
+
+  // Congelar fotograma: el del evento de video seleccionado en el cursor (o el de más arriba que se vea ahí) pasa a
+  // ser una imagen fija de FREEZE_S segundos insertada en el cursor (lo de detrás de esas pistas se aparta).
+  const freezeFrame = useCallback(async () => {
+    const { project: p, time: t, selection: sel, projectPath: file } = live.current;
+    const types = new Map(p.tracks.map((tr) => [tr.id, tr.type]));
+    const mediaOf = (e) => p.media.find((m) => m.id === e.mediaId);
+    const fits = (e) => types.get(e.trackId) === 'video' && e.start <= t && t < e.start + e.duration
+      && mediaOf(e) && !mediaOf(e).isImage && !mediaOf(e).missing;
+    const order = new Map(p.tracks.map((tr, i) => [tr.id, i]));
+    const candidates = p.events.filter(fits).sort((a, b) => order.get(a.trackId) - order.get(b.trackId));
+    const ev = candidates.find((e) => sel.includes(e.id)) || candidates[0];
+    if (!ev) {
+      setStatus('Para congelar un fotograma, pon el cursor sobre un evento de video.');
+      return;
+    }
+    setPlaying(false);
+    const fps = p.settings.fps;
+    const at = Math.floor(t * fps + 1e-6) / fps; // el fotograma que se ve
+    try {
+      setStatus('Extrayendo el fotograma…');
+      const path = await api.extractFrame(mediaOf(ev).path, sourceTime(ev, at), file);
+      const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(path)) };
+      setProject((cur) => freezeFrameAt(cur, ev.id, at, media, FREEZE_S));
+      setStatus(`Fotograma congelado (${FREEZE_S} s), guardado en ${path}. Arrastra su borde para cambiar la duración.`);
+    } catch (err) {
+      setStatus(`No se pudo congelar el fotograma: ${err.message}`);
+    }
+  }, [noteAnalyzed, setProject]);
 
   // Exportar el fotograma del cursor como PNG, al tamaño del proyecto (se renderiza con FFmpeg: sale igual
   // que en el render, con efectos, textos y transiciones).
@@ -710,6 +740,9 @@ export default function App() {
           action: () => setProject((cur) => splitEvents(cur, live.current.time, ids)),
           disabled: !selected.some((e) => e.start < t && t < e.start + e.duration),
         },
+        ...(isVideo && media && !media.isImage
+          ? [{ label: 'Congelar fotograma en el cursor', shortcut: 'Ctrl+Mayús+F', action: freezeFrame, disabled: !(info.event.start <= t && t < info.event.start + info.event.duration) }]
+          : []),
         'separator',
         { label: 'Agrupar', shortcut: 'G', action: () => groupIds(ids), disabled: ids.length < 2 },
         { label: 'Quitar del grupo', shortcut: 'U', action: () => ungroupIds(ids), disabled: !selected.some((e) => e.groupId) },
@@ -798,7 +831,7 @@ export default function App() {
       ];
     }
     setContextMenu({ x: info.x, y: info.y, items });
-  }, [copyIds, cutIds, deleteIds, deleteRegion, groupIds, insertText, insertTrack, openPan, openRender, openTextEditor, paste, seek, selectAll, setProject, ungroupIds]);
+  }, [copyIds, cutIds, deleteIds, deleteRegion, freezeFrame, groupIds, insertText, insertTrack, openPan, openRender, openTextEditor, paste, seek, selectAll, setProject, ungroupIds]);
 
   const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
 
@@ -1000,6 +1033,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: region ? 'Dividir en los extremos de la selección' : 'Dividir', shortcut: 'S', action: split },
         { label: 'Recortar el principio hasta el cursor', shortcut: 'Alt+[', action: () => trimCursor('start') },
         { label: 'Recortar el final hasta el cursor', shortcut: 'Alt+]', action: () => trimCursor('end') },
+        { label: 'Congelar fotograma en el cursor', shortcut: 'Ctrl+Mayús+F', action: freezeFrame, disabled: duration <= 0 },
         { label: 'Eliminar', shortcut: 'Supr', action: deleteSelected, disabled: !selection.length },
         { label: 'Seleccionar todo', shortcut: 'Ctrl+A', action: selectAll },
         'separator',
@@ -1089,6 +1123,8 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       action = () => trimCursor(e.code === 'BracketLeft' ? 'start' : 'end'); // por la tecla, no por el carácter
     } else if (ctrl && e.shiftKey && key === 'e') {
       action = exportFrame;
+    } else if (ctrl && e.shiftKey && key === 'f') {
+      action = freezeFrame;
     } else if (ctrl) {
       action = {
         z: e.shiftKey ? history.redo : history.undo,

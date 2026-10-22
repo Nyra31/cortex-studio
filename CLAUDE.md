@@ -117,6 +117,22 @@ Hechas las tres fases de «transiciones y efectos de sonido y video como los de 
 
 Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opacidad, modos de fusión, transiciones en los fundidos, guardar la selección de tiempo y proxies). Pendiente: firma (v1.0).
 
+**Para la v0.7 (el usuario quiere todas antes de publicarla; marcar [x] al terminar cada una):**
+- [x] Deslizar el contenido del evento (slip, Alt + arrastrar; `slip` en `onEventDown`)
+- [x] Sustituir el medio de un evento (Ctrl + soltar un medio sobre él; `replaceMedia`)
+- [x] Congelar fotograma en el cursor (Ctrl+Mayús+F; `freezeFrame` en `project.js` + `media:frame` → PNG en `Fotogramas`)
+- [ ] Miniaturas a lo largo de los eventos de video
+- [ ] Calidad de la vista previa (borrador/buena/máxima) y guías (zona segura, cuadrícula)
+- [ ] Normalizar la sonoridad en el render (LUFS)
+- [ ] Recopilar medios (copiar proyecto y archivos a una carpeta)
+- [ ] Cola de render
+- [ ] Detección de escenas (dividir en cada cambio de plano)
+- [ ] Ducking automático (bajar la música con la voz)
+- [ ] Monitores de video (histograma, forma de onda, vectorscopio)
+- [ ] Animaciones de texto (entrada/salida) y plantillas de títulos
+- [ ] Subtítulos (pista, importar/exportar SRT, quemar en el render)
+- [ ] Corrección de color avanzada (curvas, ruedas de color, LUT .cube)
+
 ## Al terminar una función
 
 Actualizar el README (lista de funciones, atajos, limitaciones) y la tabla de atajos de `ShortcutsDialog.jsx` si se añaden teclas.

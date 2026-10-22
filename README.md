@@ -58,6 +58,9 @@ Para publicar una versión, la release debe llevar el instalador, su `.blockmap`
 - **Selección por área:** arrastrando desde una zona vacía de las pistas se dibuja un rectángulo que selecciona los eventos que toca (con su grupo, para que el audio no se separe de su video). Con Ctrl se añaden a la selección. Un clic simple en una zona vacía quita la selección y coloca el cursor.
 - **Cortar, copiar y pegar** eventos (Ctrl+X, Ctrl+C, Ctrl+V). Se pega en el cursor, en las mismas pistas, y el cursor salta al final de lo pegado para poder pegar varias veces seguidas. **Agrupar** (G) y **quitar del grupo** (U) para que varios eventos se muevan juntos o separar el audio de su video.
 - **Dividir y recortar como en VEGAS:** con una selección de tiempo, S divide en sus dos extremos (para aislar un tramo); Alt+[ y Alt+] recortan el principio o el final del evento seleccionado (y su grupo) hasta el cursor.
+- **Deslizar el contenido** (slip): Alt + arrastrar un evento cambia el trozo del medio que se ve sin moverlo ni cambiar su duración (a la derecha se ve lo de antes).
+- **Sustituir el medio de un evento:** con Ctrl, suelta un medio de *Medios del proyecto* sobre un evento; cambia el archivo y se conservan la posición, la duración, los efectos y los fundidos (también en su grupo: el sonido cambia si el medio nuevo lo tiene).
+- **Congelar fotograma** (*Edición → Congelar fotograma en el cursor*, Ctrl+Mayús+F o el clic derecho en el evento): el fotograma del cursor pasa a ser una imagen fija de 2 s insertada ahí (lo que sigue en esas pistas se aparta), con los efectos y la panorámica de ese instante. La imagen se guarda como PNG en la carpeta `Fotogramas` junto al proyecto.
 - **Fotogramas clave en los efectos de video** (como en VEGAS): en la ventana de efectos del evento, cada efecto tiene una tira de fotogramas clave como la de la panorámica. Lleva el cursor a un momento del evento y pulsa *+ Fotograma clave*: desde ese momento los controles muestran los valores en el cursor y, al cambiarlos donde no hay fotograma clave, se crea uno. Entre fotogramas clave los valores cambian de forma gradual (por ejemplo, un desenfoque que entra poco a poco o un blanco y negro que se va convirtiendo en color). Los rombos se arrastran para cambiarlos de momento y aparecen también sobre el evento en la línea de tiempo. Se ve igual en la vista previa que en el render.
 - **Medidores de volumen:** cada pista de audio tiene un medidor estéreo en su cabecera (después del volumen y la panorámica de la pista) y el pie de la línea de tiempo muestra el del **máster**, con el pico retenido en dB y un testigo rojo de saturación (se apaga con un clic). Escala de −60 a 0 dBFS: verde, amarillo desde −9 dB y rojo desde −1 dB; lo que pasa de 0 dB satura en el render.
 - **Exportar el fotograma** del cursor como imagen PNG al tamaño del proyecto (*Archivo → Exportar el fotograma como imagen…*, Ctrl+Mayús+E o el botón de la cámara de la vista previa). Se renderiza igual que el video, con efectos, textos y transiciones.
@@ -84,6 +87,7 @@ Para publicar una versión, la release debe llevar el instalador, su `.blockmap`
 | S | Dividir en el cursor (los eventos seleccionados o, si no hay selección, todos); con selección de tiempo, en sus dos extremos |
 | Alt+[ / Alt+] | Recortar el principio / el final del evento seleccionado hasta el cursor |
 | Ctrl+Mayús+E | Exportar el fotograma del cursor como imagen PNG |
+| Ctrl+Mayús+F | Congelar fotograma en el cursor |
 | Supr | Eliminar los eventos seleccionados (en cascada, cierra el hueco) |
 | Ctrl+L | Activar o desactivar la edición en cascada |
 | Ctrl+R | Grabar voz en off en la pista armada / terminar la grabación |
@@ -102,6 +106,8 @@ Para publicar una versión, la release debe llevar el instalador, su `.blockmap`
 | Mayús mientras se arrastra | Sin ajuste (cursor y eventos) |
 | Ctrl+clic | Añadir o quitar eventos de la selección |
 | Ctrl + arrastrar un borde del evento | Cambiar la velocidad del evento (25 % a 400 %) |
+| Alt + arrastrar un evento | Deslizar su contenido (slip) |
+| Ctrl + soltar un medio sobre un evento | Sustituir el medio del evento |
 | Arrastrar en la barra de arriba de la regla | Selección de tiempo (un clic la quita) |
 | Doble clic en un evento | Selección de tiempo del evento |
 | Esc | Quitar la selección de tiempo |

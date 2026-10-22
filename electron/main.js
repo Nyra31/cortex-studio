@@ -177,6 +177,24 @@ ipcMain.handle('media:analyze', async (_e, filePath) => {
   return { ...info, proxy };
 });
 
+// Congelar fotograma: el fotograma del medio en `time` (segundos del medio) como PNG en «Fotogramas» junto al
+// proyecto (o en Documentos si aún no está guardado). Devuelve la ruta.
+ipcMain.handle('media:frame', async (_e, filePath, time, projectPath) => {
+  const file = path.resolve(filePath);
+  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  const dir = projectPath
+    ? path.join(path.dirname(projectPath), 'Fotogramas')
+    : path.join(app.getPath('documents'), 'Cortex Studio', 'Fotogramas');
+  await fs.promises.mkdir(dir, { recursive: true });
+  const base = path.basename(file, path.extname(file));
+  let n = 1;
+  const name = (i) => path.join(dir, `${base} - fotograma ${String(i).padStart(2, '0')}.png`);
+  while (fs.existsSync(name(n))) n++;
+  const out = name(n);
+  await ff.extractFrame(file, time, out);
+  return out;
+});
+
 // ---- Proxies de la vista previa (ver makeProxy en ffmpeg.js) ----
 // Se guardan en userData/proxies con un nombre que depende de la ruta, el tamaño y la fecha del original (si el
 // archivo cambia, se hace otro). Se crean de uno en uno; al salir se para el que esté en marcha.

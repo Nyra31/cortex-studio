@@ -6,7 +6,7 @@ import { formatRuler, formatTimecode, quantize } from '../util/time.js';
 import {
   BLEND_MODES, EVENT_DEFAULTS, MAX_RATE, MAX_TRACK_VOLUME_DB, MIN_EVENT, MIN_RATE, MIN_VOLUME_DB, deleteTrack, eventFades, formatRate, formatVolume, moveTrack,
   markPoints, updateMark, gainToVolume, isTrackActive,
-  fadeCurve, overlapAt, placeMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain, scaleFxKeys, shiftFxKeys,
+  fadeCurve, overlapAt, placeMedia, replaceMedia, resolveTimeline, scalePanTime, setTransitionAt, shiftPan, trackColor, volumeToGain, scaleFxKeys, shiftFxKeys,
 } from '../state/project.js';
 import { panActive } from '../state/pan.js';
 import {
@@ -969,6 +969,9 @@ const Timeline = forwardRef(function Timeline({
     const group = ev.groupId ? p.events.filter((x) => x.groupId === ev.groupId).map((x) => x.id) : [ev.id];
 
     const stretch = e.ctrlKey && (mode === 'trimL' || mode === 'trimR');
+    // Alt + arrastrar el cuerpo: deslizar el contenido (slip, como en VEGAS). El evento no se mueve ni cambia de
+    // duración; cambia el trozo del medio que usa (arrastrar a la derecha muestra lo de antes).
+    const slip = e.altKey && mode === 'move';
     if (e.ctrlKey && !stretch) {
       setSelection(sel.includes(ev.id) ? sel.filter((id) => !group.includes(id)) : [...new Set([...sel, ...group])]);
       return;
@@ -978,7 +981,7 @@ const Timeline = forwardRef(function Timeline({
     if (!alreadySelected) setSelection(group);
 
     // Mover afecta a toda la selección; recortar y fundir, al evento y a su grupo; el volumen, solo al evento.
-    const affected = new Set(mode === 'move' ? activeSelection : mode === 'gain' ? [ev.id] : group);
+    const affected = new Set(mode === 'move' && !slip ? activeSelection : mode === 'gain' ? [ev.id] : group);
     const origin = new Map(p.events.filter((x) => affected.has(x.id)).map((x) => [x.id, x]));
     const primary = origin.get(ev.id);
     const mediaOf = (o) => p.media.find((m) => m.id === o.mediaId);
@@ -989,7 +992,7 @@ const Timeline = forwardRef(function Timeline({
     // en todas) se desplazan lo mismo. Se toman de la foto inicial, como los que se editan.
     const ripple = live.current.ripple;
     const followers = new Map();
-    if (ripple && (mode === 'move' || mode === 'trimR')) {
+    if (ripple && !slip && (mode === 'move' || mode === 'trimR')) {
       const tracks = new Set(ripple === 'all' ? p.tracks.map((t) => t.id) : [...origin.values()].map((o) => o.trackId));
       const list = [...origin.values()];
       const from = mode === 'move' ? Math.min(...list.map((o) => o.start)) : Math.min(...list.map((o) => o.start + o.duration));
@@ -1010,7 +1013,18 @@ const Timeline = forwardRef(function Timeline({
       let dt = (me.clientX - startX) / scale;
       let update;
 
-      if (mode === 'move') {
+      if (slip) {
+        for (const o of origin.values()) {
+          const m = mediaOf(o);
+          if (!m || m.isImage || !m.duration) continue;
+          const r = o.rate || 1;
+          const used = sourceOffset(o, o.duration);
+          dt = Math.min(dt, o.inPoint / r); // no antes del principio del medio
+          dt = Math.max(dt, -(m.duration - o.inPoint - used) / r); // ni después del final
+        }
+        update = (o) => (mediaOf(o)?.isImage ? {} : { inPoint: Math.max(0, o.inPoint - dt * (o.rate || 1)) });
+        onMessage(`Deslizar: el evento empieza en ${formatTimecode(primary.inPoint - dt * (primary.rate || 1), live.current.project.settings.fps)} del medio`);
+      } else if (mode === 'move') {
         dt = snapDelta(dt, [primary.start, primary.start + primary.duration], me.shiftKey ? [] : points, threshold);
         const minStart = Math.min(...[...origin.values()].map((o) => o.start));
         if (minStart + dt < 0) dt = -minStart;
@@ -1095,7 +1109,7 @@ const Timeline = forwardRef(function Timeline({
       }
 
       // Cuánto se desplazan los de detrás: lo que se mueve el evento o lo que cambia su final.
-      const shift = mode === 'move' || mode === 'trimR' ? dt : 0;
+      const shift = !slip && (mode === 'move' || mode === 'trimR') ? dt : 0;
       setProject(
         (cur) => ({
           ...cur,
@@ -1118,7 +1132,7 @@ const Timeline = forwardRef(function Timeline({
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-  }, [cursorTime, seek, setProject, setSelection, snapPoints, trackAt]);
+  }, [cursorTime, onMessage, seek, setProject, setSelection, snapPoints, trackAt]);
 
   // Clic derecho en un evento: si no estaba seleccionado, se selecciona (con su grupo) y se abre su menú.
   const onEventMenu = useCallback((e, ev) => {
@@ -1224,6 +1238,27 @@ const Timeline = forwardRef(function Timeline({
     const near = points.find((p) => Math.abs(p - t) < threshold);
     if (near !== undefined) t = near;
     const mediaId = e.dataTransfer.getData(MEDIA_MIME);
+    if (mediaId && e.ctrlKey && target !== 'new') {
+      // Ctrl + soltar sobre un evento: sustituir su medio (como en VEGAS).
+      const { project: p } = live.current;
+      const at = timeAt(e.clientX);
+      const ev = p.events
+        .filter((x) => x.trackId === target && x.start <= at && at < x.start + x.duration)
+        .sort((a, b) => b.start - a.start)[0];
+      const media = p.media.find((m) => m.id === mediaId);
+      if (!ev || !media) {
+        onMessage('Con Ctrl, suelta el medio sobre un evento para sustituir el suyo.');
+        return;
+      }
+      const res = replaceMedia(p, ev.id, media);
+      if (!res.changed) {
+        onMessage(`«${media.name}» no tiene ${p.tracks.find((t) => t.id === target).type === 'video' ? 'imagen' : 'sonido'}: no puede sustituir a ese evento.`);
+        return;
+      }
+      setProject(res.project);
+      onMessage(`Medio sustituido por «${media.name}».`);
+      return;
+    }
     if (mediaId) {
       const media = live.current.project.media.find((m) => m.id === mediaId);
       if (media) setProject((p) => placeMedia(p, media, t, target));

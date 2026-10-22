@@ -1,10 +1,10 @@
 // Modelo del proyecto y operaciones de edición (funciones puras).
 import { DEFAULT_TRANSITION } from './transitions.js';
-import { effectsGraph, scaleFxKeys, shiftFxKeys } from './effects.js';
+import { effectsGraph, fxParamsAt, scaleFxKeys, shiftFxKeys } from './effects.js';
 export { scaleFxKeys, shiftFxKeys };
 import { isText, textPng } from './text.js';
-import { hasRamp, shiftSpeed, sourceOffset, speedPayload } from './speed.js';
-import { panActive, panExpr, scalePanTime, shiftPan } from './pan.js';
+import { hasRamp, localForSource, shiftSpeed, sourceOffset, speedPayload } from './speed.js';
+import { panActive, panAt, panExpr, scalePanTime, shiftPan } from './pan.js';
 import { trackMixExpr, trackOpacityExpr } from './envelopes.js';
 
 //
@@ -323,6 +323,31 @@ export function moveTrack(project, trackId, index) {
   return { ...project, tracks };
 }
 
+// Sustituye el medio de un evento (y de su grupo) conservando posición, duración, efectos y fundidos, como Ctrl +
+// soltar en VEGAS. Cada evento del grupo cambia si el medio nuevo tiene lo que muestra (imagen para los de video,
+// sonido para los de audio). Se conserva el punto de entrada si cabe; si el medio nuevo es más corto, se acorta.
+// Devuelve { project, changed } (changed = número de eventos cambiados).
+export function replaceMedia(project, eventId, media) {
+  const ev = project.events.find((e) => e.id === eventId);
+  if (!ev) return { project, changed: 0 };
+  const types = new Map(project.tracks.map((t) => [t.id, t.type]));
+  const ids = new Set(project.events.filter((e) => e.id === ev.id || (ev.groupId && e.groupId === ev.groupId)).map((e) => e.id));
+  let changed = 0;
+  const events = project.events.map((e) => {
+    if (!ids.has(e.id)) return e;
+    const video = types.get(e.trackId) === 'video';
+    if (video ? !media.hasVideo : !media.hasAudio) return e;
+    changed++;
+    if (media.isImage) return { ...e, mediaId: media.id, inPoint: 0, rate: 1, speed: null };
+    const used = sourceOffset(e, e.duration);
+    const total = media.duration || used;
+    const inPoint = e.inPoint + used <= total ? e.inPoint : Math.max(0, total - used);
+    const duration = Math.max(MIN_EVENT, Math.min(e.duration, localForSource(e, total - inPoint)));
+    return { ...e, mediaId: media.id, inPoint, duration };
+  });
+  return { project: changed ? { ...project, events } : project, changed };
+}
+
 // Coloca un medio en la línea de tiempo. Un video con sonido genera dos eventos agrupados (video + audio).
 // target: id de pista, 'new' para crear pistas nuevas, o null para usar las primeras pistas disponibles.
 export function placeMedia(project, media, start, target = null) {
@@ -549,6 +574,26 @@ function subtract(U, R) {
     });
   }
   return parts;
+}
+
+// Congelar fotograma: divide el evento de video (y su grupo) en t, aparta lo que sigue en esas pistas `duration`
+// segundos y pone en el hueco de la pista de video la imagen fija (media, el fotograma ya extraído) con los efectos
+// y la panorámica que tenía el evento en ese instante (fijos, sin animación). El sonido queda en silencio.
+export function freezeFrame(project, eventId, t, media, duration) {
+  const ev = project.events.find((e) => e.id === eventId);
+  if (!ev) return project;
+  const group = project.events.filter((e) => e.id === ev.id || (ev.groupId && e.groupId === ev.groupId));
+  const tracks = [...new Set(group.map((e) => e.trackId))];
+  let next = splitEvents(project, t, group.map((e) => e.id));
+  next = rippleShift(next, tracks, t - EPS, duration, 'tracks');
+  const local = t - ev.start;
+  const still = {
+    ...EVENT_DEFAULTS,
+    id: uid('e'), trackId: ev.trackId, mediaId: media.id, start: t, inPoint: 0, duration, groupId: null,
+    effects: (ev.effects || []).map((fx) => ({ ...fx, id: uid('x'), params: fxParamsAt(fx, local), keyframes: null })),
+    pan: panActive(ev.pan) ? { ...ev.pan, keyframes: [{ ...panAt(ev.pan, local), t: 0 }] } : null,
+  };
+  return { ...next, media: [...next.media, media], events: [...next.events, still] };
 }
 
 // Cuánto de los huecos G queda antes de t.

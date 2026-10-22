@@ -94,6 +94,13 @@ function needsProxy(format, videoCodec, audioCodec) {
   return false;
 }
 
+// Un fotograma del medio en `time` (s, búsqueda exacta) como PNG del tamaño original (ya girado si el video es
+// vertical), para congelar fotograma.
+async function extractFrame(file, time, out) {
+  const r = await run(ffmpegPath, ['-y', '-v', 'error', '-ss', time.toFixed(6), '-i', file, '-frames:v', '1', '-update', '1', out]);
+  if (r.code !== 0 || !fs.existsSync(out)) throw new Error(r.stderr.trim().split('\n').pop() || 'No se pudo extraer el fotograma');
+}
+
 // Proxy para la vista previa: copia ligera en H.264 (como mucho 720 líneas, un fotograma clave cada 15 para
 // buscar rápido) y AAC, con los mismos tiempos que el original (empieza donde él y conserva los fotogramas).
 // El render usa siempre el original.
@@ -663,4 +670,4 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
   }
 }
 
-module.exports = { analyze, render, buildRender, makeProxy, ffmpegPath, ffprobePath };
+module.exports = { analyze, render, buildRender, makeProxy, extractFrame, ffmpegPath, ffprobePath };
