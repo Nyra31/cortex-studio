@@ -177,6 +177,15 @@ ipcMain.handle('media:analyze', async (_e, filePath) => {
   return { ...info, proxy };
 });
 
+// Detectar escenas: cortes de plano entre start y start + length (s del medio); devuelve los instantes desde start.
+ipcMain.handle('media:scenes', async (event, filePath, start, length) => {
+  const file = path.resolve(filePath);
+  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  return ff.detectScenes(file, start, length, 0.3, {
+    onProgress: (p) => event.sender.send('scenes:progress', p),
+  });
+});
+
 // Congelar fotograma: el fotograma del medio en `time` (segundos del medio) como PNG en «Fotogramas» junto al
 // proyecto (o en Documentos si aún no está guardado). Devuelve la ruta.
 ipcMain.handle('media:frame', async (_e, filePath, time, projectPath) => {

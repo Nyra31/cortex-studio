@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('update:state', handler);
   },
   displayCount: () => ipcRenderer.invoke('screen:count'),
+  detectScenes: (filePath, start, length) => ipcRenderer.invoke('media:scenes', filePath, start, length),
+  onScenesProgress: (callback) => {
+    const handler = (_e, p) => callback(p);
+    ipcRenderer.on('scenes:progress', handler);
+    return () => ipcRenderer.removeListener('scenes:progress', handler);
+  },
   extractFrame: (filePath, time, projectPath) => ipcRenderer.invoke('media:frame', filePath, time, projectPath),
   filmstrip: (filePath) => ipcRenderer.invoke('media:filmstrip', filePath),
   collectProject: (data, currentPath) => ipcRenderer.invoke('project:collect', data, currentPath),

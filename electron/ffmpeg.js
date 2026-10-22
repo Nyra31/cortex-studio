@@ -13,9 +13,9 @@ const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.web
 const PEAKS_PER_SECOND = 50;
 const PEAK_SAMPLE_RATE = 4000;
 
-function run(bin, args, { onLine, onSpawn } = {}) {
+function run(bin, args, { onLine, onSpawn, cwd } = {}) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(bin, args, { windowsHide: true });
+    const proc = spawn(bin, args, { windowsHide: true, cwd });
     const chunks = [];
     let stderr = '';
     let pending = '';
@@ -115,6 +115,39 @@ async function filmstrip(file, out) {
   ]);
   if (r.code !== 0 || !fs.existsSync(out)) throw new Error(r.stderr.trim().split('\n').pop() || 'No se pudo hacer la tira');
   return { step, count, tw, th, cols };
+}
+
+// Cambios de plano en el tramo [start, start + length) del medio: instantes (s desde `start`) del primer fotograma
+// de cada plano nuevo, según la puntuación «scene» de FFmpeg (0 = igual, 1 = todo distinto) sobre una copia
+// pequeña de la imagen. threshold: a partir de qué diferencia hay corte (0,3 suele ir bien).
+async function detectScenes(file, start, length, threshold = 0.3, { onProgress, onSpawn } = {}) {
+  // La lista sale por el filtro metadata a un archivo temporal (nombre relativo, con la carpeta temporal como
+  // carpeta de trabajo: así no hay que escapar los «:» de la ruta de Windows dentro del filtro).
+  const name = `cortex-escenas-${Date.now()}.txt`;
+  const listPath = path.join(os.tmpdir(), name);
+  try {
+    const r = await run(ffmpegPath, [
+      '-v', 'error', '-nostats', '-progress', 'pipe:1', '-ss', start.toFixed(6), '-t', length.toFixed(6), '-i', file, '-an', '-sn',
+      '-vf', `scale=192:-2,select='gt(scene,${threshold})',metadata=mode=print:file=${name}`, '-f', 'null', '-',
+    ], {
+      cwd: os.tmpdir(),
+      onSpawn,
+      onLine: (line) => {
+        const m = /^out_time_(?:us|ms)=(\d+)/.exec(line);
+        if (m && onProgress) onProgress(Math.min(1, Number(m[1]) / 1e6 / length));
+      },
+    });
+    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || 'No se pudieron detectar las escenas');
+    let text = '';
+    try {
+      text = await fs.promises.readFile(listPath, 'utf8');
+    } catch {
+      return []; // ningún corte
+    }
+    return [...text.matchAll(/pts_time:\s*([\d.]+)/g)].map((m) => Number(m[1]));
+  } finally {
+    fs.promises.unlink(listPath).catch(() => {});
+  }
 }
 
 // Un fotograma del medio en `time` (s, búsqueda exacta) como PNG del tamaño original (ya girado si el video es
@@ -725,4 +758,4 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
   }
 }
 
-module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, ffmpegPath, ffprobePath };
+module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, detectScenes, ffmpegPath, ffprobePath };

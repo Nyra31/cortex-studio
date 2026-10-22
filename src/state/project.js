@@ -576,6 +576,27 @@ function subtract(U, R) {
   return parts;
 }
 
+// Divide un evento (y su grupo) en los instantes del medio `sourceTimes` (s desde su punto de entrada), por
+// ejemplo los cambios de plano. Se ajustan a la rejilla de fotogramas y se descartan los que quedarían a menos de
+// minGap de otro corte o de un borde. Devuelve { project, cuts }.
+export function splitAtSourceTimes(project, eventId, sourceTimes, minGap = 0.5) {
+  const ev = project.events.find((e) => e.id === eventId);
+  if (!ev) return { project, cuts: 0 };
+  const fps = project.settings.fps;
+  const ids = project.events.filter((e) => e.id === ev.id || (ev.groupId && e.groupId === ev.groupId)).map((e) => e.id);
+  const times = [];
+  for (const s of sourceTimes) {
+    const t = Math.round((ev.start + localForSource(ev, s)) * fps) / fps;
+    if (t - ev.start < minGap || ev.start + ev.duration - t < minGap) continue;
+    if (times.length && t - times[times.length - 1] < minGap) continue;
+    times.push(t);
+  }
+  // Del último al primero: la parte izquierda conserva el id, así que el evento original sigue en la selección.
+  let next = project;
+  for (const t of [...times].reverse()) next = splitEvents(next, t, ids);
+  return { project: next, cuts: times.length };
+}
+
 // Congelar fotograma: divide el evento de video (y su grupo) en t, aparta lo que sigue en esas pistas `duration`
 // segundos y pone en el hueco de la pista de video la imagen fija (media, el fotograma ya extraído) con los efectos
 // y la panorámica que tenía el evento en ese instante (fijos, sin animación). El sonido queda en silencio.

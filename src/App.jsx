@@ -21,7 +21,7 @@ import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
   EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, loadView, mediaLength, pasteEvents,
-  freezeFrame as freezeFrameAt, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
+  freezeFrame as freezeFrameAt, splitAtSourceTimes, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
   moveTrack, splitRange, trimToCursor, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
@@ -410,6 +410,25 @@ export default function App() {
     }
   }, [noteAnalyzed, setProject]);
 
+  // Detectar escenas: divide el evento de video (y su grupo) en cada cambio de plano del trozo de medio que usa.
+  const detectScenes = useCallback(async (ev) => {
+    const m = live.current.project.media.find((x) => x.id === ev.mediaId);
+    if (!m || m.isImage || m.missing) return;
+    setPlaying(false);
+    const off = api.onScenesProgress((p) => setStatus(`Buscando cambios de plano en «${m.name}»: ${Math.round(p * 100)} %…`));
+    try {
+      setStatus(`Buscando cambios de plano en «${m.name}»…`);
+      const times = await api.detectScenes(m.path, ev.inPoint, sourceOffset(ev, ev.duration));
+      const res = splitAtSourceTimes(live.current.project, ev.id, times);
+      if (res.cuts) setProject(res.project);
+      setStatus(res.cuts ? `${res.cuts} cambio(s) de plano: el evento queda dividido en ${res.cuts + 1} partes.` : 'No se han encontrado cambios de plano en el evento.');
+    } catch (err) {
+      setStatus(`No se pudieron detectar las escenas: ${err.message}`);
+    } finally {
+      off();
+    }
+  }, [setProject]);
+
   // Exportar el fotograma del cursor como PNG, al tamaño del proyecto (se renderiza con FFmpeg: sale igual
   // que en el render, con efectos, textos y transiciones).
   const exportFrame = useCallback(async () => {
@@ -776,7 +795,10 @@ export default function App() {
           disabled: !selected.some((e) => e.start < t && t < e.start + e.duration),
         },
         ...(isVideo && media && !media.isImage
-          ? [{ label: 'Congelar fotograma en el cursor', shortcut: 'Ctrl+Mayús+F', action: freezeFrame, disabled: !(info.event.start <= t && t < info.event.start + info.event.duration) }]
+          ? [
+            { label: 'Congelar fotograma en el cursor', shortcut: 'Ctrl+Mayús+F', action: freezeFrame, disabled: !(info.event.start <= t && t < info.event.start + info.event.duration) },
+            { label: 'Detectar escenas y dividir', action: () => detectScenes(info.event) },
+          ]
           : []),
         'separator',
         { label: 'Agrupar', shortcut: 'G', action: () => groupIds(ids), disabled: ids.length < 2 },
@@ -866,7 +888,7 @@ export default function App() {
       ];
     }
     setContextMenu({ x: info.x, y: info.y, items });
-  }, [copyIds, cutIds, deleteIds, deleteRegion, freezeFrame, groupIds, insertText, insertTrack, openPan, openRender, openTextEditor, paste, seek, selectAll, setProject, ungroupIds]);
+  }, [copyIds, cutIds, deleteIds, deleteRegion, detectScenes, freezeFrame, groupIds, insertText, insertTrack, openPan, openRender, openTextEditor, paste, seek, selectAll, setProject, ungroupIds]);
 
   const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
 

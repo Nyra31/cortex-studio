@@ -126,7 +126,7 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 - [x] Normalizar la sonoridad en el render (LUFS) (`settings.loudness`; `render` mide primero con loudnorm `print_format=json` en un pase solo de audio y luego aplica `linear=true` con lo medido; comprobado: −14,0 y −23,0 exactos)
 - [x] Recopilar medios (copiar proyecto y archivos a una carpeta) (`project:collect` en `main.js`, `collect` en `App`; `writeProject`/`readProject` guardan y usan `rel`, la ruta relativa de cada medio; la clave de proxies y miniaturas ya no depende de la carpeta: nombre|tamaño|fecha)
 - [x] Cola de render (`queue` en `App` + efecto que lanza el siguiente; `QueueDialog.jsx`; `enqueue` y «cada región» en `RenderDialog`)
-- [ ] Detección de escenas (dividir en cada cambio de plano)
+- [x] Detección de escenas (dividir en cada cambio de plano) (`detectScenes` en `ffmpeg.js`: `select=gt(scene,0.3)` + `metadata=print` a un archivo temporal, con `cwd` en la carpeta temporal; `splitAtSourceTimes` en `project.js`)
 - [ ] Ducking automático (bajar la música con la voz)
 - [ ] Monitores de video (histograma, forma de onda, vectorscopio)
 - [ ] Animaciones de texto (entrada/salida) y plantillas de títulos
