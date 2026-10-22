@@ -23,6 +23,48 @@ const DRIFT = 0.3;
 const PRELOAD = 2; // segundos antes de que empiece un evento se prepara su <video>
 const KEEP = 1; // y después de que termine se conserva
 
+// Calidad de la vista previa: factor de la resolución del lienzo.
+const QUALITY_SCALE = { draft: 0.25, preview: 0.5, good: 1, best: 1 };
+const PREFS_KEY = 'cortex-preview';
+function loadPreviewPrefs() {
+  let p = {};
+  try {
+    p = JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+  } catch {
+    // sin almacenamiento: valores por defecto
+  }
+  return { quality: QUALITY_SCALE[p.quality] ? p.quality : 'good', guides: ['none', 'safe', 'thirds', 'all'].includes(p.guides) ? p.guides : 'none' };
+}
+function savePreviewPrefs(p) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+  } catch {
+    // sin almacenamiento
+  }
+}
+
+// Guías sobre la imagen: zona segura de acción (90 %) y de títulos (80 %), tercios y centro.
+function Guides({ kind, width, height }) {
+  const safe = kind === 'safe' || kind === 'all';
+  const thirds = kind === 'thirds' || kind === 'all';
+  const box = (f) => <rect x={(width * (1 - f)) / 2} y={(height * (1 - f)) / 2} width={width * f} height={height * f} />;
+  const c = Math.min(width, height) * 0.03;
+  return (
+    <svg className="preview-guides" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+      {safe && (
+        <g className="safe">
+          {box(0.9)}
+          {box(0.8)}
+          <path d={`M${width / 2 - c},${height / 2}H${width / 2 + c}M${width / 2},${height / 2 - c}V${height / 2 + c}`} />
+        </g>
+      )}
+      {thirds && (
+        <path className="thirds" d={`M${width / 3},0V${height}M${(2 * width) / 3},0V${height}M0,${height / 3}H${width}M0,${(2 * height) / 3}H${width}`} />
+      )}
+    </svg>
+  );
+}
+
 // Panorámica del evento en el instante t de la línea de tiempo (para el compositor), o null si no cambia nada.
 export function panLayer(e, t) {
   if (!panActive(e.pan)) return null;
@@ -156,6 +198,10 @@ export default function Preview({
   const draw = useRef({ dirty: 0, playing: false, layers: [], frame: null });
   const [display, setDisplay] = useState({ width: 0, height: 0 });
   const [backing, setBacking] = useState({ width: 0, height: 0 });
+  // Calidad (resolución del lienzo, como en VEGAS) y guías; se recuerdan en este equipo.
+  const [quality, setQuality] = useState(() => loadPreviewPrefs().quality);
+  const [guides, setGuides] = useState(() => loadPreviewPrefs().guides);
+  useEffect(() => savePreviewPrefs({ quality, guides }), [quality, guides]);
   const [glError, setGlError] = useState(null);
   const { width, height, fps } = project.settings;
   const mediaById = useMemo(() => new Map(project.media.map((m) => [m.id, m])), [project.media]);
@@ -388,12 +434,14 @@ export default function Preview({
   }, []);
 
   // Resolución interna del lienzo: la del proyecto, sin pasar de la que ocupa en pantalla (con la vista previa
-  // en otra pantalla, la del proyecto: es lo que se ve allí).
+  // en otra pantalla o en calidad óptima, la del proyecto). Borrador y vista previa: un cuarto y la mitad (van más
+  // ligeros con efectos; las medidas de los efectos son relativas, así que se ven igual pero con menos detalle).
   useEffect(() => {
     const canvas = canvasRef.current;
     const update = () => {
       const dpr = window.devicePixelRatio || 1;
-      const w = external ? width : Math.max(2, Math.min(width, Math.round(canvas.clientWidth * dpr)));
+      const base = external || quality === 'best' ? width : Math.min(width, Math.round(canvas.clientWidth * dpr));
+      const w = Math.max(2, Math.round(base * (QUALITY_SCALE[quality] ?? 1)));
       const h = Math.max(2, Math.round((w * height) / width));
       canvas.width = w;
       canvas.height = h;
@@ -405,7 +453,7 @@ export default function Preview({
     const ro = new ResizeObserver(update);
     ro.observe(canvas);
     return () => ro.disconnect();
-  }, [width, height, external]);
+  }, [width, height, external, quality]);
 
   // Pantalla completa, como la vista previa externa de VEGAS (Alt+Mayús+4 o doble clic en la imagen). Con
   // otra pantalla conectada, la imagen va a esa pantalla y esta sigue libre para editar; con una sola, la
@@ -475,7 +523,18 @@ export default function Preview({
         <button className="tool" title="Propiedades del proyecto (Alt+Intro)" onClick={onOpenProperties}>
           <Icon name="properties" />
         </button>
-        <span className="dock-toolbar-label">Vista previa: completa</span>
+        <select className="dock-select" value={quality} onChange={(e) => setQuality(e.target.value)} title="Calidad de la vista previa (no afecta al render)">
+          <option value="draft">Borrador (¼)</option>
+          <option value="preview">Vista previa (½)</option>
+          <option value="good">Buena</option>
+          <option value="best">Óptima (tamaño del proyecto)</option>
+        </select>
+        <select className="dock-select" value={guides} onChange={(e) => setGuides(e.target.value)} title="Guías sobre la imagen (no salen en el render)">
+          <option value="none">Sin guías</option>
+          <option value="safe">Zona segura</option>
+          <option value="thirds">Tercios</option>
+          <option value="all">Zona segura y tercios</option>
+        </select>
         <span className="footer-spacer" />
         <button className="tool" title="Exportar el fotograma como imagen PNG (Ctrl+Mayús+E)" onClick={onExportFrame}>
           <Icon name="camera" />
@@ -496,6 +555,7 @@ export default function Preview({
           title={full ? 'Doble clic o Esc: salir de la pantalla completa' : undefined}
         >
           <canvas ref={canvasRef} />
+          {!full && guides !== 'none' && <Guides kind={guides} width={width} height={height} />}
           {!full && (
           <TextOverlay
             items={textItems}

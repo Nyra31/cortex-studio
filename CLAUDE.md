@@ -122,7 +122,7 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 - [x] Sustituir el medio de un evento (Ctrl + soltar un medio sobre él; `replaceMedia`)
 - [x] Congelar fotograma en el cursor (Ctrl+Mayús+F; `freezeFrame` en `project.js` + `media:frame` → PNG en `Fotogramas`)
 - [x] Miniaturas a lo largo de los eventos de video (`filmstrip` en `ffmpeg.js` → sprite JPEG en `userData/miniaturas`, `media:filmstrip`, `strips` en `App`, `Filmstrip.jsx`)
-- [ ] Calidad de la vista previa (borrador/buena/máxima) y guías (zona segura, cuadrícula)
+- [x] Calidad de la vista previa (borrador/buena/máxima) y guías (zona segura, cuadrícula) (`QUALITY_SCALE`, `Guides` en `Preview.jsx`; `localStorage` `cortex-preview`)
 - [ ] Normalizar la sonoridad en el render (LUFS)
 - [ ] Recopilar medios (copiar proyecto y archivos a una carpeta)
 - [ ] Cola de render

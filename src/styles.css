@@ -2056,3 +2056,26 @@ kbd {
   pointer-events: none;
   opacity: 0.85;
 }
+/* Calidad y guías de la vista previa */
+.dock-select {
+  height: 20px;
+  padding: 0 2px;
+  margin-left: 4px;
+  font-size: 11px;
+  background: #1b1b1b;
+  color: var(--text);
+  border: 1px solid #3a3a3a;
+  border-radius: 2px;
+}
+.preview-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.preview-guides * { vector-effect: non-scaling-stroke; stroke-width: 1; }
+.preview-guides .safe { stroke: rgba(255, 255, 255, 0.55); stroke-dasharray: 4 3; }
+.preview-guides .thirds { stroke: rgba(255, 220, 120, 0.5); }
