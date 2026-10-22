@@ -7,6 +7,7 @@ Descripción detallada de las funciones, atajos de teclado y limitaciones conoci
 - **Interfaz al estilo de los editores clásicos:** barra de menús, barra de iconos, ventanas acopladas, contador de tiempo grande, pistas de colores y transporte bajo la línea de tiempo.
 - **Proyecto nuevo:** al empezar se elige la orientación (horizontal o vertical), la resolución (de SD a 4K, o personalizada) y la velocidad de fotogramas (23,976 a 60 fps). Se puede cambiar en cualquier momento en *Archivo → Propiedades del proyecto* (Alt+Intro).
 - **Medios del proyecto:** importa videos, audios e imágenes con *Importar medios* o arrastrándolos desde el Explorador. Muestra una miniatura, la duración y la resolución de cada archivo.
+- **Descargar de YouTube** (*Archivo → Descargar de YouTube…*, Ctrl+Mayús+D o el botón de la pantalla en la barra de herramientas y en la ventana de medios): pega el enlace de un video o de una lista (si hay un enlace en el portapapeles, se pone solo) y pulsa *Buscar* para ver la miniatura, el título, el autor y la duración. Se puede bajar el video con sonido en MP4, MKV, WebM o MOV (con la resolución máxima y el códec: H.264, el más compatible, hasta 1080p, o el mejor, VP9 o AV1, hasta 4K) o solo el audio en MP3, M4A, Opus, FLAC o WAV. Dentro del archivo van los metadatos (título, autor, fecha, descripción y enlace), la portada, los capítulos y, si se pide, los subtítulos en español e inglés. Al terminar se importa al proyecto (se puede desactivar). La descarga sigue aunque se cierre la ventana (el progreso sale en la barra de estado) y se puede cancelar sin que queden archivos a medias. También funciona con muchos otros sitios de video. Usa [yt-dlp](https://github.com/yt-dlp/yt-dlp), que se descarga la primera vez (unos 18 MB, en la carpeta de datos de la aplicación) y se actualiza solo una vez al día como mucho.
 - **Línea de tiempo multipista:** pistas de video arriba y de audio abajo. Un video con sonido se coloca como dos eventos agrupados (video y audio) que se mueven y recortan juntos.
 - **Pistas:** silencio, solo, volumen y panorámica (pistas de audio; volumen de -∞ a +12 dB) y cambio de nombre con doble clic. Como en VEGAS, una pista de video nueva aparece arriba del todo y una de audio abajo del todo; se añaden desde el menú *Insertar*, con Ctrl+Mayús+Q / Ctrl+Q o con los botones de la zona vacía de abajo, y se cambian de orden arrastrando su cabecera.
 - **Edición:** arrastrar para mover (también a otra pista), recortar por los bordes, dividir en el cursor y eliminar. Incluye ajuste magnético a bordes y al cursor, y deshacer/rehacer.
@@ -105,6 +106,7 @@ Descripción detallada de las funciones, atajos de teclado y limitaciones conoci
 | Arrastrar la cabecera de una pista | Cambiarla de orden |
 | Ctrl+N / Ctrl+O / Ctrl+S | Nuevo / abrir / guardar |
 | Ctrl+I | Importar medios |
+| Ctrl+Mayús+D | Descargar de YouTube |
 | Ctrl+M | Renderizar |
 | Alt+Intro | Propiedades del proyecto |
 | F11 | Pantalla completa |
@@ -116,6 +118,7 @@ Descripción detallada de las funciones, atajos de teclado y limitaciones conoci
 
 ## Limitaciones conocidas
 
+- Descargar de YouTube necesita conexión a Internet y depende de yt-dlp: si YouTube cambia algo, puede fallar hasta que salga una versión nueva (se instala sola al día siguiente, o al borrar la carpeta `yt-dlp` de la carpeta de datos). La portada no se puede incrustar en WebM ni en WAV, ni los subtítulos en MOV. Descarga solo contenido que tengas derecho a usar.
 - Los proxies ocupan disco (en la carpeta de datos de la aplicación, `proxies`); *Herramientas → Borrar los proxies de la vista previa…* los borra y se vuelven a crear cuando hacen falta. Mientras se crea uno, ese medio no se ve en la vista previa.
 - No se pueden animar *Enfocar*, *Viñeta*, el umbral del *Brillo difuso* ni los efectos de audio (sus valores valen para todo el evento). El recorte de la panorámica tampoco se anima.
 - Con panorámica, las bandas negras de una imagen que no llena el cuadro pasan a ser transparentes (sin ella son negras).

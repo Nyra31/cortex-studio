@@ -9,7 +9,7 @@ function ToolButton({ icon, title, onClick, disabled, active }) {
 }
 
 export default function Toolbar({
-  onNew, onOpen, onSave, onImport, onProperties, onRender, canRender,
+  onNew, onOpen, onSave, onImport, onYoutube, onProperties, onRender, canRender,
   onUndo, onRedo, canUndo, canRedo, onSplit, onDelete, hasSelection, snap, onToggleSnap, ripple, onToggleRipple,
 }) {
   return (
@@ -19,6 +19,7 @@ export default function Toolbar({
       <ToolButton icon="save" title="Guardar (Ctrl+S)" onClick={onSave} />
       <span className="tool-sep" />
       <ToolButton icon="importMedia" title="Importar medios (Ctrl+I)" onClick={onImport} />
+      <ToolButton icon="webDownload" title="Descargar de YouTube (Ctrl+Mayús+D)" onClick={onYoutube} />
       <ToolButton icon="properties" title="Propiedades del proyecto (Alt+Intro)" onClick={onProperties} />
       <ToolButton icon="render" title="Renderizar como… (Ctrl+M)" onClick={onRender} disabled={!canRender} />
       <span className="tool-sep" />

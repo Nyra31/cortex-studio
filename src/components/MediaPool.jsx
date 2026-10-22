@@ -19,7 +19,7 @@ function describe(m) {
 
 // proxies / proxyJobs: proxies de la vista previa ya hechos (ruta → proxy) y los que se están creando (ruta → %).
 // onMenu(e, medio): clic derecho en un medio.
-export default function MediaPool({ media, proxies = {}, proxyJobs = {}, onImport, onNewText, onDropFiles, onRemove, onAdd, onMenu }) {
+export default function MediaPool({ media, proxies = {}, proxyJobs = {}, onImport, onYoutube, onNewText, onDropFiles, onRemove, onAdd, onMenu }) {
   const [selected, setSelected] = useState(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -43,6 +43,9 @@ export default function MediaPool({ media, proxies = {}, proxyJobs = {}, onImpor
       <div className="dock-toolbar">
         <button className="tool" title="Importar medios (Ctrl+I)" onClick={onImport}>
           <Icon name="importMedia" />
+        </button>
+        <button className="tool" title="Descargar de YouTube (Ctrl+Mayús+D)" onClick={onYoutube}>
+          <Icon name="webDownload" />
         </button>
         <button className="tool" title="Insertar texto en el cursor (Insertar → Medio de texto)" onClick={onNewText}>
           <Icon name="text" />

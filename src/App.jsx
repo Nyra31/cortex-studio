@@ -14,6 +14,7 @@ import Timeline, { MAX_PPS, MIN_PPS, gridStep } from './components/Timeline.jsx'
 import { quantize } from './util/time.js';
 import RenderDialog from './components/RenderDialog.jsx';
 import QueueDialog from './components/QueueDialog.jsx';
+import YoutubeDialog, { youtubeProgressText, cleanError } from './components/YoutubeDialog.jsx';
 import Scopes from './components/Scopes.jsx';
 import SubtitlesPanel from './components/SubtitlesPanel.jsx';
 import { addCue } from './state/subtitles.js';
@@ -67,6 +68,8 @@ export default function App() {
   const [queue, setQueue] = useState([]);
   const [queueRunning, setQueueRunning] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [youtubeOpen, setYoutubeOpen] = useState(false);
+  const [youtubeJob, setYoutubeJob] = useState(null); // { status, title, progress, files, imported, error }
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
@@ -347,6 +350,27 @@ export default function App() {
   const importDialog = useCallback(async () => {
     const paths = await api.pickMedia();
     if (paths.length) await importPaths(paths);
+  }, [importPaths]);
+
+  // Descargas de YouTube (YoutubeDialog). Siguen aunque se cierre la ventana; al terminar se importan si se pidió.
+  useEffect(() => api.onYoutubeProgress?.((p) => setYoutubeJob((j) => (j?.status === 'running' ? { ...j, progress: p } : j))), []);
+  const startDownload = useCallback(async (opts, importAfter, title) => {
+    setYoutubeJob({ status: 'running', title, progress: null, files: [] });
+    try {
+      const r = await api.youtubeDownload(opts);
+      if (r.canceled) {
+        setYoutubeJob((j) => ({ ...j, status: 'canceled' }));
+        setStatus('Descarga cancelada.');
+        return;
+      }
+      setYoutubeJob((j) => ({ ...j, status: 'done', files: r.files, error: r.error }));
+      const imported = importAfter ? await importPaths(r.files) : [];
+      if (imported.length) setYoutubeJob((j) => ({ ...j, imported: true }));
+      setStatus(`Descargado: ${r.files.length === 1 ? baseName(r.files[0]) : `${r.files.length} archivos`}${imported.length ? ' (importado al proyecto)' : ''}`);
+    } catch (err) {
+      setYoutubeJob((j) => ({ ...j, status: 'error', error: cleanError(err) }));
+      setStatus(`No se pudo descargar: ${cleanError(err)}`);
+    }
   }, [importPaths]);
 
   const filesToPaths = (files) => files.map((f) => api.getPathForFile(f)).filter(Boolean);
@@ -1115,6 +1139,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: 'Recopilar medios y guardar en una carpeta…', action: collect },
         'separator',
         { label: 'Importar medios…', shortcut: 'Ctrl+I', action: importDialog },
+        { label: 'Descargar de YouTube…', shortcut: 'Ctrl+Mayús+D', action: () => setYoutubeOpen(true) },
         { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
         { label: `Cola de render…${queue.length ? ` (${queue.filter((j) => j.status === 'waiting' || j.status === 'rendering').length})` : ''}`, action: () => setQueueOpen(true) },
         { label: 'Exportar el fotograma como imagen…', shortcut: 'Ctrl+Mayús+E', action: exportFrame, disabled: duration <= 0 },
@@ -1224,7 +1249,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
 
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
-  const modalOpen = renderOpen || queueOpen || projectDialog !== null || shortcutsOpen || recordDialog;
+  const modalOpen = renderOpen || queueOpen || youtubeOpen || projectDialog !== null || shortcutsOpen || recordDialog;
   const floatingOpen = !!fxEventId || !!textMediaId || !!panEventId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
@@ -1240,6 +1265,8 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       action = exportFrame;
     } else if (ctrl && e.shiftKey && key === 'f') {
       action = freezeFrame;
+    } else if (ctrl && e.shiftKey && key === 'd') {
+      action = () => setYoutubeOpen(true);
     } else if (ctrl && e.altKey && e.code === 'Digit2') {
       action = () => setLeftTab('scopes'); // como en VEGAS
     } else if (ctrl) {
@@ -1332,6 +1359,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         onOpen={open}
         onSave={() => save(false)}
         onImport={importDialog}
+        onYoutube={() => setYoutubeOpen(true)}
         onProperties={openProperties}
         onRender={openRender}
         canRender={duration > 0}
@@ -1365,6 +1393,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             <MediaPool
               media={project.media}
               onImport={importDialog}
+              onYoutube={() => setYoutubeOpen(true)}
               onNewText={insertText}
               onDropFiles={dropFilesOnPool}
               onRemove={removeMediaItem}
@@ -1483,6 +1512,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             const done = queue.filter((j) => j.status === 'done').length;
             return ` · Cola de render: ${done + 1}/${queue.length}${current ? ` (${Math.floor(current.progress * 100)} %)` : ''}`;
           })()}
+          {youtubeJob?.status === 'running' && !youtubeOpen && ` · ${youtubeProgressText(youtubeJob.progress)}`}
         </span>
         <span>
           {baseName(projectPath)}
@@ -1500,6 +1530,14 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           defaultName={`${baseName(projectPath)}.mp4`}
           onClose={() => setRenderOpen(false)}
           onEnqueue={enqueueRenders}
+        />
+      )}
+      {youtubeOpen && (
+        <YoutubeDialog
+          job={youtubeJob}
+          onDownload={startDownload}
+          onCancel={() => api.youtubeCancel()}
+          onClose={() => setYoutubeOpen(false)}
         />
       )}
       {queueOpen && (

@@ -13,6 +13,7 @@ const SHORTCUTS = [
   ['Alt+[ / Alt+]', 'Recortar el principio / el final del evento hasta el cursor'],
   ['Ctrl+Mayús+E', 'Exportar el fotograma como imagen PNG'],
   ['Ctrl+Mayús+F', 'Congelar fotograma en el cursor'],
+  ['Ctrl+Mayús+D', 'Descargar de YouTube'],
   ['Supr', 'Eliminar eventos seleccionados'],
   ['Ctrl+L', 'Edición en cascada (cerrar huecos, desplazar lo de detrás)'],
   ['Ctrl+Supr', 'Eliminar el tramo de la selección de tiempo y cerrar el hueco'],

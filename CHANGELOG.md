@@ -2,6 +2,10 @@
 
 Los instaladores de cada versión están en las [releases de GitHub](https://github.com/Nyra31/cortex-studio/releases). Los proyectos guardados con versiones anteriores se siguen abriendo.
 
+## Sin publicar
+
+- **Descargar de YouTube** (Ctrl+Mayús+D): video en MP4, MKV, WebM o MOV o solo el audio en MP3, M4A, Opus, FLAC o WAV, con los metadatos, la portada, los capítulos y los subtítulos dentro del archivo; listas enteras; se importa al proyecto al terminar.
+
 ## 0.7.0 (22/10/2026)
 
 - **Edición:** deslizar el contenido de un evento (Alt + arrastrar), sustituir el medio de un evento (Ctrl + soltar un medio encima), congelar el fotograma del cursor (Ctrl+Mayús+F) y detección de escenas (dividir en cada cambio de plano).

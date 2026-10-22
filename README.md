@@ -11,6 +11,7 @@ El instalador no está firmado, así que la primera vez Windows SmartScreen pued
 ## Funciones
 
 - **Edición:** multipista con eventos de video, audio, imagen y texto; recortar, dividir, deslizar y sustituir; ajuste magnético; edición en cascada; marcadores y regiones; velocidad y rampas de velocidad.
+- **Descargas:** videos de YouTube (y de muchos otros sitios) a MP4, MKV, WebM, MOV o solo audio, con metadatos, portada, capítulos y subtítulos.
 - **Video:** transiciones, efectos con fotogramas clave, panorámica/recorte animado, modos de fusión, envolventes de opacidad y corrección de color (ruedas, curvas, LUT `.cube`).
 - **Audio:** efectos, envolventes de volumen y panorámica, ducking automático, medidores y grabación de voz en off.
 - **Texto:** títulos con 50 fuentes incluidas, animaciones, plantillas y subtítulos (SRT).

@@ -4,6 +4,7 @@ const fs = require('fs');
 const { Readable } = require('stream');
 const crypto = require('crypto');
 const ff = require('./ffmpeg');
+const youtube = require('./youtube');
 
 // Actualizaciones automáticas (electron-updater, releases de GitHub: latest.yml + instalador). Solo en la app
 // instalada: al arrancar busca una versión nueva, la descarga en segundo plano y la interfaz pregunta si
@@ -642,6 +643,24 @@ let installOnClose = false;
 
 ipcMain.handle('screen:count', () => screen.getAllDisplays().length);
 
+// ---- Descargas de YouTube (ver youtube.js) ----
+// El estado de la instalación/actualización de yt-dlp y el progreso de la descarga llegan por `youtube:progress`.
+const sendYoutube = (p) => mainWindow?.webContents.send('youtube:progress', p);
+ipcMain.handle('youtube:info', async (_e, url, playlist) => {
+  await youtube.ensure(sendYoutube);
+  return youtube.info(url, playlist);
+});
+ipcMain.handle('youtube:download', async (_e, opts) => {
+  await youtube.ensure(sendYoutube);
+  return youtube.download(opts, sendYoutube);
+});
+ipcMain.handle('youtube:cancel', () => youtube.cancel());
+ipcMain.handle('youtube:defaultDir', () => app.getPath('downloads'));
+ipcMain.handle('dialog:folder', async (_e, title, defaultPath) => {
+  const res = await dialog.showOpenDialog(mainWindow, { title, defaultPath, properties: ['openDirectory', 'createDirectory', 'promptToCreate'] });
+  return res.canceled || !res.filePaths.length ? null : res.filePaths[0];
+});
+
 ipcMain.handle('shell:reveal', (_e, filePath) => shell.showItemInFolder(filePath));
 ipcMain.handle('devtools:toggle', () => mainWindow && mainWindow.webContents.toggleDevTools());
 
@@ -658,6 +677,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (renderProcess) renderProcess.cancel();
   if (proxyProc) proxyProc.kill();
+  youtube.cancel();
   // «Reiniciar y actualizar»: el instalador (sin preguntas) sustituye la aplicación y la vuelve a abrir.
   if (installOnClose && autoUpdater) autoUpdater.quitAndInstall(true, true);
   else if (process.platform !== 'darwin') app.quit();

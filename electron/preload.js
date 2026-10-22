@@ -55,6 +55,17 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('proxy:progress', handler);
     return () => ipcRenderer.removeListener('proxy:progress', handler);
   },
+  // Descargas de YouTube (yt-dlp, ver electron/youtube.js).
+  youtubeInfo: (url, playlist) => ipcRenderer.invoke('youtube:info', url, playlist),
+  youtubeDownload: (opts) => ipcRenderer.invoke('youtube:download', opts),
+  youtubeCancel: () => ipcRenderer.invoke('youtube:cancel'),
+  youtubeDefaultDir: () => ipcRenderer.invoke('youtube:defaultDir'),
+  pickFolder: (title, defaultPath) => ipcRenderer.invoke('dialog:folder', title, defaultPath),
+  onYoutubeProgress: (callback) => {
+    const handler = (_e, info) => callback(info);
+    ipcRenderer.on('youtube:progress', handler);
+    return () => ipcRenderer.removeListener('youtube:progress', handler);
+  },
   revealFile: (filePath) => ipcRenderer.invoke('shell:reveal', filePath),
   toggleDevTools: () => ipcRenderer.invoke('devtools:toggle'),
   setDirty: (dirty) => ipcRenderer.send('project:dirty', dirty),

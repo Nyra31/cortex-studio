@@ -2246,3 +2246,54 @@ kbd {
 .curve-grid line, .curve-diagonal { stroke: rgba(255, 255, 255, 0.1); }
 .curve-point { fill: #fff; stroke: #000; cursor: grab; }
 .fx-file { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Descargar de YouTube */
+.modal.youtube-dialog {
+  width: 580px;
+}
+.youtube-dialog .modal-content {
+  overflow-y: auto;
+}
+.youtube-url {
+  display: flex;
+  gap: 6px;
+}
+.youtube-url input {
+  flex: 1;
+  min-width: 0;
+}
+.youtube-info {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: var(--panel-lo);
+  border-radius: 4px;
+}
+.youtube-info img {
+  width: 160px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 3px;
+  flex: none;
+}
+.youtube-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.youtube-dir {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.youtube-job {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+.youtube-job .progress {
+  margin: 6px 0 4px;
+}

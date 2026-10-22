@@ -24,6 +24,7 @@ const PATHS = {
   properties: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4.5v5M8 14.5v5" />,
   render: <path d="M4 5h11v14H4zM15 9l5-3v12l-5-3M8 9.5v5l4-2.5z" />,
   importMedia: <path d="M12 3v11M7.5 9.5L12 14l4.5-4.5M4 15v5h16v-5" />,
+  webDownload: <path d="M3 6h18v12H3zM10 9.5v5l4.5-2.5z" />,
   undo: <path d="M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-3" />,
   redo: <path d="M15 7l5 5-5 5M20 12H9a5 5 0 0 0 0 10h3" />,
   split: <path d="M6 7a2.5 2.5 0 1 0 0-.01M6 17a2.5 2.5 0 1 0 0 .01M8 8l12 9M8 16L20 7" />,
