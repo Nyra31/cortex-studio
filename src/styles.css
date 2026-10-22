@@ -2117,3 +2117,15 @@ kbd {
   width: 100%;
   display: block;
 }
+/* Plantillas y animaciones de texto */
+.text-select {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  font-size: 12px;
+  background: #1b1b1b;
+  color: var(--text);
+  border: 1px solid #3a3a3a;
+  border-radius: 2px;
+}
+.text-row .fx-param { flex: 1; }

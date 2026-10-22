@@ -2,7 +2,7 @@
 import { DEFAULT_TRANSITION } from './transitions.js';
 import { effectsGraph, fxParamsAt, scaleFxKeys, shiftFxKeys } from './effects.js';
 export { scaleFxKeys, shiftFxKeys };
-import { isText, textPng } from './text.js';
+import { hasTextAnim, isText, textPng, textSequence } from './text.js';
 import { hasRamp, localForSource, shiftSpeed, sourceOffset, speedPayload } from './speed.js';
 import { panActive, panAt, panExpr, scalePanTime, shiftPan } from './pan.js';
 import { trackMixExpr, trackOpacityExpr } from './envelopes.js';
@@ -776,12 +776,26 @@ export function renderPayload(project, size = project.settings, range = null) {
     const expr = (prop) => panExpr(e.pan, prop, '@T@');
     return { ...fit, crop: e.pan.crop, x: expr('x'), y: expr('y'), scale: expr('scale'), rotation: expr('rotation') };
   };
+  // Textos animados: cada evento lleva sus fotogramas (PNG con su duración, ver textSequence) como un medio propio
+  // que el proceso principal monta como video.
+  const sequences = new Map();
+  for (const e of events) {
+    const m = mediaById.get(e.mediaId);
+    if (!isText(m) || !hasTextAnim(m.text)) continue;
+    sequences.set(e.id, {
+      id: `${m.id}~${e.id}`, isImage: false, hasVideo: true, hasAudio: false, duration: e.duration,
+      sequence: textSequence(m.text, size.width, size.height, e.duration, project.settings.fps),
+    });
+  }
   return {
-    media: project.media
-      .filter((m) => used.has(m.id))
-      .map(({ id, path, isImage, hasVideo, hasAudio, missing, kind, text }) => ({
-        id, path, isImage, hasVideo, hasAudio, missing, png: kind === 'text' ? textPng(text, size.width, size.height) : undefined,
-      })),
+    media: [
+      ...project.media
+        .filter((m) => used.has(m.id))
+        .map(({ id, path, isImage, hasVideo, hasAudio, missing, kind, text }) => ({
+          id, path, isImage, hasVideo, hasAudio, missing, png: kind === 'text' ? textPng(text, size.width, size.height) : undefined,
+        })),
+      ...sequences.values(),
+    ],
     tracks: project.tracks.map((t) => ({
       id: t.id,
       type: t.type,
@@ -800,6 +814,7 @@ export function renderPayload(project, size = project.settings, range = null) {
       pan: panOf(e),
       speedMap: speedPayload(e),
       afx: afxOf({ ...e, effects }),
+      ...(sequences.has(e.id) && { mediaId: sequences.get(e.id).id, inPoint: 0 }),
     })),
     transitions: transitions.filter((tr) => kept.has(tr.from) && kept.has(tr.to)),
     range,

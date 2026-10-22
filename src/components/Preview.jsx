@@ -9,7 +9,7 @@ import {
 import { transitionInfo } from '../state/transitions.js';
 import { EFFECTS, activeEffects } from '../state/effects.js';
 import { Compositor } from '../preview/compositor.js';
-import { drawText, isText } from '../state/text.js';
+import { drawText, hasTextAnim, isText, textAnimAt } from '../state/text.js';
 import { NO_CROP, panActive, panAt } from '../state/pan.js';
 import { trackMixAt, trackOpacityAt } from '../state/envelopes.js';
 import { publishScope, scopeNeedsFrame, scopeWanted } from '../preview/scopes.js';
@@ -238,18 +238,23 @@ export default function Preview({
   const sourceFor = (e, create) => {
     const media = mediaById.get(e.mediaId);
     if (isText(media)) {
-      // Canvas a la resolución del proyecto, el mismo dibujo que el PNG del render.
-      let canvas = textEls.current.get(media.id);
-      const key = `${width}x${height}:${JSON.stringify(media.text)}`;
+      // Canvas a la resolución del proyecto, el mismo dibujo que el PNG del render. Con animación, uno por evento,
+      // redibujado en cada fotograma de la animación (en el instante del fotograma, como el render).
+      const animated = hasTextAnim(media.text);
+      const local = Math.floor((time - e.start) * fps + 1e-6) / fps;
+      const anim = animated ? textAnimAt(media.text, local, e.duration) : null;
+      const id = animated ? `${media.id}@${e.id}` : media.id;
+      let canvas = textEls.current.get(id);
+      const key = `${width}x${height}:${JSON.stringify(media.text)}:${JSON.stringify(anim)}`;
       if (!canvas) {
         canvas = document.createElement('canvas');
         canvas.cortexVersion = 0;
-        textEls.current.set(media.id, canvas);
+        textEls.current.set(id, canvas);
       }
       if (canvas.cortexKey !== key) {
         canvas.width = width;
         canvas.height = height;
-        drawText(canvas.getContext('2d'), media.text, width, height);
+        drawText(canvas.getContext('2d'), media.text, width, height, anim);
         canvas.cortexKey = key;
         canvas.cortexVersion++;
       }
@@ -329,7 +334,10 @@ export default function Preview({
       videoEls.current.delete(id);
     }
     for (const l of layers) if (l.event && mediaById.get(l.event.mediaId).isImage) sourceFor(l.event, true);
-    for (const id of textEls.current.keys()) if (!mediaById.has(id)) textEls.current.delete(id);
+    for (const id of textEls.current.keys()) {
+      const [mediaId, eventId] = id.split('@');
+      if (!mediaById.has(mediaId) || (eventId && !eventsById.has(eventId))) textEls.current.delete(id);
+    }
 
     draw.current.layers = layers.map((l) =>
       l.event

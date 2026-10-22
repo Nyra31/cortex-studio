@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 import FontPicker from './FontPicker.jsx';
-import { TEXT_DEFAULTS } from '../state/text.js';
+import { TEXT_ANIMS, TEXT_DEFAULTS, TEXT_TEMPLATES } from '../state/text.js';
 
 const pct = (v) => `${Math.round(v * 100)} %`;
 
@@ -101,6 +101,22 @@ export default function TextDialog({ media, height, onChange, onClose }) {
         />
 
         <div className="text-row">
+          <span className="fx-param-label">Plantilla</span>
+          <select
+            className="text-select"
+            value=""
+            title="Aplica un estilo completo (fuente, colores, posición y animación) al texto"
+            onChange={(e) => {
+              const tpl = TEXT_TEMPLATES.find((x) => x.id === e.target.value);
+              if (tpl) onChange(() => ({ ...TEXT_DEFAULTS, ...tpl.params, text: t.text }), true);
+            }}
+          >
+            <option value="">Elegir una plantilla…</option>
+            {TEXT_TEMPLATES.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        </div>
+
+        <div className="text-row">
           <FontPicker value={t.font} onChange={(font) => set({ font })} />
           <button className={`text-toggle${t.bold ? ' active' : ''}`} title="Negrita" onClick={() => set({ bold: !t.bold })}>
             <b>N</b>
@@ -143,6 +159,17 @@ export default function TextDialog({ media, height, onChange, onClose }) {
             {range('shadowBlur', 'Desenfoque', 0, 0.6, 0.01, pct)}
           </>
         )}
+
+        <div className="text-section">Animación</div>
+        {[['animIn', 'animInDur', 'Entrada', 'in'], ['animOut', 'animOutDur', 'Salida', 'out']].map(([id, durId, label, side]) => (
+          <div key={id} className="text-row">
+            <span className="fx-param-label">{label}</span>
+            <select className="text-select" value={t[id]} onChange={(e) => set({ [id]: e.target.value })}>
+              {TEXT_ANIMS.map((a) => <option key={a.id} value={a.id}>{a[side]}</option>)}
+            </select>
+            {t[id] !== 'none' && range(durId, '', 0.1, 3, 0.05, (v) => `${v.toFixed(2).replace('.', ',')} s`)}
+          </div>
+        ))}
 
         <div className="text-section">Fondo</div>
         <div className="text-row">

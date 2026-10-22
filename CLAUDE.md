@@ -129,7 +129,7 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 - [x] Detección de escenas (dividir en cada cambio de plano) (`detectScenes` en `ffmpeg.js`: `select=gt(scene,0.3)` + `metadata=print` a un archivo temporal, con `cwd` en la carpeta temporal; `splitAtSourceTimes` en `project.js`)
 - [x] Ducking automático (bajar la música con la voz) (`duckingEnvelope` en `envelopes.js`: voz detectada con los picos de la forma de onda; crea la envolvente de volumen; menú de la cabecera de pista)
 - [x] Monitores de video (histograma, forma de onda, vectorscopio) (`Scopes.jsx`; `Compositor.readScope` copia el lienzo a 512 px con `blitFramebuffer` + `readPixels` justo después de `render`; `preview/scopes.js` une los dos y limita a ~15/s reproduciendo)
-- [ ] Animaciones de texto (entrada/salida) y plantillas de títulos
+- [x] Animaciones de texto (entrada/salida) y plantillas de títulos (`TEXT_ANIMS`, `textAnimAt`, `drawText(…, anim)`, `TEXT_TEMPLATES` en `text.js`; vista previa: un lienzo por evento animado redibujado en cada fotograma; render: `textSequence` → PNG con su duración → demuxer concat (`m.sequence` en `ffmpeg.js`); comprobado: vista previa = render)
 - [ ] Subtítulos (pista, importar/exportar SRT, quemar en el render)
 - [ ] Corrección de color avanzada (curvas, ruedas de color, LUT .cube)
 

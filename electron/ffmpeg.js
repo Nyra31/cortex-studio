@@ -443,7 +443,7 @@ function buildRender(project, settings, outPath) {
       const local0 = first / rate - origin; // tiempo local del evento en el primer fotograma del trozo
       const s0 = srcOffset(ev, local0);
       const seek = Math.max(0, ev.inPoint + s0);
-      inputs.push('-ss', num(seek), '-t', num(srcOffset(ev, local0 + length) - s0), '-i', m.path);
+      inputs.push(...(m.sequence ? ['-f', 'concat', '-safe', '0'] : []), '-ss', num(seek), '-t', num(srcOffset(ev, local0 + length) - s0), '-i', m.path);
       if (ev.speedMap) {
         // Rampa: cada fotograma del medio va al instante local en que se llega a él (inversa exacta).
         const S = `(${(seek - ev.inPoint).toFixed(9)}+(PTS-STARTPTS)*TB)`;
@@ -713,6 +713,23 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
   const stamp = Date.now();
   const temp = [];
   const media = await Promise.all(project.media.map(async (m) => {
+    if (m.sequence) {
+      // Texto animado: sus fotogramas como PNG y una lista del demuxer concat con la duración de cada uno (el
+      // último se repite sin duración: si no, concat no respeta la suya).
+      const safeId = m.id.replace(/[^\w-]/g, '_');
+      const entries = [];
+      for (const [k, item] of m.sequence.entries()) {
+        const file = path.join(os.tmpdir(), `cortex-texto-${stamp}-${safeId}-${k}.png`);
+        await fs.promises.writeFile(file, Buffer.from(item.png.slice(item.png.indexOf(',') + 1), 'base64'));
+        temp.push(file);
+        entries.push([`file '${file.replace(/\\/g, '/')}'`, `duration ${item.dur.toFixed(6)}`]);
+      }
+      const lines = [...entries.flat(), entries[entries.length - 1][0]];
+      const list = path.join(os.tmpdir(), `cortex-texto-${stamp}-${safeId}.txt`);
+      await fs.promises.writeFile(list, `ffconcat version 1.0\n${lines.join('\n')}\n`, 'utf8');
+      temp.push(list);
+      return { ...m, sequence: true, path: list, isImage: false };
+    }
     if (!m.png) return m;
     const file = path.join(os.tmpdir(), `cortex-texto-${stamp}-${m.id}.png`);
     await fs.promises.writeFile(file, Buffer.from(m.png.slice(m.png.indexOf(',') + 1), 'base64'));
