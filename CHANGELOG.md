@@ -4,6 +4,7 @@ Los instaladores de cada versión están en las [releases de GitHub](https://git
 
 ## Sin publicar
 
+- **Reducir el ruido de fondo** de un evento de audio (dos niveles).
 - **Estabilizar** un video movido (dos niveles) y quitar la estabilización.
 - **Invertir** un evento (reproducirlo hacia atrás) y quitar la inversión.
 - **Pantalla de inicio** con los proyectos recientes (también en *Archivo → Proyectos recientes…*).

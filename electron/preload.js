@@ -38,6 +38,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('stabilize:progress', handler);
     return () => ipcRenderer.removeListener('stabilize:progress', handler);
   },
+  denoiseClip: (filePath, start, length, projectPath, strength) => ipcRenderer.invoke('media:denoise', filePath, start, length, projectPath, strength),
+  onDenoiseProgress: (callback) => {
+    const handler = (_e, p) => callback(p);
+    ipcRenderer.on('denoise:progress', handler);
+    return () => ipcRenderer.removeListener('denoise:progress', handler);
+  },
   onReverseProgress: (callback) => {
     const handler = (_e, p) => callback(p);
     ipcRenderer.on('reverse:progress', handler);

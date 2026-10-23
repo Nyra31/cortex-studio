@@ -166,6 +166,8 @@ export const EVENT_DEFAULTS = {
   reversed: null,
   // Evento estabilizado: usa un archivo con el trozo estabilizado (desde `start` del medio de antes, mediaId).
   stabilized: null,
+  // Evento de audio con el ruido reducido: usa un archivo con el sonido limpio (desde `start` del medio de antes).
+  denoised: null,
 };
 
 // Modos de fusión de las pistas de video (track.blend; sin él, normal), como los modos de composición de VEGAS.
@@ -671,6 +673,18 @@ export function setStabilized(project, eventId, media, start) {
     if (media) return { ...e, mediaId: media.id, inPoint: Math.max(0, e.inPoint - start), stabilized: { mediaId: e.mediaId, start } };
     if (!e.stabilized) return e;
     return { ...e, mediaId: e.stabilized.mediaId, inPoint: e.stabilized.start + e.inPoint, stabilized: null };
+  });
+  return { ...project, media: media && !project.media.some((m) => m.id === media.id) ? [...project.media, media] : project.media, events };
+}
+
+// Reducir el ruido de un evento de audio (solo ese: el video de su grupo sigue con el original): con `media` (el
+// sonido desde `start` del medio, limpio) pasa a usarlo; con media = null vuelve al de antes.
+export function setDenoised(project, eventId, media, start) {
+  const events = project.events.map((e) => {
+    if (e.id !== eventId) return e;
+    if (media) return { ...e, mediaId: media.id, inPoint: Math.max(0, e.inPoint - start), denoised: { mediaId: e.mediaId, start } };
+    if (!e.denoised) return e;
+    return { ...e, mediaId: e.denoised.mediaId, inPoint: e.denoised.start + e.inPoint, denoised: null };
   });
   return { ...project, media: media && !project.media.some((m) => m.id === media.id) ? [...project.media, media] : project.media, events };
 }

@@ -907,4 +907,26 @@ async function stabilizeClip(file, start, length, out, { hasAudio = true, smooth
   }
 }
 
-module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, detectScenes, reverseClip, stabilizeClip, run, ffmpegPath, ffprobePath };
+// Reducir el ruido de fondo (ventilador, zumbido, siseo): el sonido de [start, start + length) con afftdn, que
+// aprende el ruido sobre la marcha (tn=1) y lo resta en frecuencia, más un filtro de graves para el retumbe.
+// strength: 'light' | 'strong'. Sale FLAC (sin pérdida; la vista previa lo reproduce).
+const DENOISE_AUDIO = {
+  light: 'highpass=f=70,afftdn=nr=20:nf=-40:tn=1', // ~8 dB menos de ruido en las pausas, la voz igual
+  strong: 'highpass=f=90,afftdn=nr=30:nf=-35:tn=1,afftdn=nr=15:nf=-45:tn=1', // ~13 dB
+};
+async function denoiseClip(file, start, length, out, { strength = 'light', onProgress } = {}) {
+  const r = await run(ffmpegPath, [
+    '-hide_banner', '-v', 'error', '-y', '-nostats', '-progress', 'pipe:1',
+    '-ss', start.toFixed(6), '-t', length.toFixed(6), '-i', file,
+    '-map', '0:a:0', '-af', DENOISE_AUDIO[strength] || DENOISE_AUDIO.light, '-c:a', 'flac', out,
+  ], {
+    onLine: (line) => {
+      const m = /^out_time_(?:us|ms)=(\d+)/.exec(line);
+      if (m && onProgress) onProgress(Math.min(1, Number(m[1]) / 1e6 / length));
+    },
+  });
+  if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+  return out;
+}
+
+module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, detectScenes, reverseClip, stabilizeClip, denoiseClip, run, ffmpegPath, ffprobePath };

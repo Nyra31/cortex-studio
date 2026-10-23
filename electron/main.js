@@ -262,6 +262,25 @@ ipcMain.handle('media:stabilize', async (event, filePath, start, length, project
   });
 });
 
+// Reducir el ruido: el sonido del trozo que usa un evento, limpio (ver denoiseClip), en «Sin ruido» junto al
+// proyecto. strength = 'light' | 'strong'. Progreso por `denoise:progress`. Devuelve la ruta.
+ipcMain.handle('media:denoise', async (event, filePath, start, length, projectPath, strength) => {
+  const file = path.resolve(filePath);
+  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  const dir = projectPath
+    ? path.join(path.dirname(projectPath), 'Sin ruido')
+    : path.join(app.getPath('documents'), 'Cortex Studio', 'Sin ruido');
+  await fs.promises.mkdir(dir, { recursive: true });
+  const base = path.basename(file, path.extname(file));
+  let n = 1;
+  const name = (i) => path.join(dir, `${base} - sin ruido ${String(i).padStart(2, '0')}.flac`);
+  while (fs.existsSync(name(n))) n++;
+  return ff.denoiseClip(file, start, length, name(n), {
+    strength,
+    onProgress: (p) => event.sender.send('denoise:progress', p),
+  });
+});
+
 // Congelar fotograma: el fotograma del medio en `time` (segundos del medio) como PNG en «Fotogramas» junto al
 // proyecto (o en Documentos si aún no está guardado). Devuelve la ruta.
 ipcMain.handle('media:frame', async (_e, filePath, time, projectPath) => {

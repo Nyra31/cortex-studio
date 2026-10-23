@@ -26,7 +26,7 @@ import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
   EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, loadView, mediaLength, pasteEvents,
-  freezeFrame as freezeFrameAt, setReversed, setStabilized, splitAtSourceTimes, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
+  freezeFrame as freezeFrameAt, setReversed, setStabilized, setDenoised, splitAtSourceTimes, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
   moveTrack, splitRange, trimToCursor, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
@@ -558,6 +558,35 @@ export default function App() {
     }
   }, [noteAnalyzed, setProject]);
 
+  // Reducir el ruido de un evento de audio: FFmpeg (afftdn) genera el sonido del trozo que usa, limpio (en «Sin
+  // ruido»), y el evento pasa a usarlo; strength = null lo devuelve al de antes.
+  const denoiseEvent = useCallback(async (ev, strength) => {
+    if (strength === null) {
+      setProject((cur) => setDenoised(cur, ev.id, null));
+      setStatus('Se ha quitado la reducción de ruido.');
+      return;
+    }
+    const { project: p, projectPath: file } = live.current;
+    const m = p.media.find((x) => x.id === ev.mediaId);
+    if (!m || m.missing || !m.hasAudio) return;
+    setPlaying(false);
+    // Un poco de medio de más a cada lado: afftdn aprende el ruido sobre la marcha.
+    const start = Math.max(0, ev.inPoint - 1);
+    const end = Math.min(m.duration || Infinity, ev.inPoint + sourceOffset(ev, ev.duration) + 1);
+    const off = api.onDenoiseProgress((f) => setStatus(`Reduciendo el ruido de «${m.name}»: ${Math.round(f * 100)} %…`));
+    try {
+      setStatus(`Reduciendo el ruido de «${m.name}»…`);
+      const out = await api.denoiseClip(m.path, start, end - start, file, strength);
+      const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(out)) };
+      setProject((cur) => setDenoised(cur, ev.id, media, start));
+      setStatus(`Ruido reducido (guardado en ${out}).`);
+    } catch (err) {
+      setStatus(`No se pudo reducir el ruido: ${err.message}`);
+    } finally {
+      off();
+    }
+  }, [noteAnalyzed, setProject]);
+
   // Detectar escenas: divide el evento de video (y su grupo) en cada cambio de plano del trozo de medio que usa.
   const detectScenes = useCallback(async (ev) => {
     const m = live.current.project.media.find((x) => x.id === ev.mediaId);
@@ -948,6 +977,14 @@ export default function App() {
             action: () => reverseEvent(info.event),
             disabled: !!(info.event.reversed && info.event.stabilized),
           }]
+          : []),
+        ...(!isVideo && media && !media.missing && media.hasAudio
+          ? info.event.denoised
+            ? [{ label: 'Quitar la reducción de ruido', action: () => denoiseEvent(info.event, null) }]
+            : [
+              { label: 'Reducir el ruido de fondo', action: () => denoiseEvent(info.event, 'light') },
+              { label: 'Reducir mucho el ruido de fondo', action: () => denoiseEvent(info.event, 'strong') },
+            ]
           : []),
         ...(isVideo && media && !media.isImage && !isText(media) && !media.missing
           ? info.event.stabilized
