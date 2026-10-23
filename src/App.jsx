@@ -18,7 +18,8 @@ import YoutubeDialog, { youtubeProgressText, cleanError } from './components/You
 import CompressDialog, { compressProgressText } from './components/CompressDialog.jsx';
 import Scopes from './components/Scopes.jsx';
 import SubtitlesPanel from './components/SubtitlesPanel.jsx';
-import { addCue } from './state/subtitles.js';
+import { addCue, importCues, parseSubtitles, tidyCues } from './state/subtitles.js';
+import TranscribeDialog from './components/TranscribeDialog.jsx';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import RecordDialog from './components/RecordDialog.jsx';
@@ -72,6 +73,7 @@ export default function App() {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const [youtubeJob, setYoutubeJob] = useState(null); // { status, title, progress, files, imported, error }
   const [compressOpen, setCompressOpen] = useState(false);
+  const [transcribeOpen, setTranscribeOpen] = useState(false);
   const [compressQueue, setCompressQueue] = useState([]); // { id, path, status, progress, result, error }
   const [compressRunning, setCompressRunning] = useState(false);
   const compressRef = useRef({ queue: [], stop: false });
@@ -405,6 +407,42 @@ export default function App() {
     compressRef.current.stop = true;
     api.compressCancel();
   }, []);
+
+  // Subtítulos automáticos (TranscribeDialog): mezcla el sonido del proyecto (o de la selección) a un WAV temporal
+  // con el render de siempre, Whisper lo transcribe y los subtítulos se añaden en tiempos de la línea de tiempo.
+  const transcribeCancel = useRef(null);
+  const transcribe = useCallback(async (opts, onStatus) => {
+    const { project: p, region: r } = live.current;
+    const range = opts.what === 'selection' && r ? { start: r.start, end: r.end } : null;
+    const size = { width: p.settings.width, height: p.settings.height };
+    const target = await api.whisperTempPath();
+    transcribeCancel.current = () => api.cancelRender();
+    const offMix = api.onRenderProgress((f) => onStatus({ stage: 'mix', percent: f * 100 }));
+    let res;
+    try {
+      res = await api.startRender(renderPayload(p, size, range, { subtitles: 'none' }), { ...size, fps: p.settings.fps, format: 'wav' }, target);
+    } finally {
+      offMix();
+    }
+    if (res.canceled) return null;
+    if (!res.ok) throw new Error(res.error || 'No se pudo mezclar el sonido');
+    transcribeCancel.current = () => api.whisperCancel();
+    const offW = api.onWhisperProgress(onStatus);
+    let srt;
+    try {
+      srt = await api.whisperTranscribe(target, { model: opts.model, language: opts.language, translate: opts.translate });
+    } finally {
+      offW();
+      transcribeCancel.current = null;
+    }
+    if (srt === null) return null;
+    const offset = range ? Math.ceil(range.start * p.settings.fps - 1e-6) / p.settings.fps : 0; // el render empieza en un fotograma
+    const list = tidyCues(parseSubtitles(srt)).map((c) => ({ ...c, start: c.start + offset, end: c.end + offset }));
+    if (list.length) setProject((cur) => importCues(cur, list, opts.replace));
+    setStatus(list.length ? `${list.length} subtítulos automáticos añadidos.` : 'No se ha reconocido ninguna frase.');
+    if (list.length) setLeftTab('subtitles');
+    return list.length;
+  }, [setProject]);
 
   // Descargas de YouTube (YoutubeDialog). Siguen aunque se cierre la ventana; al terminar se importan si se pidió.
   useEffect(() => api.onYoutubeProgress?.((p) => setYoutubeJob((j) => (j?.status === 'running' ? { ...j, progress: p } : j))), []);
@@ -1420,6 +1458,8 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: recording ? 'Terminar la grabación' : 'Grabar voz en off', shortcut: 'Ctrl+R', action: toggleRecording },
         { label: 'Opciones de grabación…', action: () => setRecordDialog(true), disabled: !!recording },
         'separator',
+        { label: 'Subtítulos automáticos…', action: () => setTranscribeOpen(true), disabled: duration <= 0 },
+        'separator',
         { label: 'Borrar los proxies de la vista previa…', action: clearProxies },
         'separator',
         { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
@@ -1439,7 +1479,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
 
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
-  const modalOpen = renderOpen || queueOpen || youtubeOpen || compressOpen || projectDialog !== null || shortcutsOpen || recordDialog;
+  const modalOpen = renderOpen || queueOpen || youtubeOpen || compressOpen || transcribeOpen || projectDialog !== null || shortcutsOpen || recordDialog;
   const floatingOpen = !!fxEventId || !!textMediaId || !!panEventId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
@@ -1610,6 +1650,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
               onFocused={clearFocusCue}
               onMessage={setStatus}
               defaultName={baseName(projectPath)}
+              onTranscribe={() => setTranscribeOpen(true)}
             />
           )}
         </Dock>
@@ -1727,6 +1768,15 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           defaultName={`${baseName(projectPath)}.mp4`}
           onClose={() => setRenderOpen(false)}
           onEnqueue={enqueueRenders}
+        />
+      )}
+      {transcribeOpen && (
+        <TranscribeDialog
+          hasRegion={!!region}
+          cueCount={project.subtitles?.cues?.length || 0}
+          onTranscribe={transcribe}
+          onCancel={() => transcribeCancel.current?.()}
+          onClose={() => setTranscribeOpen(false)}
         />
       )}
       {compressOpen && (

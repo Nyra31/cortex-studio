@@ -1,11 +1,13 @@
 const { app, BrowserWindow, ipcMain, dialog, protocol, shell, Menu, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { Readable } = require('stream');
 const crypto = require('crypto');
 const ff = require('./ffmpeg');
 const youtube = require('./youtube');
 const compressor = require('./compressor');
+const whisper = require('./whisper');
 
 // Actualizaciones automáticas (electron-updater, releases de GitHub: latest.yml + instalador). Solo en la app
 // instalada: al arrancar busca una versión nueva, la descarga en segundo plano y la interfaz pregunta si
@@ -765,6 +767,27 @@ ipcMain.handle('youtube:download', async (_e, opts) => {
 });
 ipcMain.handle('youtube:cancel', () => youtube.cancel());
 ipcMain.handle('youtube:defaultDir', () => app.getPath('downloads'));
+// ---- Subtítulos automáticos (ver whisper.js) ----
+// La interfaz renderiza el sonido del proyecto a un WAV temporal (`whisper:tempPath`, solo se transcriben esos) y
+// pide la transcripción; el estado (descargas, progreso) llega por `whisper:progress`.
+const whisperTemps = new Set();
+ipcMain.handle('whisper:models', () => whisper.models());
+ipcMain.handle('whisper:tempPath', () => {
+  const p = path.join(os.tmpdir(), `cortex-transcribir-${process.pid}-${Date.now()}.wav`);
+  whisperTemps.add(p);
+  return p;
+});
+ipcMain.handle('whisper:transcribe', async (event, wavPath, opts) => {
+  if (!whisperTemps.has(wavPath)) throw new Error('Archivo no válido');
+  try {
+    return await whisper.transcribe(wavPath, opts, (s) => event.sender.send('whisper:progress', s));
+  } finally {
+    whisperTemps.delete(wavPath);
+    fs.promises.unlink(wavPath).catch(() => {});
+  }
+});
+ipcMain.handle('whisper:cancel', () => whisper.cancel());
+
 // ---- Compresor de video (ver compressor.js) ----
 // Progreso por `compress:progress`. Las muestras de 10 s se pueden abrir en el reproductor del sistema
 // (`compress:openSample`, solo las que ha creado el compresor) y se borran al salir.
@@ -819,6 +842,7 @@ app.on('window-all-closed', () => {
   if (proxyProc) proxyProc.kill();
   youtube.cancel();
   compressor.cancel();
+  whisper.cancel();
   // «Reiniciar y actualizar»: el instalador (sin preguntas) sustituye la aplicación y la vuelve a abrir.
   if (installOnClose && autoUpdater) autoUpdater.quitAndInstall(true, true);
   else if (process.platform !== 'darwin') app.quit();

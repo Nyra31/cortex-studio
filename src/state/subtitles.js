@@ -81,6 +81,65 @@ export function parseSubtitles(text) {
   return out.sort((x, y) => x.start - y.start);
 }
 
+// Parte un texto en dos líneas por el espacio más cercano a la mitad si no cabe en una.
+function wrapLine(text, max) {
+  if (text.length <= max) return text;
+  const mid = text.length / 2;
+  let best = -1;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === ' ' && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+  }
+  return best < 0 ? text : `${text.slice(0, best)}\n${text.slice(best + 1)}`;
+}
+
+// Ordena los subtítulos de una transcripción automática: parte los largos en varios de dos líneas como mucho
+// (cortando después de un punto si se puede; el tiempo se reparte en proporción al texto), une con el anterior los
+// muy cortos que van pegados y parte en dos líneas los que no caben en una (maxChars por línea).
+export function tidyCues(list, maxChars = 42) {
+  const pieces = [];
+  for (const c of list) {
+    const words = c.text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    if (!words.length) continue;
+    const chunks = [];
+    let cur = [];
+    for (const w of words) {
+      if (cur.length && [...cur, w].join(' ').length > maxChars * 2) {
+        chunks.push(cur);
+        cur = [];
+      }
+      cur.push(w);
+      if (/[.?!…]$/.test(w) && cur.join(' ').length > maxChars) {
+        chunks.push(cur);
+        cur = [];
+      }
+    }
+    if (cur.length) chunks.push(cur);
+    const total = chunks.reduce((sum, ch) => sum + ch.join(' ').length, 0);
+    let t = c.start;
+    chunks.forEach((ch, i) => {
+      const text = ch.join(' ');
+      const end = i === chunks.length - 1 ? c.end : t + ((c.end - c.start) * text.length) / total;
+      pieces.push({ start: t, end, text });
+      t = end;
+    });
+  }
+  // Los muy cortos (una o dos palabras) se unen al anterior si caben; si no, al siguiente.
+  const short = (c) => c.end - c.start < 0.8 || c.text.length < 16;
+  const fits = (a, b) => b.start - a.end < 0.3 && a.text.length + b.text.length + 1 <= maxChars * 2;
+  const out = [];
+  for (const c of pieces) {
+    const prev = out[out.length - 1];
+    if (prev && (short(c) || prev.joinNext) && fits(prev, c)) {
+      prev.end = c.end;
+      prev.text = `${prev.text} ${c.text}`;
+      prev.joinNext = false;
+    } else {
+      out.push({ ...c, joinNext: short(c) });
+    }
+  }
+  return out.map(({ joinNext, ...c }) => ({ ...c, text: wrapLine(c.text, maxChars) }));
+}
+
 // Añade subtítulos leídos (parseSubtitles) al proyecto, con ids nuevos.
 export const importCues = (project, list, replace = false) =>
   withCues(project, [...(replace ? [] : subtitlesOf(project).cues), ...list.map((c) => ({ ...c, id: uid('c') }))]);

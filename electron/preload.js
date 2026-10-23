@@ -76,6 +76,16 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('proxy:progress', handler);
     return () => ipcRenderer.removeListener('proxy:progress', handler);
   },
+  // Subtítulos automáticos (ver electron/whisper.js).
+  whisperModels: () => ipcRenderer.invoke('whisper:models'),
+  whisperTempPath: () => ipcRenderer.invoke('whisper:tempPath'),
+  whisperTranscribe: (wavPath, opts) => ipcRenderer.invoke('whisper:transcribe', wavPath, opts),
+  whisperCancel: () => ipcRenderer.invoke('whisper:cancel'),
+  onWhisperProgress: (callback) => {
+    const handler = (_e, s) => callback(s);
+    ipcRenderer.on('whisper:progress', handler);
+    return () => ipcRenderer.removeListener('whisper:progress', handler);
+  },
   // Compresor de video (ver electron/compressor.js).
   compressEncoders: () => ipcRenderer.invoke('compress:encoders'),
   compressInspect: (file, settings) => ipcRenderer.invoke('compress:inspect', file, settings),

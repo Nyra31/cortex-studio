@@ -20,7 +20,7 @@ function parseTime(s, fps) {
 // Pestaña «Subtítulos»: la lista de subtítulos (tiempos y texto editables), añadir en el cursor o en la
 // selección de tiempo, importar y exportar SRT, el estilo y si se ven en la vista previa. focusId: subtítulo cuyo
 // texto se edita al abrir (doble clic en la franja de la regla).
-export default function SubtitlesPanel({ project, setProject, time, seek, region, focusId, onFocused, onMessage, defaultName }) {
+export default function SubtitlesPanel({ project, setProject, time, seek, region, focusId, onFocused, onMessage, defaultName, onTranscribe }) {
   const subs = subtitlesOf(project);
   const fps = project.settings.fps;
   const style = { ...SUB_STYLE, ...subs.style };
@@ -103,6 +103,7 @@ export default function SubtitlesPanel({ project, setProject, time, seek, region
     <div className="subtitles-panel">
       <div className="dock-toolbar">
         <button className="tool-text" onClick={add} title="Subtítulo nuevo en el cursor (2 s) o en la selección de tiempo">+ Añadir</button>
+        <button className="tool-text" onClick={onTranscribe} title="Escribir los subtítulos a partir de la voz, con Whisper (en este equipo)">Automáticos…</button>
         <button className="tool-text" onClick={doImport}>Importar SRT…</button>
         <button className="tool-text" onClick={doExport} disabled={!subs.cues.length}>Exportar SRT…</button>
         <label className="sub-check" title="Ver los subtítulos en la vista previa">
