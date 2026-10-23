@@ -36,6 +36,17 @@ Para publicar una versión, la release de GitHub debe llevar el instalador, su `
 
 Si la aplicación no se abre al lanzar `electron .` a mano, quita la variable `ELECTRON_RUN_AS_NODE` (la definen, por ejemplo, las terminales de VS Code). `npm start` y `npm run dev` ya la quitan.
 
+## Política de firma de código
+
+El instalador de Windows se compila en GitHub Actions a partir de este repositorio ([flujo `instalador.yml`](.github/workflows/instalador.yml)) y se firma después con SignPath.
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Autores (committers) y revisores (reviewers): [Nyra31](https://github.com/Nyra31).
+- Aprobación de las firmas (approvers): [Nyra31](https://github.com/Nyra31).
+
+**Privacidad:** Cortex Studio no envía datos personales ni de uso a ninguna parte. Solo se conecta a Internet para buscar actualizaciones en las releases de este repositorio y, cuando el usuario lo pide, para descargar videos (yt-dlp), descargar o actualizar yt-dlp y descargar el programa y los modelos de los subtítulos automáticos (whisper.cpp). Los proyectos, los medios y los registros de errores se quedan en el equipo.
+
 ## Licencia
 
 Software libre con licencia [GPL-3.0](LICENSE). Incluye FFmpeg (GPL) y 50 fuentes de Google Fonts con sus propias licencias libres (`public/fonts/LICENCIAS.txt`).

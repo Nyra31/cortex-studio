@@ -1,0 +1,38 @@
+# Compila el instalador de Windows en GitHub y lo deja como artefacto (para la firma de SignPath y para comprobar
+# que el proyecto compila en un equipo limpio). Se lanza al subir una etiqueta vX.Y.Z o a mano (Actions → Run workflow).
+name: Instalador de Windows
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Dependencias
+        run: npm ci
+
+      - name: Instalador
+        run: npm run dist
+
+      - name: Subir el instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: instalador-windows
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
