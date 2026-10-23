@@ -517,7 +517,7 @@ ipcMain.handle('render:start', async (event, project, settings, outPath) => {
       return { ok: false, canceled: true };
     }
     if (result.code !== 0) return { ok: false, error: result.stderr.trim().split('\n').slice(-8).join('\n') };
-    return { ok: true };
+    return { ok: true, cpuFallback: result.cpuFallback };
   } catch (err) {
     return { ok: false, error: err.message };
   } finally {

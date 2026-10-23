@@ -4,6 +4,7 @@ Los instaladores de cada versión están en las [releases de GitHub](https://git
 
 ## Sin publicar
 
+- **Renderizar con la tarjeta gráfica** (NVIDIA, Intel o AMD) en MP4 H.264 y H.265: varias veces más rápido en 4K y H.265; si falla, se renderiza con el procesador.
 - **Comprimir videos** (Ctrl+Mayús+C): compresor por lotes al estilo de HandBrake con preajustes y preajustes propios; H.264, H.265, VP9 y AV1 con el procesador o la tarjeta gráfica; calidad constante, tasa de bits o tamaño de archivo objetivo (dos pasadas); resolución máxima, recorte automático de bandas negras, desentrelazado, reducción de ruido, HDR a SDR; pistas de audio, subtítulos y capítulos; muestra de 10 s con el tamaño estimado.
 - **Descargar de YouTube** (Ctrl+Mayús+D): video en MP4, MKV, WebM o MOV o solo el audio en MP3, M4A, Opus, FLAC o WAV, con los metadatos, la portada, los capítulos y los subtítulos dentro del archivo; listas enteras; se importa al proyecto al terminar.
 

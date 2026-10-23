@@ -16,6 +16,7 @@ const defaults = (t = TEMPLATES[0]) => ({
   audioKbps: t.audioKbps || 192,
   loudness: t.loudness ?? null,
   subtitles: 'burn',
+  hw: '',
 });
 // Normalizar la sonoridad del render (LUFS integrados), como piden las plataformas.
 const LOUDNESS = [
@@ -47,6 +48,15 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
   const [progress, setProgress] = useState(0);
   const [outPath, setOutPath] = useState(null);
   const [error, setError] = useState('');
+  const [fallback, setFallback] = useState(null); // la tarjeta gráfica falló y se usó el procesador
+  // Tarjetas gráficas que pueden codificar H.264/H.265 en este equipo (la misma prueba que el compresor).
+  const [gpus, setGpus] = useState([]);
+  useEffect(() => {
+    window.api.compressEncoders?.().then((list) => {
+      const fams = [...new Set(list.filter((e) => e.hw && (e.codec === 'h264' || e.codec === 'hevc')).map((e) => e.id.split('_')[1]))];
+      setGpus(fams);
+    }).catch(() => {});
+  }, []);
 
   const format = formatInfo(opts.format);
   const fps = opts.fps ?? settings.fps;
@@ -56,7 +66,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
   const change = (changes) => setOpts((o) => ({ ...o, ...changes, template: 'custom' }));
   const applyTemplate = (id) => {
     const t = TEMPLATES.find((x) => x.id === id);
-    if (t) setOpts((o) => ({ ...defaults(t), custom: o.custom, loudness: t.loudness !== undefined ? t.loudness : o.loudness }));
+    if (t) setOpts((o) => ({ ...defaults(t), custom: o.custom, hw: o.hw, loudness: t.loudness !== undefined ? t.loudness : o.loudness }));
   };
 
   useEffect(() => {
@@ -90,6 +100,9 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
   const softOk = ['mp4-h264', 'mp4-h265', 'mov-prores', 'webm'].includes(format.id);
   const wanted = opts.subtitles || 'burn';
   const subtitleMode = !hasSubtitles || !format.video ? 'none' : wanted === 'soft' && !softOk ? 'burn' : wanted;
+  const GPU_NAMES = { nvenc: 'Tarjeta gráfica NVIDIA (NVENC)', qsv: 'Gráfica Intel (Quick Sync)', amf: 'Tarjeta gráfica AMD (AMF)' };
+  const hwFormat = format.id === 'mp4-h264' || format.id === 'mp4-h265';
+  const hw = hwFormat && gpus.includes(opts.hw) ? opts.hw : null;
   const renderSettings = {
     width: inner.w,
     height: inner.h,
@@ -100,6 +113,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
     quality: opts.quality,
     audioKbps: opts.audioKbps,
     loudness: format.id !== 'gif' ? opts.loudness : null,
+    hw,
   };
   const baseFile = defaultName.replace(/\.[^.]+$/, '');
   const regionLabel = (r) => (r.name ? r.name : `Región ${r.number}`);
@@ -143,7 +157,10 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
         renderSettings,
         target,
       );
-      if (result.ok) setPhase('done');
+      if (result.ok) {
+        setFallback(result.cpuFallback || null);
+        setPhase('done');
+      }
       else if (result.canceled) setPhase('settings');
       else {
         setError(result.error || 'Error desconocido');
@@ -210,6 +227,15 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
                       </div>
                     )}
                   </>
+                )}
+                {hwFormat && gpus.length > 0 && (
+                  <label className="wide" title="Con la tarjeta gráfica, el render en 4K o en H.265 es varias veces más rápido (en 1080p la diferencia es menor). Si la tarjeta falla, se renderiza con el procesador.">
+                    <span className="field-label">Codificar con</span>
+                    <select value={hw || ''} onChange={(e) => setOpts((o) => ({ ...o, hw: e.target.value }))}>
+                      <option value="">El procesador (mejor calidad por tamaño)</option>
+                      {gpus.map((g) => <option key={g} value={g}>{GPU_NAMES[g]} (más rápido, sobre todo en 4K y H.265)</option>)}
+                    </select>
+                  </label>
                 )}
                 {format.quality && (
                   <label>
@@ -314,6 +340,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
             <>
               <p>Renderizado completado.</p>
               <p className="note">{outPath}</p>
+              {fallback && <p className="note">La tarjeta gráfica dio un error ({fallback}) y se ha renderizado con el procesador.</p>}
             </>
           )}
           {phase === 'error' && (

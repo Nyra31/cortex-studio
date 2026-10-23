@@ -351,7 +351,29 @@ const CRF = {
   h265: { high: 20, normal: 24, light: 30 },
   vp9: { high: 24, normal: 32, light: 40 },
 };
-function videoArgs(codec, quality = { mode: 'crf', level: 'normal' }) {
+// Con la tarjeta gráfica (settings.hw = 'nvenc' | 'qsv' | 'amf', solo H.264 y H.265): mucho más rápido, archivos
+// algo mayores con la misma calidad. Los niveles de calidad se traducen a su escala (CQ/ICQ/QP).
+const HW_Q = {
+  h264: { high: 19, normal: 23, light: 29 },
+  h265: { high: 21, normal: 26, light: 31 },
+};
+function hwVideoArgs(codec, quality, hw) {
+  const lib = `${codec === 'h265' ? 'hevc' : 'h264'}_${hw}`;
+  const q = String(HW_Q[codec][quality.level] ?? HW_Q[codec].normal);
+  const kbps = Math.round((quality.mbps || 8) * 1000);
+  const bitrate = quality.mode === 'bitrate';
+  const peak = ['-maxrate', `${Math.round(kbps * 1.5)}k`, '-bufsize', `${kbps * 2}k`];
+  const tag = codec === 'h265' ? ['-tag:v', 'hvc1'] : [];
+  if (hw === 'nvenc') {
+    return ['-c:v', lib, '-preset', 'p5', '-tune', 'hq', '-rc', 'vbr', ...(bitrate ? ['-b:v', `${kbps}k`, ...peak] : ['-cq', q, '-b:v', '0']), '-pix_fmt', 'yuv420p', ...tag];
+  }
+  if (hw === 'qsv') {
+    return ['-c:v', lib, '-preset', 'medium', ...(bitrate ? ['-b:v', `${kbps}k`, ...peak] : ['-global_quality', q]), '-pix_fmt', 'nv12', ...tag];
+  }
+  return ['-c:v', lib, '-quality', 'balanced', ...(bitrate ? ['-rc', 'vbr_peak', '-b:v', `${kbps}k`, ...peak] : ['-rc', 'cqp', '-qp_i', q, '-qp_p', q, '-qp_b', q]), '-pix_fmt', 'yuv420p', ...tag];
+}
+function videoArgs(codec, quality = { mode: 'crf', level: 'normal' }, hw = null) {
+  if (hw && (codec === 'h264' || codec === 'h265')) return hwVideoArgs(codec, quality, hw);
   const crf = CRF[codec][quality.level] ?? CRF[codec].normal;
   const kbps = Math.round((quality.mbps || 8) * 1000);
   const rate = quality.mode === 'bitrate'
@@ -362,8 +384,8 @@ function videoArgs(codec, quality = { mode: 'crf', level: 'normal' }) {
   return ['-c:v', 'libvpx-vp9', '-deadline', 'good', '-cpu-used', '2', '-row-mt', '1', ...rate, '-pix_fmt', 'yuv420p'];
 }
 const OUTPUT_FORMATS = {
-  'mp4-h264': { video: (q) => videoArgs('h264', q), audio: (k) => ['-c:a', 'aac', '-b:a', `${k}k`], extra: ['-movflags', '+faststart'] },
-  'mp4-h265': { video: (q) => videoArgs('h265', q), audio: (k) => ['-c:a', 'aac', '-b:a', `${k}k`], extra: ['-movflags', '+faststart'] },
+  'mp4-h264': { video: (q, hw) => videoArgs('h264', q, hw), audio: (k) => ['-c:a', 'aac', '-b:a', `${k}k`], extra: ['-movflags', '+faststart'] },
+  'mp4-h265': { video: (q, hw) => videoArgs('h265', q, hw), audio: (k) => ['-c:a', 'aac', '-b:a', `${k}k`], extra: ['-movflags', '+faststart'] },
   webm: { video: (q) => videoArgs('vp9', q), audio: (k) => ['-c:a', 'libopus', '-b:a', `${k}k`], extra: [] },
   'mov-prores': {
     video: () => ['-c:v', 'prores_ks', '-profile:v', '3', '-pix_fmt', 'yuv422p10le', '-vendor', 'apl0'],
@@ -707,7 +729,7 @@ function buildRender(project, settings, outPath) {
     ...(format.audioOnly ? [] : ['-map', '[vout]']),
     ...(format.gif || format.still ? [] : ['-map', '[aout]']),
     ...(subs !== null ? ['-map', `${subs}:s`, '-c:s', subCodec, '-metadata:s:s:0', 'language=spa'] : []),
-    ...(format.video ? [...format.video(settings.quality), '-r', fps] : format.gif ? ['-r', fps] : []),
+    ...(format.video ? [...format.video(settings.quality, settings.hw), '-r', fps] : format.gif ? ['-r', fps] : []),
     ...(format.audio ? format.audio(settings.audioKbps || 192) : []),
     '-t', num(duration), ...format.extra,
     outPath,
@@ -756,6 +778,16 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
     await fs.promises.writeFile(subtitlesFile, project.subtitlesSrt, 'utf8');
     temp.push(subtitlesFile);
   }
+  // Se marca si el proceso lo para quien lo lanzó (cancelar): entonces no se repite con el procesador.
+  let killed = false;
+  const spawned = (proc) => {
+    const kill = proc.kill.bind(proc);
+    proc.kill = (...a) => {
+      killed = true;
+      return kill(...a);
+    };
+    onSpawn?.(proc);
+  };
   const pass = async (opts, out, from, share, edit = (a) => a) => {
     const { args, filterGraph, duration } = buildRender({ ...project, media, subtitlesFile: opts.format === 'wav' ? null : subtitlesFile }, opts, out);
     const scriptPath = path.join(os.tmpdir(), `cortex-filtros-${stamp}-${temp.length}.txt`);
@@ -764,7 +796,7 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
     args[args.indexOf(null)] = scriptPath;
     return run(ffmpegPath, edit(args), {
       cwd: os.tmpdir(),
-      onSpawn,
+      onSpawn: spawned,
       onLine: (line) => {
         const m = /^out_time_(?:us|ms)=(\d+)/.exec(line);
         if (m && onProgress) onProgress(from + share * Math.min(1, Number(m[1]) / 1e6 / duration));
@@ -789,7 +821,14 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
       opts = m && Number.isFinite(Number(m.input_i)) ? { ...settings, loudnessMeasured: m } : { ...settings, loudness: null };
       from = 0.2;
     }
-    return await pass(opts, outPath, from, 1 - from);
+    const result = await pass(opts, outPath, from, 1 - from);
+    // Si la tarjeta gráfica falla (controlador antiguo, sin memoria, tamaño que no admite…), se repite con el
+    // procesador. `cpuFallback` avisa a la interfaz.
+    if (result.code !== 0 && opts.hw && !killed) {
+      const retry = await pass({ ...opts, hw: null }, outPath, from, 1 - from);
+      return { ...retry, cpuFallback: retry.code === 0 ? result.stderr.trim().split('\n').pop() || 'error' : undefined };
+    }
+    return result;
   } finally {
     for (const file of temp) fs.promises.unlink(file).catch(() => {});
   }

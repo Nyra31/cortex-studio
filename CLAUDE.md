@@ -123,6 +123,17 @@ Hechas las tres fases de «transiciones y efectos de sonido y video como los de 
 
 Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opacidad, modos de fusión, transiciones en los fundidos, guardar la selección de tiempo y proxies). Pendiente: firma (v1.0).
 
+**Para la v1.0 (el usuario quiere todas antes de publicarla; marcar [x] al terminar cada una):**
+- [x] Renderizar con la tarjeta gráfica (`settings.hw` = nvenc/qsv/amf → `hwVideoArgs` en `ffmpeg.js`, niveles de calidad en `HW_Q`; `RenderDialog` ofrece las familias que da `compressEncoders`; si falla, `render` repite con el procesador salvo si se canceló (`killed`) y devuelve `cpuFallback`. Medido: 4K H.264 50 s → 7 s, 4K H.265 96 s → 6 s; en 1080p sencillo apenas cambia)
+- [ ] Pantalla de inicio con proyectos recientes
+- [ ] Invertir un evento (reproducir hacia atrás)
+- [ ] Estabilizar un video movido (vidstab, dos pasadas)
+- [ ] Reducción de ruido de voz (arnndn/afftdn) en los efectos de audio
+- [ ] Subtítulos automáticos (Whisper en el equipo, descargado la primera vez como yt-dlp)
+- [ ] Registro de errores y repaso de rendimiento (perfil de CPU, proyecto largo)
+- [ ] Firma del instalador: flujo de GitHub Actions y sección del README para SignPath (la solicitud la envía el usuario)
+- [ ] (Opcional, preguntar antes) Interfaz en inglés
+
 **Lista de la v0.7 (todo hecho y publicado en la v0.7.0; se deja como referencia de dónde está cada cosa):**
 - [x] Deslizar el contenido del evento (slip, Alt + arrastrar; `slip` en `onEventDown`)
 - [x] Sustituir el medio de un evento (Ctrl + soltar un medio sobre él; `replaceMedia`)
