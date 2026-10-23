@@ -834,4 +834,46 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
   }
 }
 
-module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, detectScenes, run, ffmpegPath, ffprobePath };
+// Invertir: el trozo [start, start + length) del medio, al revés, en `out` (MP4 H.264 + AAC, o M4A si solo hay
+// sonido). `reverse`/`areverse` guardan en memoria todo lo que invierten, así que se hace por trozos de unos 4 s
+// (un número entero de fotogramas), del último al primero, en MKV con video casi sin pérdida y audio PCM; luego se
+// unen sin recodificar el video y el audio se codifica una sola vez (así no quedan huecos entre trozos).
+async function reverseClip(file, start, length, out, { hasVideo = true, hasAudio = true, fps = null, onProgress } = {}) {
+  const chunk = fps ? Math.max(1, Math.round(4 * fps)) / fps : 4;
+  const count = Math.max(1, Math.ceil(length / chunk - 1e-6));
+  const stamp = `${process.pid}-${Date.now()}`;
+  const temp = [];
+  try {
+    for (let k = 0; k < count; k++) {
+      const i = count - 1 - k;
+      const s = start + i * chunk;
+      const len = Math.min(chunk, start + length - s);
+      const part = path.join(os.tmpdir(), `cortex-invertir-${stamp}-${k}.mkv`);
+      temp.push(part);
+      const r = await run(ffmpegPath, [
+        '-hide_banner', '-v', 'error', '-y', '-ss', s.toFixed(6), '-t', len.toFixed(6), '-i', file,
+        ...(hasVideo ? ['-map', '0:v:0', '-vf', 'reverse', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p'] : []),
+        ...(hasAudio ? ['-map', '0:a:0?', '-af', 'areverse', '-c:a', 'pcm_s16le'] : []),
+        part,
+      ]);
+      if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+      onProgress?.((k + 1) / (count + 1));
+    }
+    const list = path.join(os.tmpdir(), `cortex-invertir-${stamp}.txt`);
+    temp.push(list);
+    await fs.promises.writeFile(list, `ffconcat version 1.0\n${temp.slice(0, -1).map((f) => `file '${f.replace(/\\/g, '/')}'`).join('\n')}\n`, 'utf8');
+    const r = await run(ffmpegPath, [
+      '-hide_banner', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list,
+      ...(hasVideo ? ['-map', '0:v:0', '-c:v', 'copy'] : []),
+      ...(hasAudio ? ['-map', '0:a:0?', '-c:a', 'aac', '-b:a', '256k'] : []),
+      '-movflags', '+faststart', out,
+    ]);
+    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+    onProgress?.(1);
+    return out;
+  } finally {
+    for (const f of temp) fs.promises.unlink(f).catch(() => {});
+  }
+}
+
+module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, detectScenes, reverseClip, run, ffmpegPath, ffprobePath };

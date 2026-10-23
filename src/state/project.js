@@ -161,6 +161,9 @@ export const EVENT_DEFAULTS = {
   // Transición en un fundido de video (id de transitions.js o null): en vez de transparentarse, el evento entra o
   // sale con esa transición hacia lo que hay debajo, como al soltar una transición sobre un fundido en VEGAS.
   fadeInTransition: null, fadeOutTransition: null,
+  // Evento invertido (reproducido hacia atrás): usa un archivo con el trozo al revés y guarda de dónde viene
+  // ({ mediaId, start, span }: segundos del medio original) para poder quitar la inversión (ver setReversed).
+  reversed: null,
 };
 
 // Modos de fusión de las pistas de video (track.blend; sin él, normal), como los modos de composición de VEGAS.
@@ -625,6 +628,32 @@ export function freezeFrame(project, eventId, t, media, duration) {
     pan: panActive(ev.pan) ? { ...ev.pan, keyframes: [{ ...panAt(ev.pan, local), t: 0 }] } : null,
   };
   return { ...next, media: [...next.media, media], events: [...next.events, still] };
+}
+
+// Rampa de velocidad reflejada (lo que pasaba en t pasa en duration − t).
+const mirrorSpeed = (speed, duration) => (speed?.length ? speed.map((p) => ({ ...p, t: duration - p.t })).reverse() : speed ?? null);
+
+// Invertir el evento eventId y su grupo (los del mismo medio): con `media` (el trozo [start, start + span) del medio
+// al revés, ver reverseClip), pasan a usarlo desde el punto equivalente; con media = null, vuelven al original. El
+// punto se calcula a partir de lo que usa el evento ahora, así que vale aunque se haya recortado o dividido después.
+export function setReversed(project, eventId, media, start, span) {
+  const ev = project.events.find((e) => e.id === eventId);
+  if (!ev) return project;
+  const group = new Set(project.events
+    .filter((e) => e.id === ev.id || (ev.groupId && e.groupId === ev.groupId && e.mediaId === ev.mediaId))
+    .map((e) => e.id));
+  const events = project.events.map((e) => {
+    if (!group.has(e.id)) return e;
+    const used = sourceOffset(e, e.duration);
+    if (media) {
+      // Lo que empezaba en el medio en `a` pasa a empezar en start + span − (a + usado).
+      return { ...e, mediaId: media.id, inPoint: Math.max(0, start + span - (e.inPoint + used)), speed: mirrorSpeed(e.speed, e.duration), reversed: { mediaId: e.mediaId, start, span } };
+    }
+    if (!e.reversed) return e;
+    const r = e.reversed;
+    return { ...e, mediaId: r.mediaId, inPoint: Math.max(0, r.start + r.span - (e.inPoint + used)), speed: mirrorSpeed(e.speed, e.duration), reversed: null };
+  });
+  return { ...project, media: media && !project.media.some((m) => m.id === media.id) ? [...project.media, media] : project.media, events };
 }
 
 // Cuánto de los huecos G queda antes de t.

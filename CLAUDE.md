@@ -126,7 +126,7 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 **Para la v1.0 (el usuario quiere todas antes de publicarla; marcar [x] al terminar cada una):**
 - [x] Renderizar con la tarjeta gráfica (`settings.hw` = nvenc/qsv/amf → `hwVideoArgs` en `ffmpeg.js`, niveles de calidad en `HW_Q`; `RenderDialog` ofrece las familias que da `compressEncoders`; si falla, `render` repite con el procesador salvo si se canceló (`killed`) y devuelve `cpuFallback`. Medido: 4K H.264 50 s → 7 s, 4K H.265 96 s → 6 s; en 1080p sencillo apenas cambia)
 - [x] Pantalla de inicio con proyectos recientes (`recientes.json` en userData: `noteRecent` al abrir y guardar, `recent:list`/`recent:remove`, `project:openPath` solo abre .cortex de la lista; `ProjectDialog` en modo `startup`/`recent` con la columna de recientes)
-- [ ] Invertir un evento (reproducir hacia atrás)
+- [x] Invertir un evento (`reverseClip` en `ffmpeg.js`: trozos de ~4 s a fotogramas enteros, del último al primero, `reverse`/`areverse` a MKV H.264 crf 14 + PCM, `concat` sin recodificar el video y AAC una vez; `media:reverse` → «Invertidos»; `setReversed` en `project.js` cambia el medio del evento y su grupo, refleja `speed` y guarda `reversed = { mediaId, start, span }` para volver (inPoint = start + span − (inPoint + usado)). Comprobado: fotograma k = original 299 − k, también en las uniones de trozos)
 - [ ] Estabilizar un video movido (vidstab, dos pasadas)
 - [ ] Reducción de ruido de voz (arnndn/afftdn) en los efectos de audio
 - [ ] Subtítulos automáticos (Whisper en el equipo, descargado la primera vez como yt-dlp)

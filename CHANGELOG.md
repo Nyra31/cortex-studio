@@ -4,6 +4,7 @@ Los instaladores de cada versión están en las [releases de GitHub](https://git
 
 ## Sin publicar
 
+- **Invertir** un evento (reproducirlo hacia atrás) y quitar la inversión.
 - **Pantalla de inicio** con los proyectos recientes (también en *Archivo → Proyectos recientes…*).
 - **Renderizar con la tarjeta gráfica** (NVIDIA, Intel o AMD) en MP4 H.264 y H.265: varias veces más rápido en 4K y H.265; si falla, se renderiza con el procesador.
 - **Comprimir videos** (Ctrl+Mayús+C): compresor por lotes al estilo de HandBrake con preajustes y preajustes propios; H.264, H.265, VP9 y AV1 con el procesador o la tarjeta gráfica; calidad constante, tasa de bits o tamaño de archivo objetivo (dos pasadas); resolución máxima, recorte automático de bandas negras, desentrelazado, reducción de ruido, HDR a SDR; pistas de audio, subtítulos y capítulos; muestra de 10 s con el tamaño estimado.

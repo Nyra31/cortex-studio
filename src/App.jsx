@@ -26,7 +26,7 @@ import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
   EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, loadView, mediaLength, pasteEvents,
-  freezeFrame as freezeFrameAt, splitAtSourceTimes, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
+  freezeFrame as freezeFrameAt, setReversed, splitAtSourceTimes, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
   moveTrack, splitRange, trimToCursor, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
@@ -501,6 +501,33 @@ export default function App() {
     }
   }, [noteAnalyzed, setProject]);
 
+  // Invertir un evento (y su grupo): FFmpeg genera el trozo de medio que usa al revés (en «Invertidos») y el evento
+  // pasa a usarlo; si ya estaba invertido, vuelve al original.
+  const reverseEvent = useCallback(async (ev) => {
+    if (ev.reversed) {
+      setProject((cur) => setReversed(cur, ev.id, null));
+      setStatus('El evento vuelve a reproducirse hacia delante.');
+      return;
+    }
+    const { project: p, projectPath: file } = live.current;
+    const m = p.media.find((x) => x.id === ev.mediaId);
+    if (!m || m.isImage || m.missing || isText(m)) return;
+    setPlaying(false);
+    const span = sourceOffset(ev, ev.duration);
+    const off = api.onReverseProgress((f) => setStatus(`Invirtiendo «${m.name}»: ${Math.round(f * 100)} %…`));
+    try {
+      setStatus(`Invirtiendo «${m.name}»…`);
+      const out = await api.reverseClip(m.path, ev.inPoint, span, file, { hasVideo: !!m.hasVideo, hasAudio: !!m.hasAudio, fps: m.fps || null });
+      const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(out)) };
+      setProject((cur) => setReversed(cur, ev.id, media, ev.inPoint, span));
+      setStatus(`Evento invertido (guardado en ${out}).`);
+    } catch (err) {
+      setStatus(`No se pudo invertir: ${err.message}`);
+    } finally {
+      off();
+    }
+  }, [noteAnalyzed, setProject]);
+
   // Detectar escenas: divide el evento de video (y su grupo) en cada cambio de plano del trozo de medio que usa.
   const detectScenes = useCallback(async (ev) => {
     const m = live.current.project.media.find((x) => x.id === ev.mediaId);
@@ -885,6 +912,12 @@ export default function App() {
           action: () => setProject((cur) => splitEvents(cur, live.current.time, ids)),
           disabled: !selected.some((e) => e.start < t && t < e.start + e.duration),
         },
+        ...(media && !media.isImage && !isText(media) && !media.missing
+          ? [{
+            label: info.event.reversed ? 'Quitar la inversión (reproducir hacia delante)' : 'Invertir (reproducir hacia atrás)',
+            action: () => reverseEvent(info.event),
+          }]
+          : []),
         ...(isVideo && media && !media.isImage
           ? [
             { label: 'Congelar fotograma en el cursor', shortcut: 'Ctrl+Mayús+F', action: freezeFrame, disabled: !(info.event.start <= t && t < info.event.start + info.event.duration) },

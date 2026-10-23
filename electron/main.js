@@ -223,6 +223,26 @@ ipcMain.handle('media:scenes', async (event, filePath, start, length) => {
   });
 });
 
+// Invertir: el trozo del medio que usa un evento, al revés, en «Invertidos» junto al proyecto (o en Documentos si
+// aún no está guardado). opts = { hasVideo, hasAudio, fps }. Progreso por `reverse:progress`. Devuelve la ruta.
+ipcMain.handle('media:reverse', async (event, filePath, start, length, projectPath, opts) => {
+  const file = path.resolve(filePath);
+  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  const dir = projectPath
+    ? path.join(path.dirname(projectPath), 'Invertidos')
+    : path.join(app.getPath('documents'), 'Cortex Studio', 'Invertidos');
+  await fs.promises.mkdir(dir, { recursive: true });
+  const base = path.basename(file, path.extname(file));
+  const ext = opts?.hasVideo === false ? 'm4a' : 'mp4';
+  let n = 1;
+  const name = (i) => path.join(dir, `${base} - invertido ${String(i).padStart(2, '0')}.${ext}`);
+  while (fs.existsSync(name(n))) n++;
+  return ff.reverseClip(file, start, length, name(n), {
+    ...opts,
+    onProgress: (p) => event.sender.send('reverse:progress', p),
+  });
+});
+
 // Congelar fotograma: el fotograma del medio en `time` (segundos del medio) como PNG en «Fotogramas» junto al
 // proyecto (o en Documentos si aún no está guardado). Devuelve la ruta.
 ipcMain.handle('media:frame', async (_e, filePath, time, projectPath) => {
