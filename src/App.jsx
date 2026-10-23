@@ -991,6 +991,18 @@ export default function App() {
     if (confirmDiscard()) setProjectDialog('new');
   }, []);
 
+  // Pantalla de inicio: proyectos recientes (los guarda main.js al abrir y al guardar).
+  const [recents, setRecents] = useState(null);
+  const startScreen = projectDialog === 'startup' || projectDialog === 'recent';
+  useEffect(() => {
+    if (!startScreen) return;
+    setRecents(null);
+    api.recentProjects().then(setRecents).catch(() => setRecents([]));
+  }, [startScreen]);
+  const showRecent = useCallback(() => {
+    if (confirmDiscard()) setProjectDialog('recent');
+  }, []);
+
   const acceptProjectDialog = (settings) => {
     if (projectDialog === 'edit') {
       // Las miniaturas de los textos dependen de la proporción del proyecto.
@@ -1100,6 +1112,19 @@ export default function App() {
     setStatus(missing ? `${what}. Faltan ${missing} archivo(s) de medios.` : what);
   }, [history, noteAnalyzed]);
 
+  const openRecent = useCallback(async (filePath) => {
+    let result;
+    try {
+      result = await api.openProjectPath(filePath);
+    } catch (err) {
+      window.alert(`No se pudo abrir el proyecto: ${String(err.message).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`);
+      setRecents(await api.recentProjects());
+      return;
+    }
+    setProjectDialog(null);
+    await loadData(result.data, result.path);
+  }, [loadData]);
+
   const open = useCallback(async () => {
     if (!confirmDiscard()) return;
     let result;
@@ -1188,6 +1213,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       items: [
         { label: 'Nuevo…', shortcut: 'Ctrl+N', action: newProject },
         { label: 'Abrir…', shortcut: 'Ctrl+O', action: open },
+        { label: 'Proyectos recientes…', action: showRecent },
         { label: 'Guardar', shortcut: 'Ctrl+S', action: () => save(false) },
         { label: 'Guardar como…', shortcut: 'Ctrl+Mayús+S', action: () => save(true) },
         { label: 'Recopilar medios y guardar en una carpeta…', action: collect },
@@ -1636,6 +1662,25 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           initial={project.settings}
           onAccept={acceptProjectDialog}
           onCancel={() => setProjectDialog(null)}
+          recents={recents}
+          onOpenRecent={openRecent}
+          onOpenOther={async () => {
+            let result;
+            try {
+              result = await api.openProject();
+            } catch (err) {
+              window.alert(`No se pudo abrir el proyecto: ${err.message}`);
+              return;
+            }
+            if (result) {
+              setProjectDialog(null);
+              await loadData(result.data, result.path);
+            }
+          }}
+          onRemoveRecent={async (p) => {
+            await api.removeRecent(p);
+            setRecents(await api.recentProjects());
+          }}
         />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}

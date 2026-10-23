@@ -21,7 +21,20 @@ function initialState({ width, height, fps }) {
 }
 
 // Ventana de proyecto nuevo y de propiedades del proyecto (mode: 'startup' | 'new' | 'edit').
-export default function ProjectDialog({ mode, initial, onAccept, onCancel }) {
+const fileName = (p) => p.split(/[\\/]/).pop().replace(/\.cortex$/i, '');
+const folderName = (p) => p.split(/[\\/]/).slice(0, -1).join('\\');
+const when = (ms) => {
+  const days = Math.floor((Date.now() - ms) / 86400000);
+  if (days < 1) return `hoy, ${new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+  if (days === 1) return 'ayer';
+  if (days < 7) return `hace ${days} días`;
+  return new Date(ms).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+// Nuevo proyecto / propiedades. En la pantalla de inicio ('startup', o 'recent' desde el menú), a la izquierda
+// están los proyectos recientes (recents = [{ path, openedAt, exists, modifiedAt }] o null mientras se leen).
+export default function ProjectDialog({ mode, initial, onAccept, onCancel, recents = null, onOpenRecent, onOpenOther, onRemoveRecent }) {
+  const start = mode === 'startup' || mode === 'recent';
   const [state, setState] = useState(() => initialState(initial));
   const { vertical, preset, fps } = state;
 
@@ -39,7 +52,7 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel }) {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') onCancel();
-      if (e.key === 'Enter' && !['SELECT', 'BUTTON'].includes(e.target.tagName)) accept();
+      if (e.key === 'Enter' && !['SELECT', 'BUTTON', 'LI'].includes(e.target.tagName)) accept();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -55,9 +68,46 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal project-dialog">
-        <div className="modal-title">{mode === 'edit' ? 'Propiedades del proyecto' : 'Nuevo proyecto'}</div>
+      <div className={`modal project-dialog${start ? ' start-dialog' : ''}`}>
+        <div className="modal-title">{mode === 'edit' ? 'Propiedades del proyecto' : start ? 'Cortex Studio' : 'Nuevo proyecto'}</div>
+        <div className={start ? 'start-columns' : 'start-plain'}>
+        {start && (
+          <div className="start-recent">
+            <div className="field-label">Proyectos recientes</div>
+            {recents === null && <p className="note">Cargando…</p>}
+            {recents?.length === 0 && <p className="note">Aún no hay ninguno. Los proyectos que abras o guardes aparecerán aquí.</p>}
+            <ul className="recent-list">
+              {recents?.map((r) => (
+                <li
+                  key={r.path}
+                  tabIndex={0}
+                  className={r.exists ? '' : 'missing'}
+                  title={r.path}
+                  onClick={() => r.exists && onOpenRecent(r.path)}
+                  onKeyDown={(e) => e.key === 'Enter' && r.exists && onOpenRecent(r.path)}
+                >
+                  <div className="recent-name">{fileName(r.path)}</div>
+                  <div className="note">
+                    {r.exists ? `${when(r.modifiedAt || r.openedAt)} · ${folderName(r.path)}` : 'No se encuentra (movido o borrado)'}
+                  </div>
+                  <button
+                    className="recent-remove"
+                    title="Quitar de la lista (no borra el archivo)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveRecent(r.path);
+                    }}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button onClick={onOpenOther}>Abrir otro proyecto…</button>
+          </div>
+        )}
         <div className="modal-content">
+          {start && <div className="field-label start-new">Nuevo proyecto</div>}
           <div className="field-label">Orientación</div>
           <div className="orientation">
             <button className={!vertical ? 'choice active' : 'choice'} onClick={() => setOrientation(false)}>
@@ -141,10 +191,11 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel }) {
             <p className="note">Los cambios afectan a la vista previa y al renderizado; los eventos no se modifican.</p>
           )}
         </div>
+        </div>
         <div className="modal-actions">
           <button onClick={onCancel}>{mode === 'startup' ? 'Usar valores por defecto' : 'Cancelar'}</button>
           <button className="primary" onClick={accept} disabled={!valid}>
-            Aceptar
+            {start ? 'Crear el proyecto' : 'Aceptar'}
           </button>
         </div>
       </div>

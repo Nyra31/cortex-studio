@@ -125,7 +125,7 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 
 **Para la v1.0 (el usuario quiere todas antes de publicarla; marcar [x] al terminar cada una):**
 - [x] Renderizar con la tarjeta gráfica (`settings.hw` = nvenc/qsv/amf → `hwVideoArgs` en `ffmpeg.js`, niveles de calidad en `HW_Q`; `RenderDialog` ofrece las familias que da `compressEncoders`; si falla, `render` repite con el procesador salvo si se canceló (`killed`) y devuelve `cpuFallback`. Medido: 4K H.264 50 s → 7 s, 4K H.265 96 s → 6 s; en 1080p sencillo apenas cambia)
-- [ ] Pantalla de inicio con proyectos recientes
+- [x] Pantalla de inicio con proyectos recientes (`recientes.json` en userData: `noteRecent` al abrir y guardar, `recent:list`/`recent:remove`, `project:openPath` solo abre .cortex de la lista; `ProjectDialog` en modo `startup`/`recent` con la columna de recientes)
 - [ ] Invertir un evento (reproducir hacia atrás)
 - [ ] Estabilizar un video movido (vidstab, dos pasadas)
 - [ ] Reducción de ruido de voz (arnndn/afftdn) en los efectos de audio

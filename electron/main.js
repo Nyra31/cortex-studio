@@ -362,6 +362,7 @@ ipcMain.handle('project:save', async (_e, data, filePath) => {
     target = res.filePath;
   }
   await writeProject(target, data);
+  await noteRecent(target);
   return target;
 });
 
@@ -477,6 +478,53 @@ ipcMain.handle('autosave:check', async () => {
   }
 });
 
+// Proyectos recientes (pantalla de inicio): userData/recientes.json = [{ path, openedAt }], los últimos abiertos o
+// guardados primero, como mucho RECENT_MAX.
+const RECENT_MAX = 12;
+const recentPath = () => path.join(app.getPath('userData'), 'recientes.json');
+async function readRecent() {
+  try {
+    const list = JSON.parse(await fs.promises.readFile(recentPath(), 'utf8'));
+    return Array.isArray(list) ? list.filter((r) => typeof r?.path === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+async function writeRecent(list) {
+  await fs.promises.mkdir(path.dirname(recentPath()), { recursive: true }).catch(() => {});
+  await fs.promises.writeFile(recentPath(), JSON.stringify(list.slice(0, RECENT_MAX)), 'utf8').catch(() => {});
+}
+async function noteRecent(filePath) {
+  const key = path.resolve(filePath).toLowerCase();
+  const list = (await readRecent()).filter((r) => path.resolve(r.path).toLowerCase() !== key);
+  await writeRecent([{ path: path.resolve(filePath), openedAt: Date.now() }, ...list]);
+}
+ipcMain.handle('recent:list', async () => {
+  const list = await readRecent();
+  return Promise.all(list.map(async (r) => {
+    try {
+      const st = await fs.promises.stat(r.path);
+      return { ...r, exists: true, modifiedAt: st.mtimeMs };
+    } catch {
+      return { ...r, exists: false };
+    }
+  }));
+});
+ipcMain.handle('recent:remove', async (_e, filePath) => {
+  const key = path.resolve(filePath).toLowerCase();
+  await writeRecent((await readRecent()).filter((r) => path.resolve(r.path).toLowerCase() !== key));
+});
+// Abrir un proyecto de la lista de recientes (solo archivos .cortex que estén en ella).
+ipcMain.handle('project:openPath', async (_e, filePath) => {
+  const key = path.resolve(filePath).toLowerCase();
+  if (!/\.cortex$/i.test(key) || !(await readRecent()).some((r) => path.resolve(r.path).toLowerCase() === key)) {
+    throw new Error('El proyecto no está en la lista de recientes');
+  }
+  const data = await readProject(filePath);
+  await noteRecent(filePath);
+  return { path: path.resolve(filePath), data };
+});
+
 ipcMain.handle('project:open', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: 'Abrir proyecto',
@@ -485,7 +533,9 @@ ipcMain.handle('project:open', async () => {
   });
   if (res.canceled || !res.filePaths.length) return null;
   const filePath = res.filePaths[0];
-  return { path: filePath, data: await readProject(filePath) };
+  const data = await readProject(filePath);
+  await noteRecent(filePath);
+  return { path: filePath, data };
 });
 
 // type = { name, ext } del formato elegido en la ventana de render.
