@@ -5,6 +5,7 @@ const { Readable } = require('stream');
 const crypto = require('crypto');
 const ff = require('./ffmpeg');
 const youtube = require('./youtube');
+const compressor = require('./compressor');
 
 // Actualizaciones automáticas (electron-updater, releases de GitHub: latest.yml + instalador). Solo en la app
 // instalada: al arrancar busca una versión nueva, la descarga en segundo plano y la interfaz pregunta si
@@ -656,6 +657,37 @@ ipcMain.handle('youtube:download', async (_e, opts) => {
 });
 ipcMain.handle('youtube:cancel', () => youtube.cancel());
 ipcMain.handle('youtube:defaultDir', () => app.getPath('downloads'));
+// ---- Compresor de video (ver compressor.js) ----
+// Progreso por `compress:progress`. Las muestras de 10 s se pueden abrir en el reproductor del sistema
+// (`compress:openSample`, solo las que ha creado el compresor) y se borran al salir.
+const samples = new Set();
+const sendCompress = (p) => mainWindow?.webContents.send('compress:progress', p);
+ipcMain.handle('compress:encoders', () => compressor.availableEncoders());
+ipcMain.handle('compress:inspect', (_e, file, settings) => compressor.inspect(file, settings));
+ipcMain.handle('compress:run', (_e, file, settings) => compressor.compress(file, settings, sendCompress));
+ipcMain.handle('compress:sample', async (_e, file, settings) => {
+  const r = await compressor.sample(file, settings, (p) => sendCompress({ ...p, sample: true }));
+  if (r.path) samples.add(r.path);
+  return r;
+});
+ipcMain.handle('compress:cancel', () => compressor.cancel());
+ipcMain.handle('compress:openSample', (_e, file) => (samples.has(file) ? shell.openPath(file) : null));
+ipcMain.handle('compress:pick', async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: 'Videos para comprimir',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Videos', extensions: ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'wmv', 'flv', 'mpg', 'mpeg', 'ts', 'mts', 'm2ts', '3gp', 'ogv', 'vob', 'mxf'] }, { name: 'Todos los archivos', extensions: ['*'] }],
+  });
+  return res.canceled ? [] : res.filePaths;
+});
+app.on('will-quit', () => {
+  for (const f of samples) {
+    try {
+      fs.unlinkSync(f);
+    } catch {}
+  }
+});
+
 ipcMain.handle('dialog:folder', async (_e, title, defaultPath) => {
   const res = await dialog.showOpenDialog(mainWindow, { title, defaultPath, properties: ['openDirectory', 'createDirectory', 'promptToCreate'] });
   return res.canceled || !res.filePaths.length ? null : res.filePaths[0];
@@ -678,6 +710,7 @@ app.on('window-all-closed', () => {
   if (renderProcess) renderProcess.cancel();
   if (proxyProc) proxyProc.kill();
   youtube.cancel();
+  compressor.cancel();
   // «Reiniciar y actualizar»: el instalador (sin preguntas) sustituye la aplicación y la vuelve a abrir.
   if (installOnClose && autoUpdater) autoUpdater.quitAndInstall(true, true);
   else if (process.platform !== 'darwin') app.quit();

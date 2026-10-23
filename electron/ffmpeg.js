@@ -795,4 +795,4 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
   }
 }
 
-module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, detectScenes, ffmpegPath, ffprobePath };
+module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, detectScenes, run, ffmpegPath, ffprobePath };

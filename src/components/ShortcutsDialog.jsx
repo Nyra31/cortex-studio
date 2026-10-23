@@ -14,6 +14,7 @@ const SHORTCUTS = [
   ['Ctrl+Mayús+E', 'Exportar el fotograma como imagen PNG'],
   ['Ctrl+Mayús+F', 'Congelar fotograma en el cursor'],
   ['Ctrl+Mayús+D', 'Descargar de YouTube'],
+  ['Ctrl+Mayús+C', 'Comprimir videos'],
   ['Supr', 'Eliminar eventos seleccionados'],
   ['Ctrl+L', 'Edición en cascada (cerrar huecos, desplazar lo de detrás)'],
   ['Ctrl+Supr', 'Eliminar el tramo de la selección de tiempo y cerrar el hueco'],

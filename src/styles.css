@@ -2297,3 +2297,137 @@ kbd {
 .youtube-job .progress {
   margin: 6px 0 4px;
 }
+
+/* Comprimir videos */
+.modal.compress-dialog {
+  width: 760px;
+}
+.compress-dialog .modal-content {
+  overflow-y: auto;
+}
+.compress-files-bar,
+.compress-preset,
+.compress-sample,
+.compress-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.compress-files-bar {
+  margin-bottom: 4px;
+}
+.compress-list {
+  min-height: 64px;
+  max-height: 150px;
+  overflow-y: auto;
+  background: var(--panel-lo);
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  padding: 4px;
+  margin-bottom: 12px;
+}
+.compress-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 2fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: default;
+}
+.compress-item.selected {
+  background: var(--accent-dim);
+}
+.compress-item.error .compress-state {
+  color: #e07070;
+}
+.compress-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compress-state {
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 0;
+}
+.compress-state span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compress-preset {
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+.compress-preset label {
+  flex: 1;
+  margin-bottom: 0;
+}
+.compress-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+}
+.compress-tabs button {
+  border: none;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 5px 12px;
+}
+.compress-tabs button.active {
+  background: var(--panel-hi);
+  color: var(--text);
+}
+.compress-slider {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 6px 22px;
+}
+.compress-inline {
+  margin: 0 0 6px 22px;
+}
+.compress-inline input[type='number'] {
+  width: 90px;
+}
+.modal .compress-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 0 10px;
+}
+.compress-info {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-bottom: 10px;
+  display: grid;
+  gap: 6px;
+}
+.compress-output {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+}
+.compress-output select {
+  min-width: 0;
+}
+.compress-checks {
+  grid-auto-flow: column;
+  justify-content: start;
+  column-gap: 18px;
+}
+.compress-output > * {
+  min-width: 0;
+}
+.compress-output .youtube-url select {
+  flex: 1;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+.compress-output .youtube-dir {
+  grid-template-columns: minmax(0, 1fr);
+}

@@ -55,6 +55,19 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('proxy:progress', handler);
     return () => ipcRenderer.removeListener('proxy:progress', handler);
   },
+  // Compresor de video (ver electron/compressor.js).
+  compressEncoders: () => ipcRenderer.invoke('compress:encoders'),
+  compressInspect: (file, settings) => ipcRenderer.invoke('compress:inspect', file, settings),
+  compressRun: (file, settings) => ipcRenderer.invoke('compress:run', file, settings),
+  compressSample: (file, settings) => ipcRenderer.invoke('compress:sample', file, settings),
+  compressCancel: () => ipcRenderer.invoke('compress:cancel'),
+  compressOpenSample: (file) => ipcRenderer.invoke('compress:openSample', file),
+  compressPick: () => ipcRenderer.invoke('compress:pick'),
+  onCompressProgress: (callback) => {
+    const handler = (_e, info) => callback(info);
+    ipcRenderer.on('compress:progress', handler);
+    return () => ipcRenderer.removeListener('compress:progress', handler);
+  },
   // Descargas de YouTube (yt-dlp, ver electron/youtube.js).
   youtubeInfo: (url, playlist) => ipcRenderer.invoke('youtube:info', url, playlist),
   youtubeDownload: (opts) => ipcRenderer.invoke('youtube:download', opts),

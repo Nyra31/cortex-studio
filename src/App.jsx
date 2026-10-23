@@ -15,6 +15,7 @@ import { quantize } from './util/time.js';
 import RenderDialog from './components/RenderDialog.jsx';
 import QueueDialog from './components/QueueDialog.jsx';
 import YoutubeDialog, { youtubeProgressText, cleanError } from './components/YoutubeDialog.jsx';
+import CompressDialog, { compressProgressText } from './components/CompressDialog.jsx';
 import Scopes from './components/Scopes.jsx';
 import SubtitlesPanel from './components/SubtitlesPanel.jsx';
 import { addCue } from './state/subtitles.js';
@@ -70,6 +71,11 @@ export default function App() {
   const [queueOpen, setQueueOpen] = useState(false);
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const [youtubeJob, setYoutubeJob] = useState(null); // { status, title, progress, files, imported, error }
+  const [compressOpen, setCompressOpen] = useState(false);
+  const [compressQueue, setCompressQueue] = useState([]); // { id, path, status, progress, result, error }
+  const [compressRunning, setCompressRunning] = useState(false);
+  const compressRef = useRef({ queue: [], stop: false });
+  compressRef.current.queue = compressQueue;
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [status, setStatus] = useState('');
@@ -306,6 +312,7 @@ export default function App() {
             action: () => requestProxy(m.path, `Creando una copia ligera (proxy) de «${m.name}» para la vista previa…`),
             disabled: !video || busy.has(m.path),
           },
+        ...(video ? [{ label: 'Comprimir…', action: () => { addToCompress([m.path]); setCompressOpen(true); } }] : []),
         ...(!isText(m) ? [{ label: 'Abrir la ubicación del archivo', action: () => api.revealFile(m.path), disabled: m.missing }] : []),
       ],
     });
@@ -351,6 +358,53 @@ export default function App() {
     const paths = await api.pickMedia();
     if (paths.length) await importPaths(paths);
   }, [importPaths]);
+
+  // Compresor de video (CompressDialog): la lista se comprime de uno en uno con los ajustes del momento de empezar;
+  // sigue aunque se cierre la ventana.
+  useEffect(() => api.onCompressProgress?.((p) => {
+    if (!p.sample) setCompressQueue((q) => q.map((j) => (j.status === 'running' ? { ...j, progress: p } : j)));
+  }), []);
+  const addToCompress = useCallback((paths) => {
+    setCompressQueue((q) => [
+      ...q,
+      ...[...new Set(paths)].filter((p) => !q.some((j) => j.path === p && j.status === 'waiting')).map((p) => ({ id: uid('c'), path: p, status: 'waiting', progress: null })),
+    ]);
+  }, []);
+  const setCompressJob = (id, patch) => setCompressQueue((q) => q.map((j) => (j.id === id ? { ...j, ...patch } : j)));
+  const startCompress = useCallback(async (settings) => {
+    compressRef.current.stop = false;
+    setCompressRunning(true);
+    const outs = [];
+    let failed = 0;
+    for (;;) {
+      const job = compressRef.current.stop ? null : compressRef.current.queue.find((j) => j.status === 'waiting');
+      if (!job) break;
+      setCompressJob(job.id, { status: 'running', progress: null, error: null });
+      compressRef.current.queue = compressRef.current.queue.map((j) => (j.id === job.id ? { ...j, status: 'running' } : j));
+      try {
+        const r = await api.compressRun(job.path, settings);
+        if (r.canceled) {
+          setCompressJob(job.id, { status: 'canceled' });
+          break;
+        }
+        setCompressJob(job.id, { status: 'done', result: r });
+        outs.push(r.outPath);
+      } catch (err) {
+        failed++;
+        setCompressJob(job.id, { status: 'error', error: cleanError(err) });
+      }
+      await new Promise((res) => setTimeout(res, 50)); // deja que la lista se actualice antes de buscar el siguiente
+    }
+    setCompressRunning(false);
+    const imported = settings.importAfter && outs.length ? await importPaths(outs) : [];
+    if (outs.length || failed) {
+      setStatus(`Compresión terminada: ${outs.length} video${outs.length === 1 ? '' : 's'}${failed ? `, ${failed} con error` : ''}${imported.length ? ' (importados al proyecto)' : ''}`);
+    }
+  }, [importPaths]);
+  const stopCompress = useCallback(() => {
+    compressRef.current.stop = true;
+    api.compressCancel();
+  }, []);
 
   // Descargas de YouTube (YoutubeDialog). Siguen aunque se cierre la ventana; al terminar se importan si se pidió.
   useEffect(() => api.onYoutubeProgress?.((p) => setYoutubeJob((j) => (j?.status === 'running' ? { ...j, progress: p } : j))), []);
@@ -1140,6 +1194,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         'separator',
         { label: 'Importar medios…', shortcut: 'Ctrl+I', action: importDialog },
         { label: 'Descargar de YouTube…', shortcut: 'Ctrl+Mayús+D', action: () => setYoutubeOpen(true) },
+        { label: `Comprimir videos…${compressRunning ? ' (comprimiendo)' : ''}`, shortcut: 'Ctrl+Mayús+C', action: () => setCompressOpen(true) },
         { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
         { label: `Cola de render…${queue.length ? ` (${queue.filter((j) => j.status === 'waiting' || j.status === 'rendering').length})` : ''}`, action: () => setQueueOpen(true) },
         { label: 'Exportar el fotograma como imagen…', shortcut: 'Ctrl+Mayús+E', action: exportFrame, disabled: duration <= 0 },
@@ -1249,7 +1304,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
 
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
-  const modalOpen = renderOpen || queueOpen || youtubeOpen || projectDialog !== null || shortcutsOpen || recordDialog;
+  const modalOpen = renderOpen || queueOpen || youtubeOpen || compressOpen || projectDialog !== null || shortcutsOpen || recordDialog;
   const floatingOpen = !!fxEventId || !!textMediaId || !!panEventId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
@@ -1267,6 +1322,8 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       action = freezeFrame;
     } else if (ctrl && e.shiftKey && key === 'd') {
       action = () => setYoutubeOpen(true);
+    } else if (ctrl && e.shiftKey && key === 'c') {
+      action = () => setCompressOpen(true);
     } else if (ctrl && e.altKey && e.code === 'Digit2') {
       action = () => setLeftTab('scopes'); // como en VEGAS
     } else if (ctrl) {
@@ -1513,6 +1570,11 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             return ` · Cola de render: ${done + 1}/${queue.length}${current ? ` (${Math.floor(current.progress * 100)} %)` : ''}`;
           })()}
           {youtubeJob?.status === 'running' && !youtubeOpen && ` · ${youtubeProgressText(youtubeJob.progress)}`}
+          {compressRunning && !compressOpen && (() => {
+            const j = compressQueue.find((x) => x.status === 'running');
+            const done = compressQueue.filter((x) => x.status === 'done' || x.status === 'error').length;
+            return j ? ` · Comprimiendo ${done + 1}/${done + compressQueue.filter((x) => x.status === 'waiting' || x.status === 'running').length}: ${compressProgressText(j.progress)}` : '';
+          })()}
         </span>
         <span>
           {baseName(projectPath)}
@@ -1530,6 +1592,19 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           defaultName={`${baseName(projectPath)}.mp4`}
           onClose={() => setRenderOpen(false)}
           onEnqueue={enqueueRenders}
+        />
+      )}
+      {compressOpen && (
+        <CompressDialog
+          queue={compressQueue}
+          running={compressRunning}
+          projectVideos={project.media.filter((m) => m.path && m.hasVideo && !m.isImage && !m.missing).map((m) => m.path)}
+          onAdd={addToCompress}
+          onRemove={(id) => setCompressQueue((q) => q.filter((j) => j.id !== id))}
+          onClearDone={() => setCompressQueue((q) => q.filter((j) => j.status === 'waiting' || j.status === 'running'))}
+          onStart={startCompress}
+          onCancel={stopCompress}
+          onClose={() => setCompressOpen(false)}
         />
       )}
       {youtubeOpen && (
