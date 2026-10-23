@@ -858,6 +858,14 @@ export default function App() {
 
   // Ventana de panorámica/recorte del evento (una sola ventana flotante abierta a la vez).
   const panEvent = panEventId ? project.events.find((e) => e.id === panEventId) : null;
+  // Estable (useCallback): la línea de tiempo memoriza las pistas y los eventos, y una función nueva en cada dibujado
+  // haría que se volvieran a dibujar todos en cada fotograma de la reproducción.
+  const openFx = useCallback((id) => {
+    setTextMediaId(null);
+    setPanEventId(null);
+    setFxEventId(id);
+  }, []);
+
   const openPan = useCallback((eventId) => {
     setFxEventId(null);
     setTextMediaId(null);
@@ -1697,11 +1705,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         onDropFiles={dropFilesOnTimeline}
         onMessage={setStatus}
         onContextMenu={openContextMenu}
-        onOpenFx={(id) => {
-          setTextMediaId(null);
-          setPanEventId(null);
-          setFxEventId(id);
-        }}
+        onOpenFx={openFx}
         onEditText={editTextOf}
         onOpenPan={openPan}
         onAddTrack={insertTrack}

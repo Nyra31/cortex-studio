@@ -4,6 +4,7 @@ Los instaladores de cada versión están en las [releases de GitHub](https://git
 
 ## Sin publicar
 
+- La reproducción con proyectos largos es mucho más fluida (la línea de tiempo ya no se redibuja entera en cada fotograma).
 - **Registro de errores** (*Ayuda → Abrir la carpeta de registros*) y pantalla de error que deja recargar la interfaz en vez de quedarse en blanco.
 - **Subtítulos automáticos** con Whisper en el propio equipo (idioma automático o elegido, tres modelos, traducir al inglés).
 - **Reducir el ruido de fondo** de un evento de audio (dos niveles).
