@@ -8,6 +8,16 @@ const ff = require('./ffmpeg');
 const youtube = require('./youtube');
 const compressor = require('./compressor');
 const whisper = require('./whisper');
+const log = require('./log');
+
+// Registro de errores (ver log.js): antes de registrar ningún canal, para apuntar los errores de todos.
+log.setup();
+log.wrapIpc(ipcMain);
+ipcMain.on('log:error', (_e, source, message) => log.write('error', `interfaz:${String(source).slice(0, 40)}`, message));
+ipcMain.handle('log:openDir', async () => {
+  await fs.promises.mkdir(log.dir(), { recursive: true });
+  return shell.openPath(log.dir());
+});
 
 // Actualizaciones automáticas (electron-updater, releases de GitHub: latest.yml + instalador). Solo en la app
 // instalada: al arrancar busca una versión nueva, la descarga en segundo plano y la interfaz pregunta si
@@ -626,9 +636,14 @@ ipcMain.handle('render:start', async (event, project, settings, outPath) => {
       fs.promises.unlink(outPath).catch(() => {});
       return { ok: false, canceled: true };
     }
-    if (result.code !== 0) return { ok: false, error: result.stderr.trim().split('\n').slice(-8).join('\n') };
+    if (result.code !== 0) {
+      log.write('error', 'render', `${settings.format} ${settings.width}×${settings.height}${settings.hw ? ` (${settings.hw})` : ''}:\n${result.stderr.trim().split('\n').slice(-20).join('\n')}`);
+      return { ok: false, error: result.stderr.trim().split('\n').slice(-8).join('\n') };
+    }
+    if (result.cpuFallback) log.write('aviso', 'render', `La tarjeta gráfica (${settings.hw}) falló y se usó el procesador: ${result.cpuFallback}`);
     return { ok: true, cpuFallback: result.cpuFallback };
   } catch (err) {
+    log.write('error', 'render', err);
     return { ok: false, error: err.message };
   } finally {
     renderProcess = null;

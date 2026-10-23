@@ -4,6 +4,7 @@ Los instaladores de cada versión están en las [releases de GitHub](https://git
 
 ## Sin publicar
 
+- **Registro de errores** (*Ayuda → Abrir la carpeta de registros*) y pantalla de error que deja recargar la interfaz en vez de quedarse en blanco.
 - **Subtítulos automáticos** con Whisper en el propio equipo (idioma automático o elegido, tres modelos, traducir al inglés).
 - **Reducir el ruido de fondo** de un evento de audio (dos niveles).
 - **Estabilizar** un video movido (dos niveles) y quitar la estabilización.

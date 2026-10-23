@@ -1472,6 +1472,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         { label: 'Atajos de teclado', shortcut: 'F1', action: () => setShortcutsOpen(true) },
         'separator',
         { label: 'Buscar actualizaciones…', action: checkForUpdates },
+        { label: 'Abrir la carpeta de registros', action: () => api.openLogs() },
         { label: `Cortex Studio ${version}`, disabled: true },
       ],
     },

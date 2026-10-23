@@ -111,6 +111,9 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('youtube:progress', handler);
   },
   revealFile: (filePath) => ipcRenderer.invoke('shell:reveal', filePath),
+  // Registro de errores (ver electron/log.js).
+  logError: (source, message) => ipcRenderer.send('log:error', source, String(message).slice(0, 6000)),
+  openLogs: () => ipcRenderer.invoke('log:openDir'),
   toggleDevTools: () => ipcRenderer.invoke('devtools:toggle'),
   setDirty: (dirty) => ipcRenderer.send('project:dirty', dirty),
   closeWindow: () => ipcRenderer.send('window:close'),

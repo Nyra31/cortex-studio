@@ -2518,3 +2518,40 @@ kbd {
   margin-bottom: 8px;
   font-weight: 600;
 }
+
+/* Pantalla de error (ErrorBoundary) */
+.crash-screen {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--app);
+  color: var(--text);
+  padding: 16px;
+}
+.crash-box {
+  max-width: 640px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  padding: 20px 24px;
+}
+.crash-box h1 {
+  font-size: 18px;
+  margin: 0 0 10px;
+}
+.crash-box pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--panel-lo);
+  padding: 8px 10px;
+  border-radius: 4px;
+  max-height: 160px;
+  overflow: auto;
+}
+.crash-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
