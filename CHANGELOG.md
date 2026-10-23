@@ -2,18 +2,18 @@
 
 Los instaladores de cada versión están en las [releases de GitHub](https://github.com/Nyra31/cortex-studio/releases). Los proyectos guardados con versiones anteriores se siguen abriendo.
 
-## Sin publicar
+## 1.0.0 (23/10/2026)
 
-- La reproducción con proyectos largos es mucho más fluida (la línea de tiempo ya no se redibuja entera en cada fotograma).
-- **Registro de errores** (*Ayuda → Abrir la carpeta de registros*) y pantalla de error que deja recargar la interfaz en vez de quedarse en blanco.
+- **Descargar de YouTube** (Ctrl+Mayús+D): video en MP4, MKV, WebM o MOV o solo el audio en MP3, M4A, Opus, FLAC o WAV, con los metadatos, la portada, los capítulos y los subtítulos dentro del archivo; listas enteras; se importa al proyecto al terminar.
+- **Comprimir videos** (Ctrl+Mayús+C): compresor por lotes al estilo de HandBrake con preajustes y preajustes propios; H.264, H.265, VP9 y AV1 con el procesador o la tarjeta gráfica; calidad constante, tasa de bits o tamaño de archivo objetivo (dos pasadas); resolución máxima, recorte automático de bandas negras, desentrelazado, reducción de ruido, HDR a SDR; pistas de audio, subtítulos y capítulos; muestra de 10 s con el tamaño estimado.
 - **Subtítulos automáticos** con Whisper en el propio equipo (idioma automático o elegido, tres modelos, traducir al inglés).
-- **Reducir el ruido de fondo** de un evento de audio (dos niveles).
+- **Renderizar con la tarjeta gráfica** (NVIDIA, Intel o AMD) en MP4 H.264 y H.265: varias veces más rápido en 4K y H.265; si falla, se renderiza con el procesador.
 - **Estabilizar** un video movido (dos niveles) y quitar la estabilización.
 - **Invertir** un evento (reproducirlo hacia atrás) y quitar la inversión.
+- **Reducir el ruido de fondo** de un evento de audio (dos niveles).
 - **Pantalla de inicio** con los proyectos recientes (también en *Archivo → Proyectos recientes…*).
-- **Renderizar con la tarjeta gráfica** (NVIDIA, Intel o AMD) en MP4 H.264 y H.265: varias veces más rápido en 4K y H.265; si falla, se renderiza con el procesador.
-- **Comprimir videos** (Ctrl+Mayús+C): compresor por lotes al estilo de HandBrake con preajustes y preajustes propios; H.264, H.265, VP9 y AV1 con el procesador o la tarjeta gráfica; calidad constante, tasa de bits o tamaño de archivo objetivo (dos pasadas); resolución máxima, recorte automático de bandas negras, desentrelazado, reducción de ruido, HDR a SDR; pistas de audio, subtítulos y capítulos; muestra de 10 s con el tamaño estimado.
-- **Descargar de YouTube** (Ctrl+Mayús+D): video en MP4, MKV, WebM o MOV o solo el audio en MP3, M4A, Opus, FLAC o WAV, con los metadatos, la portada, los capítulos y los subtítulos dentro del archivo; listas enteras; se importa al proyecto al terminar.
+- **Registro de errores** (*Ayuda → Abrir la carpeta de registros*) y pantalla de error que deja recargar la interfaz en vez de quedarse en blanco.
+- La reproducción con proyectos largos es mucho más fluida (la línea de tiempo ya no se redibuja entera en cada fotograma).
 
 ## 0.7.0 (22/10/2026)
 

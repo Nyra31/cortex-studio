@@ -96,7 +96,7 @@ Si `npm start` dice que `vite` no se reconoce, falta `npm install`. Si falta `no
 
 `dist/` y `release/` no están en el repo: se regeneran con `npm run build` / `npm run dist` (el instalador solo se puede generar en Windows).
 
-## Estado (22/10/2026, v0.7.0)
+## Estado (23/10/2026, v1.0.0)
 
 v0.1.0 terminada: edición multipista, vista previa, renderizado a MP4, interfaz estilo editor clásico, propiedades del proyecto e instalador de Windows.
 v0.2.0: volumen por evento y fundidos de entrada/salida (formato `.cortex` versión 2; los de versión 1 se siguen abriendo).
@@ -109,9 +109,9 @@ v0.6.0 (19/10/2026): curvas de fundido (formato `.cortex` versión 8), 50 fuente
 
 v0.7.0 (22/10/2026): curvas en las envolventes y envolvente de opacidad en las pistas de video, modos de fusión de pista, transiciones en los fundidos hacia la pista de debajo, la selección de tiempo y el cursor guardados en el proyecto (formato `.cortex` versión 9), proxies para la vista previa y las 14 funciones de la lista «Para la v0.7» de abajo (formato `.cortex` versión 10). Probado: render = fórmulas (fusión ±3, opacidad ±1/255), vista previa = render en todo (≈2,5) y proxies de ProRes y MPEG-2.
 
-Sin publicar todavía (en `main` tras la v0.7.0, 23/10/2026): descargar de YouTube y el compresor de video (ver Arquitectura y la sección «Sin publicar» de `CHANGELOG.md`).
+v1.0.0 (23/10/2026): descargar de YouTube, compresor de video por lotes, render con la tarjeta gráfica, pantalla de inicio con proyectos recientes, invertir, estabilizar, reducir el ruido, subtítulos automáticos con Whisper, registro de errores y reproducción fluida en proyectos largos (lista «Para la v1.0» de abajo).
 
-**Siguiente paso**: la lista de la v1.0 está hecha (la interfaz en inglés y la firma pasan a la v1.1). Publicar la v1.0.0 cuando el usuario la haya probado con `npm start` y lo confirme (pasos de Releases, arriba; la sección «Sin publicar» del CHANGELOG pasa a «1.0.0 (fecha)»). Si nota tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma.
+**Siguiente paso**: la v1.1 (interfaz en inglés y firma con SignPath; ver abajo). Preguntar al usuario qué más quiere añadir. Si nota tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma.
 
 ## Firma del instalador (pendiente, para la v1.0)
 
