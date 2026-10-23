@@ -4,6 +4,7 @@ Los instaladores de cada versión están en las [releases de GitHub](https://git
 
 ## Sin publicar
 
+- **Estabilizar** un video movido (dos niveles) y quitar la estabilización.
 - **Invertir** un evento (reproducirlo hacia atrás) y quitar la inversión.
 - **Pantalla de inicio** con los proyectos recientes (también en *Archivo → Proyectos recientes…*).
 - **Renderizar con la tarjeta gráfica** (NVIDIA, Intel o AMD) en MP4 H.264 y H.265: varias veces más rápido en 4K y H.265; si falla, se renderiza con el procesador.

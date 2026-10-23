@@ -164,6 +164,8 @@ export const EVENT_DEFAULTS = {
   // Evento invertido (reproducido hacia atrás): usa un archivo con el trozo al revés y guarda de dónde viene
   // ({ mediaId, start, span }: segundos del medio original) para poder quitar la inversión (ver setReversed).
   reversed: null,
+  // Evento estabilizado: usa un archivo con el trozo estabilizado (desde `start` del medio de antes, mediaId).
+  stabilized: null,
 };
 
 // Modos de fusión de las pistas de video (track.blend; sin él, normal), como los modos de composición de VEGAS.
@@ -652,6 +654,23 @@ export function setReversed(project, eventId, media, start, span) {
     if (!e.reversed) return e;
     const r = e.reversed;
     return { ...e, mediaId: r.mediaId, inPoint: Math.max(0, r.start + r.span - (e.inPoint + used)), speed: mirrorSpeed(e.speed, e.duration), reversed: null };
+  });
+  return { ...project, media: media && !project.media.some((m) => m.id === media.id) ? [...project.media, media] : project.media, events };
+}
+
+// Estabilizar el evento eventId y su grupo (los del mismo medio): con `media` (el trozo desde `start` del medio,
+// estabilizado), pasan a usarlo; con media = null, vuelven al medio de antes. Mismos tiempos (solo se desplazan).
+export function setStabilized(project, eventId, media, start) {
+  const ev = project.events.find((e) => e.id === eventId);
+  if (!ev) return project;
+  const group = new Set(project.events
+    .filter((e) => e.id === ev.id || (ev.groupId && e.groupId === ev.groupId && e.mediaId === ev.mediaId))
+    .map((e) => e.id));
+  const events = project.events.map((e) => {
+    if (!group.has(e.id)) return e;
+    if (media) return { ...e, mediaId: media.id, inPoint: Math.max(0, e.inPoint - start), stabilized: { mediaId: e.mediaId, start } };
+    if (!e.stabilized) return e;
+    return { ...e, mediaId: e.stabilized.mediaId, inPoint: e.stabilized.start + e.inPoint, stabilized: null };
   });
   return { ...project, media: media && !project.media.some((m) => m.id === media.id) ? [...project.media, media] : project.media, events };
 }

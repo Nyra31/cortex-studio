@@ -32,6 +32,12 @@ contextBridge.exposeInMainWorld('api', {
   displayCount: () => ipcRenderer.invoke('screen:count'),
   detectScenes: (filePath, start, length) => ipcRenderer.invoke('media:scenes', filePath, start, length),
   reverseClip: (filePath, start, length, projectPath, opts) => ipcRenderer.invoke('media:reverse', filePath, start, length, projectPath, opts),
+  stabilizeClip: (filePath, start, length, projectPath, opts) => ipcRenderer.invoke('media:stabilize', filePath, start, length, projectPath, opts),
+  onStabilizeProgress: (callback) => {
+    const handler = (_e, p) => callback(p);
+    ipcRenderer.on('stabilize:progress', handler);
+    return () => ipcRenderer.removeListener('stabilize:progress', handler);
+  },
   onReverseProgress: (callback) => {
     const handler = (_e, p) => callback(p);
     ipcRenderer.on('reverse:progress', handler);

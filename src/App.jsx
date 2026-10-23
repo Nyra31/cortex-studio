@@ -26,7 +26,7 @@ import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
   EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, loadView, mediaLength, pasteEvents,
-  freezeFrame as freezeFrameAt, setReversed, splitAtSourceTimes, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
+  freezeFrame as freezeFrameAt, setReversed, setStabilized, splitAtSourceTimes, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
   moveTrack, splitRange, trimToCursor, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
@@ -528,6 +528,36 @@ export default function App() {
     }
   }, [noteAnalyzed, setProject]);
 
+  // Estabilizar un evento de video (y su sonido): vid.stab genera el trozo que usa estabilizado (en «Estabilizados») y
+  // el evento pasa a usarlo; smoothing = null lo devuelve al de antes.
+  const stabilizeEvent = useCallback(async (ev, smoothing) => {
+    if (smoothing === null) {
+      setProject((cur) => setStabilized(cur, ev.id, null));
+      setStatus('Se ha quitado la estabilización.');
+      return;
+    }
+    const { project: p, projectPath: file } = live.current;
+    const m = p.media.find((x) => x.id === ev.mediaId);
+    if (!m || m.isImage || m.missing || !m.hasVideo) return;
+    setPlaying(false);
+    // Un poco de medio de más a cada lado (si lo hay): vid.stab necesita fotogramas vecinos para suavizar los bordes.
+    const pad = 1;
+    const start = Math.max(0, ev.inPoint - pad);
+    const end = Math.min(m.duration || Infinity, ev.inPoint + sourceOffset(ev, ev.duration) + pad);
+    const off = api.onStabilizeProgress((f) => setStatus(`Estabilizando «${m.name}»: ${Math.round(f * 100)} %…`));
+    try {
+      setStatus(`Estabilizando «${m.name}»…`);
+      const out = await api.stabilizeClip(m.path, start, end - start, file, { hasAudio: !!m.hasAudio, smoothing });
+      const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(out)) };
+      setProject((cur) => setStabilized(cur, ev.id, media, start));
+      setStatus(`Evento estabilizado (guardado en ${out}).`);
+    } catch (err) {
+      setStatus(`No se pudo estabilizar: ${err.message}`);
+    } finally {
+      off();
+    }
+  }, [noteAnalyzed, setProject]);
+
   // Detectar escenas: divide el evento de video (y su grupo) en cada cambio de plano del trozo de medio que usa.
   const detectScenes = useCallback(async (ev) => {
     const m = live.current.project.media.find((x) => x.id === ev.mediaId);
@@ -916,7 +946,16 @@ export default function App() {
           ? [{
             label: info.event.reversed ? 'Quitar la inversión (reproducir hacia delante)' : 'Invertir (reproducir hacia atrás)',
             action: () => reverseEvent(info.event),
+            disabled: !!(info.event.reversed && info.event.stabilized),
           }]
+          : []),
+        ...(isVideo && media && !media.isImage && !isText(media) && !media.missing
+          ? info.event.stabilized
+            ? [{ label: 'Quitar la estabilización', action: () => stabilizeEvent(info.event, null) }]
+            : [
+              { label: 'Estabilizar', action: () => stabilizeEvent(info.event, 15) },
+              { label: 'Estabilizar mucho (más zoom)', action: () => stabilizeEvent(info.event, 40) },
+            ]
           : []),
         ...(isVideo && media && !media.isImage
           ? [

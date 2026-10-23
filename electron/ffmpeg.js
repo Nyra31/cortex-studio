@@ -876,4 +876,35 @@ async function reverseClip(file, start, length, out, { hasVideo = true, hasAudio
   }
 }
 
-module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, detectScenes, reverseClip, run, ffmpegPath, ffprobePath };
+// Estabilizar: el trozo [start, start + length) del medio con vid.stab en dos pasadas (vidstabdetect mide el
+// movimiento en un .trf de la carpeta temporal, vidstabtransform lo suaviza; optzoom amplía lo justo para que no se
+// vean bordes). smoothing = fotogramas a cada lado que se promedian (más = más estable, más zoom). Sale MP4 H.264
+// casi sin pérdida + AAC.
+async function stabilizeClip(file, start, length, out, { hasAudio = true, smoothing = 15, onProgress } = {}) {
+  const trf = `cortex-estabilizar-${process.pid}-${Date.now()}.trf`;
+  const progress = (from, share) => (line) => {
+    const m = /^out_time_(?:us|ms)=(\d+)/.exec(line);
+    if (m && onProgress) onProgress(from + share * Math.min(1, Number(m[1]) / 1e6 / length));
+  };
+  const input = ['-hide_banner', '-v', 'error', '-y', '-nostats', '-progress', 'pipe:1', '-ss', start.toFixed(6), '-t', length.toFixed(6), '-i', file];
+  try {
+    let r = await run(ffmpegPath, [...input, '-map', '0:v:0', '-vf', `vidstabdetect=shakiness=8:accuracy=15:result=${trf}`, '-f', 'null', '-'], {
+      cwd: os.tmpdir(), onLine: progress(0, 0.4),
+    });
+    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+    r = await run(ffmpegPath, [
+      ...input,
+      '-map', '0:v:0', '-vf', `vidstabtransform=input=${trf}:smoothing=${Math.round(smoothing)}:optzoom=1:zoomspeed=0.25:interpol=bicubic,unsharp=5:5:0.6:3:3:0.3,format=yuv420p`,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14',
+      ...(hasAudio ? ['-map', '0:a:0?', '-c:a', 'aac', '-b:a', '256k'] : []),
+      '-movflags', '+faststart', out,
+    ], { cwd: os.tmpdir(), onLine: progress(0.4, 0.6) });
+    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+    onProgress?.(1);
+    return out;
+  } finally {
+    fs.promises.unlink(path.join(os.tmpdir(), trf)).catch(() => {});
+  }
+}
+
+module.exports = { analyze, render, buildRender, makeProxy, extractFrame, filmstrip, detectScenes, reverseClip, stabilizeClip, run, ffmpegPath, ffprobePath };
