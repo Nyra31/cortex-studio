@@ -38,7 +38,7 @@ Si la aplicación no se abre al lanzar `electron .` a mano, quita la variable `E
 
 ## Política de firma de código
 
-El instalador de Windows se compila en GitHub Actions a partir de este repositorio ([flujo `instalador.yml`](.github/workflows/instalador.yml)) y se firma después con SignPath.
+En preparación para la versión 1.1: el instalador de Windows se compilará en GitHub Actions a partir de este repositorio ([flujo `instalador.yml`](.github/workflows/instalador.yml)) y se firmará con SignPath. Hasta entonces, el instalador no está firmado.
 
 Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
