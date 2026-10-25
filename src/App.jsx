@@ -20,6 +20,7 @@ import Scopes from './components/Scopes.jsx';
 import SubtitlesPanel from './components/SubtitlesPanel.jsx';
 import { addCue, importCues, parseSubtitles, tidyCues } from './state/subtitles.js';
 import TranscribeDialog from './components/TranscribeDialog.jsx';
+import VoicesDialog from './components/VoicesDialog.jsx';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
 import RecordDialog from './components/RecordDialog.jsx';
@@ -27,7 +28,7 @@ import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
 import {
   EVENT_DEFAULTS, FADE_CURVES, IMAGE_DURATION, MIN_EVENT, addMarker, addRegion, addTrack, copyEvents, deleteMark, deleteRange, emptyProject, markPoints, fitSize, groupEvents, loadProject, loadView, mediaLength, pasteEvents,
-  freezeFrame as freezeFrameAt, setReversed, setStabilized, setDenoised, splitAtSourceTimes, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
+  freezeFrame as freezeFrameAt, setReversed, setStabilized, setDenoised, setDevoiced, splitAtSourceTimes, placeMedia, projectDuration, removeMedia, sourceTime, renderPayload, rippleDelete, rippleShift, serializeProject, splitEvents, uid,
   moveTrack, splitRange, trimToCursor, ungroupEvents, updateEvents,
 } from './state/project.js';
 import { TEXT_DEFAULTS, isText, newTextMedia, withTextThumb } from './state/text.js';
@@ -35,6 +36,7 @@ import { panActive, setPanValues } from './state/pan.js';
 import { hasRamp, shiftSpeed, sourceOffset } from './state/speed.js';
 import { transitionLabel } from './state/transitions.js';
 import { Recorder, loadRecordSettings, micError } from './preview/recorder.js';
+import { separateVoices } from './preview/separator.js';
 import { LANGUAGES, lang, locale, tx } from './i18n/index.js';
 
 const api = window.api;
@@ -626,6 +628,60 @@ export default function App() {
     }
   }, [noteAnalyzed, setProject]);
 
+  // Quitar las voces de un evento de audio, para doblar encima (ver preview/separator.js): el modelo elegido en
+  // VoicesDialog separa las voces del trozo que usa y el evento pasa a usar el resto (música y efectos, en «Sin
+  // voces»); la pista de voces sola se añade a los medios, de referencia. modelId = null lo devuelve al de antes.
+  // Una separación a la vez.
+  const separation = useRef(null); // { eventId, canceled, cancel } mientras se separa
+  const [voicesEventId, setVoicesEventId] = useState(null); // evento cuya ventana de quitar las voces está abierta
+  const devoiceEvent = useCallback(async (ev, modelId) => {
+    if (!modelId) {
+      setProject((cur) => setDevoiced(cur, ev.id, null));
+      setStatus(tx('Las voces vuelven a sonar en el evento.'));
+      return;
+    }
+    if (separation.current) return;
+    const { project: p, projectPath: file } = live.current;
+    const m = p.media.find((x) => x.id === ev.mediaId);
+    if (!m || m.missing || !m.hasAudio) return;
+    setPlaying(false);
+    // Un poco de medio de más a cada lado, para que los bordes del evento se separen con contexto.
+    const start = Math.max(0, ev.inPoint - 1);
+    const end = Math.min(m.duration || Infinity, ev.inPoint + sourceOffset(ev, ev.duration) + 1);
+    const job = { eventId: ev.id, canceled: false, cancel: null };
+    separation.current = job;
+    const onStatus = ({ stage, percent, backend, mb }) => {
+      const p100 = percent == null ? '…' : `${Math.floor(percent)} %`;
+      if (stage === 'model') setStatus(tx('Descargando el modelo para quitar las voces (solo la primera vez, {mb} MB): {p}', { mb, p: p100 }));
+      else if (stage === 'decode') setStatus(tx('Preparando el sonido de «{name}»…', { name: m.name }));
+      else if (stage === 'load') setStatus(tx('Cargando el modelo para quitar las voces…'));
+      else if (backend === 'wasm') setStatus(tx('Quitando las voces de «{name}» con el procesador (lento; con una tarjeta gráfica compatible va mucho más rápido): {p}', { name: m.name, p: p100 }));
+      else setStatus(tx('Quitando las voces de «{name}» con la tarjeta gráfica: {p}', { name: m.name, p: p100 }));
+    };
+    try {
+      onStatus({ stage: 'decode' });
+      const res = await separateVoices(m.path, start, end - start, file, modelId, onStatus, job);
+      if (!res) {
+        setStatus(tx('Se ha cancelado la separación de voces.'));
+        return;
+      }
+      const rest = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(res.rest)) };
+      const vocals = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(res.vocals)) };
+      setProject((cur) => setDevoiced(cur, ev.id, rest, start, [vocals]));
+      setStatus(tx('Voces quitadas (guardado en {rest}). Las voces solas están en los medios del proyecto, por si las necesitas de referencia.', { rest: res.rest }));
+    } catch (err) {
+      setStatus(tx('No se pudieron quitar las voces: {message}', { message: err.message }));
+    } finally {
+      separation.current = null;
+    }
+  }, [noteAnalyzed, setProject]);
+  const cancelSeparation = useCallback(() => {
+    const job = separation.current;
+    if (!job) return;
+    job.canceled = true;
+    job.cancel?.();
+  }, []);
+
   // Detectar escenas: divide el evento de video (y su grupo) en cada cambio de plano del trozo de medio que usa.
   const detectScenes = useCallback(async (ev) => {
     const m = live.current.project.media.find((x) => x.id === ev.mediaId);
@@ -1025,13 +1081,21 @@ export default function App() {
             disabled: !!(info.event.reversed && info.event.stabilized),
           }]
           : []),
-        ...(!isVideo && media && !media.missing && media.hasAudio
+        // Sin voces: lo de antes de quitarlas (reducir el ruido) ya no se puede deshacer hasta volver a ponerlas.
+        ...(!isVideo && media && !media.missing && media.hasAudio && !info.event.devoiced
           ? info.event.denoised
             ? [{ label: tx('Quitar la reducción de ruido'), action: () => denoiseEvent(info.event, null) }]
             : [
               { label: tx('Reducir el ruido de fondo'), action: () => denoiseEvent(info.event, 'light') },
               { label: tx('Reducir mucho el ruido de fondo'), action: () => denoiseEvent(info.event, 'strong') },
             ]
+          : []),
+        ...(!isVideo && media && !media.missing && media.hasAudio
+          ? separation.current?.eventId === info.event.id
+            ? [{ label: tx('Cancelar la separación de voces'), action: cancelSeparation }]
+            : info.event.devoiced
+              ? [{ label: tx('Volver a poner las voces'), action: () => devoiceEvent(info.event, null) }]
+              : [{ label: tx('Quitar las voces (para doblar)…'), action: () => setVoicesEventId(info.event.id), disabled: !!separation.current }]
           : []),
         ...(isVideo && media && !media.isImage && !isText(media) && !media.missing
           ? info.event.stabilized
@@ -1135,7 +1199,7 @@ export default function App() {
       ];
     }
     setContextMenu({ x: info.x, y: info.y, items });
-  }, [copyIds, cutIds, deleteIds, deleteRegion, detectScenes, freezeFrame, groupIds, insertText, insertTrack, openPan, openRender, openTextEditor, paste, seek, selectAll, setProject, ungroupIds]);
+  }, [cancelSeparation, copyIds, cutIds, deleteIds, deleteRegion, detectScenes, devoiceEvent, freezeFrame, groupIds, insertText, insertTrack, openPan, openRender, openTextEditor, paste, seek, selectAll, setProject, ungroupIds]);
 
   const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
 
@@ -1493,7 +1557,7 @@ export default function App() {
 
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
-  const modalOpen = renderOpen || queueOpen || youtubeOpen || compressOpen || transcribeOpen || projectDialog !== null || shortcutsOpen || recordDialog;
+  const modalOpen = renderOpen || queueOpen || youtubeOpen || compressOpen || transcribeOpen || !!voicesEventId || projectDialog !== null || shortcutsOpen || recordDialog;
   const floatingOpen = !!fxEventId || !!textMediaId || !!panEventId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
@@ -1781,6 +1845,20 @@ export default function App() {
           onEnqueue={enqueueRenders}
         />
       )}
+      {voicesEventId && (() => {
+        const ev = project.events.find((e) => e.id === voicesEventId);
+        const m = ev && project.media.find((x) => x.id === ev.mediaId);
+        return m ? (
+          <VoicesDialog
+            mediaName={m.name}
+            onClose={() => setVoicesEventId(null)}
+            onStart={(modelId) => {
+              setVoicesEventId(null);
+              devoiceEvent(ev, modelId);
+            }}
+          />
+        ) : null;
+      })()}
       {transcribeOpen && (
         <TranscribeDialog
           hasRegion={!!region}

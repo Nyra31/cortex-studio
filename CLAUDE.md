@@ -1,4 +1,4 @@
-# Cortex Studio
+﻿# Cortex Studio
 
 Editor de video de escritorio (Electron 44 + React 18 + Vite 5 + FFmpeg). Los comentarios, los mensajes de commit y la documentación están en **español**; la interfaz, en español e inglés (ver «Idiomas»).
 
@@ -24,6 +24,7 @@ Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está defi
 
 - `electron/main.js`: ventana (arranca maximizada con `show: false` + `maximize()` en `ready-to-show`; F11 = pantalla completa por IPC y la interfaz recibe el estado con `window:fullscreen`), diálogos (incluida la pregunta al cerrar con cambios sin guardar: la interfaz avisa con `api.setDirty` y, si se elige Guardar, recibe `project:saveBeforeClose`), IPC (`ipcMain.handle`) y protocolo `media://` (sirve a la vista previa **solo** los archivos importados, con soporte de rangos y CORS, necesario para que WebGL lea los fotogramas).
 - `electron/ffmpeg.js`: análisis (ffprobe), miniaturas, formas de onda (`peaks`) y renderizado a MP4 con `filter_complex`. Las rutas de ffmpeg/ffprobe se ajustan para `app.asar.unpacked` al empaquetar.
+- Quitar las voces (para doblar): ver «Quitar las voces» más abajo.
 - `electron/preload.js`: única puerta entre interfaz y sistema (`window.api`). Cualquier función nueva del proceso principal se añade aquí y en `main.js`.
 - `src/state/project.js`: modelo de datos y operaciones de edición como **funciones puras** que devuelven un proyecto nuevo (inmutable). El esquema está documentado al principio del archivo.
 - `src/state/useHistory.js`: deshacer/rehacer. `set(updater, false)` actualiza sin crear paso (se usa durante los arrastres; al soltar se registra un solo paso).
@@ -58,6 +59,22 @@ Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está defi
 - `src/preview/compositor.js`: compositor WebGL2 de la vista previa. Las transiciones son traducciones a GLSL de `vf_xfade.c` (P va de 1 = solo A a 0 = solo B; `mixx(a,b,m) = a·m + b·(1−m)`), para que la vista previa coincida con el render. Para añadir una transición: entrada en `transitions.js` + fragmento en `GLSL` del compositor. Hay un programa para las capas normales y uno por transición, compilado la primera vez que se usa (`programFor`): **no volver a meter todas las transiciones en un mismo shader** ni añadir ramas en `fit()`, que se copia en cada una; Direct3D tardaba hasta 30 s en compilarlo sin caché y la ventana no se pintaba (parecía que la app no arrancaba). Para comprobarlo, arrancar con una carpeta de datos nueva (`app.setPath('userData', …)`): las pruebas con caché no lo detectan. Los efectos se aplican antes de componer, a la imagen encajada (sin bandas), en búferes intermedios (`applyEffects`).
 - `src/components/`: MenuBar, Toolbar, Dock (con pestañas), MediaPool, TransitionsPanel, Preview (un `<video>` oculto por evento cercano al cursor; el compositor toma sus fotogramas), Timeline, Transport, Waveform y diálogos (Project, Render, Shortcuts).
 - `src/styles.css`: un único archivo de estilos, tema oscuro estilo editor clásico.
+
+## Quitar las voces (desde la v1.1)
+
+Menú de un evento de audio → *Quitar las voces (para doblar)…* → `VoicesDialog.jsx` (elegir modelo; se recuerda en `localStorage` `cortex-voces`) → `devoiceEvent(ev, modelId)` en `App.jsx`. Modelos en `MODELS` de `electron/separate.js` (url, tamaño, SHA-256 comprobado al descargar a `userData/separacion`; `separate:models` dice cuáles están ya), cada uno con su motor en `ENGINES` de `separator.worker.js`:
+- **htdemucs** (*Rápido*, Demucs v4 de Meta, MIT): exportación de demucs-web (`timcsy/demucs-web-onnx`, `htdemucs_embedded.onnx`, 172 MB, sin licencia en la ficha; los pesos son los de Meta). Segmentos de 343 980 muestras solapados un 25 % con fundido en todo el solape; pre/posprocesado de `demucs-web`.
+- **roformer** (*El mejor*, Mel-Band RoFormer de Kimberley Jensen, MIT): `audiojs/mel-roformer` `mel-roformer.fp16.onnx` (464 MB, pesos fp16 y cálculo fp32: no necesita `shader-f16`). Entra `mix_spec` [1, 4, 1025, 801] (L re, L im, R re, R im) y sale el espectrograma de las voces igual. STFT propia en el worker: n_fft 2048, salto 441, Hann periódica, centrada con reflejo, sin normalizar (como `torch.stft`; comprobada contra la DFT directa y en ida y vuelta, 139 dB). Segmentos de 8 s cada 4 s con fundidos de 0,8 s.
+- Comparación con música real (7 canciones de 7 s de MUSDB18-7, test; `%TEMP%/cortex-pruebas/musdb`): SDR de voces, mediana, htdemucs 10,3 dB y RoFormer 13,4 dB (mejor en todas). Con la voz sintética de Windows sale al revés (16,4 frente a 13,1): esa prueba no sirve para comparar modelos. Velocidad en la GTX 1060 con 56 s: htdemucs ~15 s + 5 s de carga, RoFormer ~64 s + 20 s.
+
+Camino común:
+- `electron/separate.js` (`separate:start`): FFmpeg pasa el trozo (con 1 s de más a cada lado) a PCM s16le estéreo 44,1 kHz en `%TEMP%/cortex-voces-*` y lo añade a `allowedFiles`.
+- `src/preview/separator.worker.js` (módulo worker): ONNX Runtime Web 1.30 (`onnxruntime-web/webgpu`, el `.wasm` asyncify lo copia Vite a `dist/assets`) con WebGPU y si no WASM de un hilo (sin SharedArrayBuffer). Lee el PCM por `media://` con rangos, segmentos de 343 980 muestras (7,8 s) solapados un 25 % con fundido lineal; pre/posprocesado de `demucs-web` 1.0.2 (`prepareModelInput`, `standaloneIspec`; solo se reconstruye la pista de voces). Prepara el segmento siguiente mientras la tarjeta calcula el actual. Manda las voces a trozos (`separate:write`).
+- `separate:finish`: voces → FLAC 24 bits; **sin voces = original − voces** (`amerge` + `pan`), así las dos suman el original. En «Sin voces» junto al proyecto. `setDevoiced` en `project.js` (campo `devoiced` del evento, como `denoised`, vía `swapAudio`); las voces solas se añaden a los medios.
+- Cancelar: el mismo menú (*Cancelar la separación de voces*) termina el worker y borra el temporal. Al arrancar, `cleanStale` borra temporales de más de un día.
+- htdemucs con el procesador: ~18 s por segmento de 5,85 s (≈0,3× tiempo real), misma calidad que con la tarjeta. Probado también desde el `app.asar` empaquetado (con htdemucs).
+- Otros modelos que se podrían añadir (todos con exportación ONNX para WebGPU): htdemucs_ft de voces (`silverdaw/htdemucs-ft-onnx`, 302 MB, SDR 9,2 según su ficha), Mel-Band RoFormer Duality (`musetric/aname-mel-band-roformer-duality-onnx`, Apache-2.0, entra STFT [1, 2050, 1100, 2] y sale una máscara compleja). Para ir más rápido con htdemucs: la exportación fp16 en 21 trozos de `monteslu/htdemucs-web-onnx` (MIT, 126 MB, ~2,4× más rápida según su ficha; hay que fijar en CPU los nodos de normalización del primer trozo) o menos solapamiento.
+- `onnxruntime-web` y `demucs-web` van en `devDependencies`: Vite los mete en `dist` y así electron-builder no copia el paquete entero (más de 80 MB de `.wasm`).
 
 ## Idiomas (desde la v1.1)
 
@@ -105,7 +122,7 @@ Si `npm start` dice que `vite` no se reconoce, falta `npm install`. Si falta `no
 
 `dist/` y `release/` no están en el repo: se regeneran con `npm run build` / `npm run dist` (el instalador solo se puede generar en Windows).
 
-## Estado (23/10/2026, v1.0.0)
+## Estado (26/10/2026, v1.1.0)
 
 v0.1.0 terminada: edición multipista, vista previa, renderizado a MP4, interfaz estilo editor clásico, propiedades del proyecto e instalador de Windows.
 v0.2.0: volumen por evento y fundidos de entrada/salida (formato `.cortex` versión 2; los de versión 1 se siguen abriendo).
@@ -120,7 +137,7 @@ v0.7.0 (22/10/2026): curvas en las envolventes y envolvente de opacidad en las p
 
 v1.0.0 (23/10/2026): descargar de YouTube, compresor de video por lotes, render con la tarjeta gráfica, pantalla de inicio con proyectos recientes, invertir, estabilizar, reducir el ruido, subtítulos automáticos con Whisper, registro de errores y reproducción fluida en proyectos largos (lista «Para la v1.0» de abajo).
 
-**v1.1 en curso**: la interfaz en inglés está hecha (25/10/2026, sección «Idiomas»; sin publicar todavía). La firma con SignPath **queda en espera** (decisión del usuario, 25/10/2026): el proyecto aún no tiene reputación (0 estrellas, unas 8 descargas) y SignPath la pide; se solicitará cuando tenga algo de uso. **Siguiente paso**: que el usuario pruebe la interfaz en inglés y decidir si se publica la v1.1 solo con eso o con algo más. Preguntar al usuario qué más quiere añadir. Si nota tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma.
+v1.1.0 (26/10/2026): interfaz en inglés y selector de idioma (sección «Idiomas») y quitar las voces para doblar con dos modelos a elegir (sección «Quitar las voces»). Los dos modelos, probados también desde el instalador empaquetado. La firma con SignPath **queda en espera** (decisión del usuario, 25/10/2026): el proyecto aún no tiene reputación (0 estrellas, unas 8 descargas) y SignPath la pide; se solicitará cuando tenga algo de uso. **Siguiente paso**: que el usuario pruebe *Quitar las voces* con material real (película o video con diálogo y música) en su otro equipo con la RTX 4070 Super (medir allí la velocidad del RoFormer y apuntarla). Preguntar qué quiere para la próxima versión. Preguntar al usuario qué más quiere añadir. Si nota tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma.
 
 ## Firma del instalador (v1.1, con SignPath Foundation)
 

@@ -34,7 +34,7 @@ function walk(node, visit) {
   }
 }
 
-const files = execSync('git ls-files src electron', { cwd: root, encoding: 'utf8' })
+const files = execSync('git ls-files --cached --others --exclude-standard src electron', { cwd: root, encoding: 'utf8' })
   .split('\n')
   .filter((f) => /\.(js|jsx)$/.test(f));
 const used = new Map(); // clave → primer sitio donde aparece

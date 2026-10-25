@@ -8,6 +8,7 @@ const ff = require('./ffmpeg');
 const youtube = require('./youtube');
 const compressor = require('./compressor');
 const whisper = require('./whisper');
+const separate = require('./separate');
 const log = require('./log');
 const i18n = require('./i18n');
 
@@ -298,6 +299,33 @@ ipcMain.handle('media:denoise', async (event, filePath, start, length, projectPa
     onProgress: (p) => event.sender.send('denoise:progress', p),
   });
 });
+
+// Quitar las voces (ver separate.js): `separate:start` descarga el modelo si hace falta (progreso por
+// `separate:progress`) y deja el sonido del trozo en un temporal que la interfaz lee por media://; la interfaz manda
+// la pista de voces con `separate:write` y `separate:finish` escribe los dos FLAC en «Sin voces» junto al proyecto.
+ipcMain.handle('separate:models', () => separate.models());
+ipcMain.handle('separate:start', async (event, filePath, start, length, modelId) => {
+  const file = path.resolve(filePath);
+  if (!allowedFiles.has(file)) throw new Error(tx('El archivo no está importado'));
+  const job = await separate.start(file, start, length, modelId, (s) => event.sender.send('separate:progress', s));
+  allowedFiles.add(job.input);
+  allowedFiles.add(job.model);
+  return job;
+});
+ipcMain.on('separate:write', (_e, id, chunk) => separate.write(id, chunk));
+ipcMain.handle('separate:finish', async (_e, id, filePath, projectPath) => {
+  const dir = projectPath
+    ? path.join(path.dirname(projectPath), tx('Sin voces'))
+    : path.join(app.getPath('documents'), 'Cortex Studio', tx('Sin voces'));
+  await fs.promises.mkdir(dir, { recursive: true });
+  const base = path.basename(filePath, path.extname(filePath));
+  let n = 1;
+  const rest = (i) => path.join(dir, tx('{base} - sin voces {i}.flac', { base, i: String(i).padStart(2, '0') }));
+  const vocals = (i) => path.join(dir, tx('{base} - voces {i}.flac', { base, i: String(i).padStart(2, '0') }));
+  while (fs.existsSync(rest(n)) || fs.existsSync(vocals(n))) n++;
+  return separate.finish(id, rest(n), vocals(n));
+});
+ipcMain.handle('separate:cancel', (_e, id) => separate.cancel(id));
 
 // Congelar fotograma: el fotograma del medio en `time` (segundos del medio) como PNG en «Fotogramas» junto al
 // proyecto (o en Documentos si aún no está guardado). Devuelve la ruta.
@@ -865,6 +893,7 @@ app.whenReady().then(() => {
   protocol.handle('media', serveMedia);
   createWindow();
   setupUpdates();
+  separate.cleanStale();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -876,6 +905,7 @@ app.on('window-all-closed', () => {
   youtube.cancel();
   compressor.cancel();
   whisper.cancel();
+  separate.cancelAll();
   // «Reiniciar y actualizar»: el instalador (sin preguntas) sustituye la aplicación y la vuelve a abrir.
   if (installOnClose && autoUpdater) {
     autoUpdater.quitAndInstall(true, true);

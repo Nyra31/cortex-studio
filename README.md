@@ -14,7 +14,7 @@ El instalador no está firmado, así que la primera vez Windows SmartScreen pued
 - **Descargas:** videos de YouTube (y de muchos otros sitios) a MP4, MKV, WebM, MOV o solo audio, con metadatos, portada, capítulos y subtítulos.
 - **Compresor:** por lotes, al estilo de HandBrake: H.264, H.265, VP9 y AV1 (también con la tarjeta gráfica), calidad constante o tamaño objetivo, recorte de bandas negras, filtros y preajustes.
 - **Video:** transiciones, efectos con fotogramas clave, panorámica/recorte animado, modos de fusión, envolventes de opacidad y corrección de color (ruedas, curvas, LUT `.cube`).
-- **Audio:** efectos, envolventes de volumen y panorámica, ducking automático, medidores y grabación de voz en off.
+- **Audio:** efectos, envolventes de volumen y panorámica, ducking automático, medidores, grabación de voz en off y quitar las voces (para doblar) con IA en el propio equipo.
 - **Texto:** títulos con 50 fuentes incluidas, animaciones, plantillas y subtítulos (SRT).
 - **Vista previa:** en tiempo real con WebGL, igual que el render; proxies, monitores de video y pantalla completa.
 - **Render:** MP4 (H.264/H.265), WebM, ProRes, GIF, MP3 y WAV, con plantillas para YouTube y formatos verticales, normalización de sonoridad y cola de render.
@@ -53,7 +53,8 @@ Team roles:
 
 - checking for and downloading updates from this repository's [GitHub releases](https://github.com/Nyra31/cortex-studio/releases) ([GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement));
 - when the user asks for it: downloading videos with [yt-dlp](https://github.com/yt-dlp/yt-dlp) from the site the user enters (for YouTube, the [Google Privacy Policy](https://policies.google.com/privacy) applies), and downloading or updating yt-dlp from GitHub;
-- when the user asks for automatic subtitles: downloading [whisper.cpp](https://github.com/ggml-org/whisper.cpp) from GitHub and its models from [Hugging Face](https://huggingface.co) ([Hugging Face Privacy Policy](https://huggingface.co/privacy)). Transcription runs on the user's computer.
+- when the user asks for automatic subtitles: downloading [whisper.cpp](https://github.com/ggml-org/whisper.cpp) from GitHub and its models from [Hugging Face](https://huggingface.co) ([Hugging Face Privacy Policy](https://huggingface.co/privacy)). Transcription runs on the user's computer;
+- when the user asks to remove the voices from an audio event: downloading the chosen voice separation model (htdemucs or Mel-Band RoFormer) from [Hugging Face](https://huggingface.co). The separation runs on the user's computer.
 
 Projects, media files and error logs stay on the user's computer.
 
@@ -64,8 +65,8 @@ Firma de código gratuita de [SignPath.io](https://about.signpath.io), certifica
 - Autores (committers) y revisores (reviewers): [Nyra31](https://github.com/Nyra31).
 - Aprobación de las firmas (approvers): [Nyra31](https://github.com/Nyra31).
 
-**Privacidad:** Cortex Studio no envía información a ningún sistema en red salvo cuando el usuario lo pide. Solo se conecta para buscar y descargar actualizaciones en las releases de este repositorio (GitHub) y, cuando el usuario lo pide, para descargar videos con yt-dlp del sitio que indique, descargar o actualizar yt-dlp (GitHub) y descargar whisper.cpp (GitHub) y sus modelos (Hugging Face) para los subtítulos automáticos, que se generan en el propio equipo. Los proyectos, los medios y los registros de errores se quedan en el equipo. Se aplican las políticas de privacidad de GitHub, Google (YouTube) y Hugging Face enlazadas arriba.
+**Privacidad:** Cortex Studio no envía información a ningún sistema en red salvo cuando el usuario lo pide. Solo se conecta para buscar y descargar actualizaciones en las releases de este repositorio (GitHub) y, cuando el usuario lo pide, para descargar videos con yt-dlp del sitio que indique, descargar o actualizar yt-dlp (GitHub) y descargar whisper.cpp (GitHub) y sus modelos (Hugging Face) para los subtítulos automáticos y el modelo para quitar las voces (Hugging Face); los subtítulos y la separación de voces se hacen en el propio equipo. Los proyectos, los medios y los registros de errores se quedan en el equipo. Se aplican las políticas de privacidad de GitHub, Google (YouTube) y Hugging Face enlazadas arriba.
 
 ## Licencia
 
-Software libre con licencia [GPL-3.0](LICENSE). Incluye FFmpeg (GPL) y 50 fuentes de Google Fonts con sus propias licencias libres (`public/fonts/LICENCIAS.txt`).
+Software libre con licencia [GPL-3.0](LICENSE). Incluye FFmpeg (GPL), ONNX Runtime Web (MIT), el procesado de [demucs-web](https://github.com/timcsy/demucs-web) (MIT) y 50 fuentes de Google Fonts con sus propias licencias libres (`public/fonts/LICENCIAS.txt`). Los modelos para quitar las voces, que se descargan aparte, son [htdemucs](https://github.com/facebookresearch/demucs) de Meta (MIT) y [Mel-Band RoFormer](https://huggingface.co/audiojs/mel-roformer) de Kimberley Jensen (MIT).

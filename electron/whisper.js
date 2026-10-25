@@ -139,4 +139,4 @@ function cancel() {
   current.proc?.kill();
 }
 
-module.exports = { models, transcribe, cancel };
+module.exports = { models, transcribe, cancel, download };

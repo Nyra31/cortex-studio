@@ -1238,6 +1238,27 @@ input[type='number'] {
   border-color: var(--accent);
   color: #fff;
 }
+.model-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.model-option {
+  align-items: flex-start;
+  text-align: left;
+  line-height: 1.4;
+}
+.model-option .model-size {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.model-option.active .model-size {
+  color: inherit;
+}
+.voices-dialog {
+  width: 520px;
+}
 .custom-size {
   display: flex;
   align-items: flex-end;

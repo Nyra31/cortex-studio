@@ -169,6 +169,8 @@ export const EVENT_DEFAULTS = {
   stabilized: null,
   // Evento de audio con el ruido reducido: usa un archivo con el sonido limpio (desde `start` del medio de antes).
   denoised: null,
+  // Evento de audio sin las voces (para doblar): usa un archivo sin voces (desde `start` del medio de antes).
+  devoiced: null,
 };
 
 // Modos de fusión de las pistas de video (track.blend; sin él, normal), como los modos de composición de VEGAS.
@@ -680,12 +682,24 @@ export function setStabilized(project, eventId, media, start) {
 
 // Reducir el ruido de un evento de audio (solo ese: el video de su grupo sigue con el original): con `media` (el
 // sonido desde `start` del medio, limpio) pasa a usarlo; con media = null vuelve al de antes.
-export function setDenoised(project, eventId, media, start) {
+export const setDenoised = (project, eventId, media, start) => swapAudio(project, eventId, media, start, 'denoised');
+
+// Quitar las voces de un evento de audio (para doblar encima), igual que setDenoised. `extra`: medios que se añaden
+// también a la ventana de medios (la pista de voces sola, de referencia).
+export function setDevoiced(project, eventId, media, start, extra = []) {
+  const next = swapAudio(project, eventId, media, start, 'devoiced');
+  const add = extra.filter((m) => !next.media.some((x) => x.id === m.id));
+  return add.length ? { ...next, media: [...next.media, ...add] } : next;
+}
+
+// El evento pasa a usar `media` (un archivo hecho a partir del trozo que usaba, desde `start` del medio de antes) y
+// apunta en `field` de dónde venía; con media = null vuelve al medio de antes.
+function swapAudio(project, eventId, media, start, field) {
   const events = project.events.map((e) => {
     if (e.id !== eventId) return e;
-    if (media) return { ...e, mediaId: media.id, inPoint: Math.max(0, e.inPoint - start), denoised: { mediaId: e.mediaId, start } };
-    if (!e.denoised) return e;
-    return { ...e, mediaId: e.denoised.mediaId, inPoint: e.denoised.start + e.inPoint, denoised: null };
+    if (media) return { ...e, mediaId: media.id, inPoint: Math.max(0, e.inPoint - start), [field]: { mediaId: e.mediaId, start } };
+    if (!e[field]) return e;
+    return { ...e, mediaId: e[field].mediaId, inPoint: e[field].start + e.inPoint, [field]: null };
   });
   return { ...project, media: media && !project.media.some((m) => m.id === media.id) ? [...project.media, media] : project.media, events };
 }

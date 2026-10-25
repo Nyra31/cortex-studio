@@ -2,8 +2,9 @@
 
 Los instaladores de cada versión están en las [releases de GitHub](https://github.com/Nyra31/cortex-studio/releases). Los proyectos guardados con versiones anteriores se siguen abriendo.
 
-## Sin publicar
+## 1.1.0 (26/10/2026)
 
+- **Quitar las voces** de un evento de audio para doblar encima (menú del evento → *Quitar las voces (para doblar)…*): separación con IA en el propio equipo, con dos modelos a elegir (*Rápido*: htdemucs; *El mejor*: Mel-Band RoFormer), con la tarjeta gráfica si es compatible; el evento usa la música y los efectos sin voces y las voces solas quedan en los medios del proyecto. Se puede cancelar y deshacer.
 - **Interfaz en inglés** (*Ayuda → Idioma*): toda la aplicación, también los diálogos de Windows, los mensajes de error y los nombres de las carpetas y archivos que crea (Reversed, Recordings…). La primera vez se usa el idioma de Windows (español si Windows está en español; si no, inglés). Cambiar el idioma reinicia la aplicación (pregunta antes si hay cambios sin guardar). Los números usan el separador decimal del idioma y los subtítulos automáticos proponen el idioma de la interfaz.
 
 ## 1.0.0 (23/10/2026)

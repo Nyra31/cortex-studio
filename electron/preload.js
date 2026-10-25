@@ -42,6 +42,16 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('stabilize:progress', handler);
   },
   denoiseClip: (filePath, start, length, projectPath, strength) => ipcRenderer.invoke('media:denoise', filePath, start, length, projectPath, strength),
+  separateModels: () => ipcRenderer.invoke('separate:models'),
+  separateStart: (filePath, start, length, modelId) => ipcRenderer.invoke('separate:start', filePath, start, length, modelId),
+  separateWrite: (id, chunk) => ipcRenderer.send('separate:write', id, chunk),
+  separateFinish: (id, filePath, projectPath) => ipcRenderer.invoke('separate:finish', id, filePath, projectPath),
+  separateCancel: (id) => ipcRenderer.invoke('separate:cancel', id),
+  onSeparateProgress: (callback) => {
+    const handler = (_e, state) => callback(state);
+    ipcRenderer.on('separate:progress', handler);
+    return () => ipcRenderer.removeListener('separate:progress', handler);
+  },
   onDenoiseProgress: (callback) => {
     const handler = (_e, p) => callback(p);
     ipcRenderer.on('denoise:progress', handler);
