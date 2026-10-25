@@ -6,7 +6,7 @@ Editor de video de escritorio con línea de tiempo multipista, al estilo de los 
 
 Descarga `Cortex-Studio-Setup-<versión>.exe` de la [última release](https://github.com/Nyra31/cortex-studio/releases/latest) (Windows). Se instala sin permisos de administrador y después se actualiza sola.
 
-El instalador no está firmado, así que la primera vez Windows SmartScreen puede mostrar «Windows protegió su PC»: pulsa *Más información → Ejecutar de todas formas*.
+El instalador no está firmado, así que la primera vez Windows SmartScreen puede mostrar «Windows protegió su PC»: pulsa *Más información → Ejecutar de todas formas*. A partir de la versión 1.1 se firmará con SignPath ([Code signing policy](#code-signing-policy)).
 
 ## Funciones
 
@@ -36,16 +36,35 @@ Para publicar una versión, la release de GitHub debe llevar el instalador, su `
 
 Si la aplicación no se abre al lanzar `electron .` a mano, quita la variable `ELECTRON_RUN_AS_NODE` (la definen, por ejemplo, las terminales de VS Code). `npm start` y `npm run dev` ya la quitan.
 
-## Política de firma de código
+## Code signing policy
 
-En preparación para la versión 1.1: el instalador de Windows se compilará en GitHub Actions a partir de este repositorio ([flujo `instalador.yml`](.github/workflows/instalador.yml)) y se firmará con SignPath. Hasta entonces, el instalador no está firmado.
+*Política de firma de código* (en español más abajo).
 
 Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+The Windows installer is built from this repository by GitHub Actions ([`instalador.yml`](.github/workflows/instalador.yml)) and signed with SignPath. Releases before 1.1 are not signed.
+
+Team roles:
+
+- Committers and reviewers: [Nyra31](https://github.com/Nyra31)
+- Approvers: [Nyra31](https://github.com/Nyra31)
+
+**Privacy policy:** This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. The only connections it makes are:
+
+- checking for and downloading updates from this repository's [GitHub releases](https://github.com/Nyra31/cortex-studio/releases) ([GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement));
+- when the user asks for it: downloading videos with [yt-dlp](https://github.com/yt-dlp/yt-dlp) from the site the user enters (for YouTube, the [Google Privacy Policy](https://policies.google.com/privacy) applies), and downloading or updating yt-dlp from GitHub;
+- when the user asks for automatic subtitles: downloading [whisper.cpp](https://github.com/ggml-org/whisper.cpp) from GitHub and its models from [Hugging Face](https://huggingface.co) ([Hugging Face Privacy Policy](https://huggingface.co/privacy)). Transcription runs on the user's computer.
+
+Projects, media files and error logs stay on the user's computer.
+
+### Política de firma de código
+
+Firma de código gratuita de [SignPath.io](https://about.signpath.io), certificado de [SignPath Foundation](https://signpath.org). El instalador de Windows se compila en GitHub Actions a partir de este repositorio y se firma con SignPath; las versiones anteriores a la 1.1 no están firmadas.
 
 - Autores (committers) y revisores (reviewers): [Nyra31](https://github.com/Nyra31).
 - Aprobación de las firmas (approvers): [Nyra31](https://github.com/Nyra31).
 
-**Privacidad:** Cortex Studio no envía datos personales ni de uso a ninguna parte. Solo se conecta a Internet para buscar actualizaciones en las releases de este repositorio y, cuando el usuario lo pide, para descargar videos (yt-dlp), descargar o actualizar yt-dlp y descargar el programa y los modelos de los subtítulos automáticos (whisper.cpp). Los proyectos, los medios y los registros de errores se quedan en el equipo.
+**Privacidad:** Cortex Studio no envía información a ningún sistema en red salvo cuando el usuario lo pide. Solo se conecta para buscar y descargar actualizaciones en las releases de este repositorio (GitHub) y, cuando el usuario lo pide, para descargar videos con yt-dlp del sitio que indique, descargar o actualizar yt-dlp (GitHub) y descargar whisper.cpp (GitHub) y sus modelos (Hugging Face) para los subtítulos automáticos, que se generan en el propio equipo. Los proyectos, los medios y los registros de errores se quedan en el equipo. Se aplican las políticas de privacidad de GitHub, Google (YouTube) y Hugging Face enlazadas arriba.
 
 ## Licencia
 
