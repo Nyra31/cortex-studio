@@ -4,6 +4,7 @@
 // x/y en píxeles del proyecto con el origen arriba a la izquierda, y mixx(a, b, m) = a·m + b·(1−m).
 import { TRANSITIONS } from '../state/transitions.js';
 import { GLSL_HELPERS, effectPasses } from './effects-gl.js';
+import { tx } from '../i18n/index.js';
 
 const GLSL = {
   fade: 'return mixx(A(uv), B(uv), P);',
@@ -264,7 +265,7 @@ const SCRATCH = 7; // unidad de textura para subir y crear texturas sin tocar la
 export class Compositor {
   constructor(canvas, { preserveDrawingBuffer = false } = {}) {
     const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, preserveDrawingBuffer });
-    if (!gl) throw new Error('WebGL2 no está disponible');
+    if (!gl) throw new Error(tx('WebGL2 no está disponible'));
     this.gl = gl;
     this.canvas = canvas;
     this.textures = new WeakMap(); // elemento → { tex, still } (still: imagen ya subida)

@@ -5,6 +5,7 @@ import {
   EFFECTS, addFxKey, canAnimate, effectDefaults, effectGroups, fxKeyAt, fxParamsAt, hasKeyframes, isAnimatable, moveFxKey, newEffect,
   removeFxKey, setFxValues,
 } from '../state/effects.js';
+import { tx } from '../i18n/index.js';
 
 // Ventana flotante con los efectos de un evento (como «FX de evento» de VEGAS); kind = 'video' o 'audio'
 // según la pista. Arriba la cadena (en el orden en que se aplican), abajo los controles del efecto elegido.
@@ -108,8 +109,8 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
   return (
     <div className="fx-window" style={{ left: pos.x, top: pos.y }}>
       <div className="fx-title" onPointerDown={startDrag}>
-        <span>Efectos {kind === 'audio' ? 'de audio' : 'de video'} del evento: {mediaName}</span>
-        <button className="track-btn" title="Cerrar (Esc)" onClick={onClose}>
+        <span>{tx('Efectos {n} del evento: {mediaName}', { n: kind === 'audio' ? tx('de audio') : tx('de video'), mediaName })}</span>
+        <button className="track-btn" title={tx('Cerrar (Esc)')} onClick={onClose}>
           <Icon name="close" size={11} />
         </button>
       </div>
@@ -120,7 +121,7 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
             key={fx.id}
             className={`fx-chip${fx.id === selected?.id ? ' active' : ''}${fx.enabled === false ? ' off' : ''}`}
             onClick={() => setSelectedId(fx.id)}
-            title="Clic para ver sus controles; la casilla lo activa o desactiva"
+            title={tx('Clic para ver sus controles; la casilla lo activa o desactiva')}
           >
             <input
               type="checkbox"
@@ -135,9 +136,9 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
           className="fx-add"
           value=""
           onChange={(e) => e.target.value && add(e.target.value)}
-          title="Añadir un efecto al final de la cadena"
+          title={tx('Añadir un efecto al final de la cadena')}
         >
-          <option value="">+ Añadir efecto…</option>
+          <option value="">{tx('+ Añadir efecto…')}</option>
           {effectGroups(kind).map((g) => (
             <optgroup key={g.name} label={g.name}>
               {g.items.map((item) => (
@@ -153,26 +154,26 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
           <div className="fx-params-head">
             <strong>{def.name}</strong>
             <span className="fx-buttons">
-              <button onClick={() => move(-1)} disabled={effects[0]?.id === selected.id} title="Aplicar antes">◀</button>
-              <button onClick={() => move(1)} disabled={effects.at(-1)?.id === selected.id} title="Aplicar después">▶</button>
+              <button onClick={() => move(-1)} disabled={effects[0]?.id === selected.id} title={tx('Aplicar antes')}>◀</button>
+              <button onClick={() => move(1)} disabled={effects.at(-1)?.id === selected.id} title={tx('Aplicar después')}>▶</button>
               <button
                 onClick={() => changeSelected((fx) => ({ ...fx, params: effectDefaults(fx.type), keyframes: null }))}
-                title="Valores por defecto (y quita la animación)"
+                title={tx('Valores por defecto (y quita la animación)')}
               >
-                Restablecer
+               {tx('Restablecer')}
               </button>
-              <button onClick={remove}>Quitar</button>
+              <button onClick={remove}>{tx('Quitar')}</button>
             </span>
           </div>
           {kind === 'video' && (animatable ? (
             <>
-              <div className="pan-strip" ref={stripRef} onPointerDown={(e) => e.button === 0 && onSeek(event.start + stripTime(e.clientX))} title="Clic: llevar el cursor ahí">
+              <div className="pan-strip" ref={stripRef} onPointerDown={(e) => e.button === 0 && onSeek(event.start + stripTime(e.clientX))} title={tx('Clic: llevar el cursor ahí')}>
                 {kfs.map((k, i) => (
                   <span
                     key={i}
                     className={`pan-key${i === at ? ' active' : ''}`}
                     style={{ left: `${(k.t / event.duration) * 100}%` }}
-                    title="Fotograma clave (arrastra para moverlo)"
+                    title={tx('Fotograma clave (arrastra para moverlo)')}
                     onPointerDown={(e) => onKeyDown(e, i)}
                   />
                 ))}
@@ -181,19 +182,19 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
                 )}
               </div>
               <div className="text-row pan-keys">
-                <button title="Fotograma clave anterior" onClick={() => jump(-1)} disabled={!kfs.some((k) => k.t < local - 1e-6)}>◀</button>
-                <button title="Fotograma clave siguiente" onClick={() => jump(1)} disabled={!kfs.some((k) => k.t > local + 1e-6)}>▶</button>
-                <button onClick={() => changeSelected((fx) => addFxKey(fx, local, fps))} disabled={at >= 0}>+ Fotograma clave</button>
-                <button onClick={() => changeSelected((fx) => removeFxKey(fx, at))} disabled={at < 0 || !hasKeyframes(selected)}>Quitar</button>
+                <button title={tx('Fotograma clave anterior')} onClick={() => jump(-1)} disabled={!kfs.some((k) => k.t < local - 1e-6)}>◀</button>
+                <button title={tx('Fotograma clave siguiente')} onClick={() => jump(1)} disabled={!kfs.some((k) => k.t > local + 1e-6)}>▶</button>
+                <button onClick={() => changeSelected((fx) => addFxKey(fx, local, fps))} disabled={at >= 0}>{tx('+ Fotograma clave')}</button>
+                <button onClick={() => changeSelected((fx) => removeFxKey(fx, at))} disabled={at < 0 || !hasKeyframes(selected)}>{tx('Quitar')}</button>
               </div>
               <p className="pan-hint">
                 {kfs.length
-                  ? `Animado con ${kfs.length} fotogramas clave: los controles muestran los valores en el cursor y, al cambiarlos donde no hay ninguno, se crea uno nuevo.`
-                  : 'Sin animación: los valores valen para todo el evento. Para animarlo, lleva el cursor a otro momento del evento y pulsa «+ Fotograma clave».'}
+                  ? tx('Animado con {length} fotogramas clave: los controles muestran los valores en el cursor y, al cambiarlos donde no hay ninguno, se crea uno nuevo.', { length: kfs.length })
+                  : tx('Sin animación: los valores valen para todo el evento. Para animarlo, lleva el cursor a otro momento del evento y pulsa «+ Fotograma clave».')}
               </p>
             </>
           ) : (
-            <p className="pan-hint">Este efecto no se puede animar con fotogramas clave.</p>
+            <p className="pan-hint">{tx('Este efecto no se puede animar con fotogramas clave.')}</p>
           ))}
           {def.params.some((p) => p.type === 'curve') && (
             <CurveEditor
@@ -219,14 +220,14 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
                   if (file) setParam(p.id, file, true);
                 }}
               >
-                Elegir…
+               {tx('Elegir…')}
               </button>
               <span className="fx-param-value fx-file" title={values[p.id] || ''}>
                 {values[p.id] ? values[p.id].split(/[\\/]/).pop() : 'ninguno'}
               </span>
             </div>
           ) : (
-            <label key={p.id} className="fx-param" title={kfs.length && !canAnimate(def, p) ? 'Este valor no se anima: vale para todo el evento' : undefined}>
+            <label key={p.id} className="fx-param" title={kfs.length && !canAnimate(def, p) ? tx('Este valor no se anima: vale para todo el evento') : undefined}>
               <span className="fx-param-label">{p.label}</span>
               {p.type === 'range' && (
                 <>
@@ -243,7 +244,7 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
                       first.current = false;
                     }}
                     onDoubleClick={() => setParam(p.id, p.default, true)}
-                    title="Doble clic: valor por defecto"
+                    title={tx('Doble clic: valor por defecto')}
                   />
                   <span className="fx-param-value">{p.format ? p.format(values[p.id]) : values[p.id]}</span>
                 </>
@@ -267,8 +268,7 @@ export default function EventFxDialog({ event, kind, mediaName, fps = 30, time =
         </div>
       ) : (
         <div className="fx-empty">
-          Este evento no tiene efectos. Añade uno con «+ Añadir efecto…» o arrastrándolo desde la ventana
-          {kind === 'audio' ? ' Efectos de audio.' : ' Efectos de video (Alt+8).'}
+         {tx('Este evento no tiene efectos. Añade uno con «+ Añadir efecto…» o arrastrándolo desde la ventana {n}', { n: kind === 'audio' ? tx(' Efectos de audio.') : tx(' Efectos de video (Alt+8).') })}
         </div>
       )}
     </div>

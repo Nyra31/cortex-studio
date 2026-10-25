@@ -1,3 +1,4 @@
+import { decimal } from '../i18n/index.js';
 // Medidores de volumen (vista previa): uno estéreo por pista de audio y el del máster. Leen los picos del
 // motor de audio (AudioEngine.levels) en un bucle propio con requestAnimationFrame y tocan el DOM
 // directamente: nada se vuelve a dibujar con React.
@@ -74,7 +75,7 @@ function tick(now) {
     }
     put(m.clip, '_on', s.clipped, (v) => m.clip.classList.toggle('on', v));
     const top = Math.max(s.hold[0], s.hold[1]);
-    put(m.label, '_t', Number.isFinite(top) && top > METER_MIN_DB ? `${top > 0 ? '+' : ''}${top.toFixed(1).replace('.', ',')}` : '-∞', (v) => (m.label.textContent = v));
+    put(m.label, '_t', Number.isFinite(top) && top > METER_MIN_DB ? `${top > 0 ? '+' : ''}${decimal(top, 1)}` : '-∞', (v) => (m.label.textContent = v));
   }
 }
 

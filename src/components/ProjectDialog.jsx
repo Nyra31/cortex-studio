@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import Icon from './Icon.jsx';
 import { FRAME_RATES, formatFps } from '../state/project.js';
+import { locale, tx } from '../i18n/index.js';
 
 const PRESETS = [
   { name: '4K UHD', long: 3840, short: 2160 },
   { name: 'QHD', long: 2560, short: 1440 },
-  { name: 'Full HD', long: 1920, short: 1080 },
+  { name: tx('Full HD'), long: 1920, short: 1080 },
   { name: 'HD', long: 1280, short: 720 },
   { name: 'SD', long: 854, short: 480 },
 ];
@@ -25,10 +26,10 @@ const fileName = (p) => p.split(/[\\/]/).pop().replace(/\.cortex$/i, '');
 const folderName = (p) => p.split(/[\\/]/).slice(0, -1).join('\\');
 const when = (ms) => {
   const days = Math.floor((Date.now() - ms) / 86400000);
-  if (days < 1) return `hoy, ${new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
-  if (days === 1) return 'ayer';
-  if (days < 7) return `hace ${days} días`;
-  return new Date(ms).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (days < 1) return tx('hoy, {time}', { time: new Date(ms).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) });
+  if (days === 1) return tx('ayer');
+  if (days < 7) return tx('hace {days} días', { days });
+  return new Date(ms).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
 // Nuevo proyecto / propiedades. En la pantalla de inicio ('startup', o 'recent' desde el menú), a la izquierda
@@ -69,13 +70,13 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel, recen
   return (
     <div className="modal-backdrop">
       <div className={`modal project-dialog${start ? ' start-dialog' : ''}`}>
-        <div className="modal-title">{mode === 'edit' ? 'Propiedades del proyecto' : start ? 'Cortex Studio' : 'Nuevo proyecto'}</div>
+        <div className="modal-title">{mode === 'edit' ? tx('Propiedades del proyecto') : start ? 'Cortex Studio' : tx('Nuevo proyecto')}</div>
         <div className={start ? 'start-columns' : 'start-plain'}>
         {start && (
           <div className="start-recent">
-            <div className="field-label">Proyectos recientes</div>
-            {recents === null && <p className="note">Cargando…</p>}
-            {recents?.length === 0 && <p className="note">Aún no hay ninguno. Los proyectos que abras o guardes aparecerán aquí.</p>}
+            <div className="field-label">{tx('Proyectos recientes')}</div>
+            {recents === null && <p className="note">{tx('Cargando…')}</p>}
+            {recents?.length === 0 && <p className="note">{tx('Aún no hay ninguno. Los proyectos que abras o guardes aparecerán aquí.')}</p>}
             <ul className="recent-list">
               {recents?.map((r) => (
                 <li
@@ -88,11 +89,11 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel, recen
                 >
                   <div className="recent-name">{fileName(r.path)}</div>
                   <div className="note">
-                    {r.exists ? `${when(r.modifiedAt || r.openedAt)} · ${folderName(r.path)}` : 'No se encuentra (movido o borrado)'}
+                    {r.exists ? `${when(r.modifiedAt || r.openedAt)} · ${folderName(r.path)}` : tx('No se encuentra (movido o borrado)')}
                   </div>
                   <button
                     className="recent-remove"
-                    title="Quitar de la lista (no borra el archivo)"
+                    title={tx('Quitar de la lista (no borra el archivo)')}
                     onClick={(e) => {
                       e.stopPropagation();
                       onRemoveRecent(r.path);
@@ -103,25 +104,25 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel, recen
                 </li>
               ))}
             </ul>
-            <button onClick={onOpenOther}>Abrir otro proyecto…</button>
+            <button onClick={onOpenOther}>{tx('Abrir otro proyecto…')}</button>
           </div>
         )}
         <div className="modal-content">
-          {start && <div className="field-label start-new">Nuevo proyecto</div>}
-          <div className="field-label">Orientación</div>
+          {start && <div className="field-label start-new">{tx('Nuevo proyecto')}</div>}
+          <div className="field-label">{tx('Orientación')}</div>
           <div className="orientation">
             <button className={!vertical ? 'choice active' : 'choice'} onClick={() => setOrientation(false)}>
               <Icon name="landscape" size={22} />
-              Horizontal
+             {tx('Horizontal')}
             </button>
             <button className={vertical ? 'choice active' : 'choice'} onClick={() => setOrientation(true)}>
               <Icon name="portrait" size={22} />
-              Vertical
+             {tx('Vertical')}
             </button>
           </div>
 
           <label>
-            <span className="field-label">Resolución</span>
+            <span className="field-label">{tx('Resolución')}</span>
             <select
               value={preset}
               onChange={(e) => {
@@ -134,13 +135,13 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel, recen
                   {vertical ? `${p.short} × ${p.long}` : `${p.long} × ${p.short}`} ({p.name})
                 </option>
               ))}
-              <option value={CUSTOM}>Personalizada…</option>
+              <option value={CUSTOM}>{tx('Personalizada…')}</option>
             </select>
           </label>
           {preset === CUSTOM && (
             <div className="custom-size">
               <label>
-                <span className="field-label">Ancho</span>
+                <span className="field-label">{tx('Ancho')}</span>
                 <input
                   type="number"
                   min="16"
@@ -153,7 +154,7 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel, recen
               </label>
               <span className="times">×</span>
               <label>
-                <span className="field-label">Alto</span>
+                <span className="field-label">{tx('Alto')}</span>
                 <input
                   type="number"
                   min="16"
@@ -168,11 +169,11 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel, recen
           )}
 
           <label>
-            <span className="field-label">Velocidad de fotogramas</span>
+            <span className="field-label">{tx('Velocidad de fotogramas')}</span>
             <select value={fps} onChange={(e) => setState((s) => ({ ...s, fps: Number(e.target.value) }))}>
               {FRAME_RATES.map((f) => (
                 <option key={f} value={f}>
-                  {formatFps(f)} fps{f === 29.97 ? ' (NTSC)' : f === 25 ? ' (PAL)' : ''}
+                  {tx('{formatFps} fps{n}', { formatFps: formatFps(f), n: f === 29.97 ? ' (NTSC)' : f === 25 ? ' (PAL)' : '' })}
                 </option>
               ))}
             </select>
@@ -181,21 +182,21 @@ export default function ProjectDialog({ mode, initial, onAccept, onCancel, recen
           <div className="frame-preview">
             <div className="frame-box" style={valid ? box : undefined} />
             <div>
-              <strong>{valid ? `${even(width)} × ${even(height)}` : 'Tamaño no válido'}</strong>
+              <strong>{valid ? `${even(width)} × ${even(height)}` : tx('Tamaño no válido')}</strong>
               <div className="note">
-                {formatFps(fps)} fps · {vertical ? 'vertical' : 'horizontal'}
+                {tx('{formatFps} fps · {n}', { formatFps: formatFps(fps), n: vertical ? tx('vertical') : tx('horizontal') })}
               </div>
             </div>
           </div>
           {mode === 'edit' && (
-            <p className="note">Los cambios afectan a la vista previa y al renderizado; los eventos no se modifican.</p>
+            <p className="note">{tx('Los cambios afectan a la vista previa y al renderizado; los eventos no se modifican.')}</p>
           )}
         </div>
         </div>
         <div className="modal-actions">
-          <button onClick={onCancel}>{mode === 'startup' ? 'Usar valores por defecto' : 'Cancelar'}</button>
+          <button onClick={onCancel}>{mode === 'startup' ? tx('Usar valores por defecto') : tx('Cancelar')}</button>
           <button className="primary" onClick={accept} disabled={!valid}>
-            {start ? 'Crear el proyecto' : 'Aceptar'}
+            {start ? tx('Crear el proyecto') : tx('Aceptar')}
           </button>
         </div>
       </div>

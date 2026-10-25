@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { registerMeter, resetClip } from '../preview/meters.js';
+import { tx } from '../i18n/index.js';
 
 // Medidor estéreo (izquierda arriba, derecha abajo) de una pista o del máster (id = 'master'). Lo anima
 // meters.js. withLabel: muestra el pico retenido en dB y el testigo de saturación.
@@ -26,7 +27,7 @@ export default function Meter({ id, withLabel = false, title }) {
       {withLabel && (
         <>
           <span ref={label} className="meter-db">-∞</span>
-          <span ref={clip} className="meter-clip" title="Saturación (clic para apagar)" onClick={() => resetClip(id)} />
+          <span ref={clip} className="meter-clip" title={tx('Saturación (clic para apagar)')} onClick={() => resetClip(id)} />
         </>
       )}
     </div>

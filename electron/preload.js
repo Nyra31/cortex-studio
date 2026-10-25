@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  // Idioma de la interfaz (síncrono: los textos se crean al cargar los módulos).
+  lang: ipcRenderer.sendSync('i18n:lang'),
+  setLanguage: (lang) => ipcRenderer.invoke('i18n:set', lang),
   pickMedia: () => ipcRenderer.invoke('media:pick'),
   analyzeMedia: (filePath) => ipcRenderer.invoke('media:analyze', filePath),
   getPathForFile: (file) => webUtils.getPathForFile(file),

@@ -9,6 +9,7 @@
     "build": "vite build",
     "start": "vite build && node scripts/electron.js .",
     "icon": "node scripts/make-icon.js",
+    "i18n": "node scripts/i18n-check.js",
     "dist": "vite build && electron-builder --win --publish never"
   },
   "dependencies": {

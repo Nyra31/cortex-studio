@@ -7,6 +7,7 @@ import { hasRamp, localForSource, shiftSpeed, sourceOffset, speedPayload } from 
 import { panActive, panAt, panExpr, scalePanTime, shiftPan } from './pan.js';
 import { trackMixExpr, trackOpacityExpr } from './envelopes.js';
 import { SUB_STYLE, emptySubtitles, subtitleParams, toSrt } from './subtitles.js';
+import { decimal, point, tx } from '../i18n/index.js';
 
 //
 // project = {
@@ -142,7 +143,7 @@ export function isTrackActive(track, tracks) {
 
 export const volumeToGain = (db) => (db <= MIN_VOLUME_DB ? 0 : 10 ** (db / 20));
 export const gainToVolume = (gain) => (gain <= volumeToGain(MIN_VOLUME_DB) ? MIN_VOLUME_DB : Math.min(0, 20 * Math.log10(gain)));
-export const formatVolume = (db) => (db <= MIN_VOLUME_DB ? '-∞ dB' : `${db > 0 ? '+' : ''}${db.toFixed(1).replace('.', ',')} dB`);
+export const formatVolume = (db) => (db <= MIN_VOLUME_DB ? '-∞ dB' : `${db > 0 ? '+' : ''}${decimal(db, 1)} dB`);
 
 // Pico (0–1) del audio de un evento según la forma de onda del medio (lo usa el efecto Normalizar).
 export function eventPeak(media, e) {
@@ -173,27 +174,27 @@ export const EVENT_DEFAULTS = {
 // Modos de fusión de las pistas de video (track.blend; sin él, normal), como los modos de composición de VEGAS.
 // Mismas fórmulas que el filtro blend de FFmpeg (ver BLEND_CODE en preview/compositor.js).
 export const BLEND_MODES = [
-  { id: 'normal', label: 'Normal' },
-  { id: 'multiply', label: 'Multiplicar' },
-  { id: 'screen', label: 'Trama' },
-  { id: 'overlay', label: 'Superponer' },
-  { id: 'hardlight', label: 'Luz fuerte' },
-  { id: 'darken', label: 'Oscurecer' },
-  { id: 'lighten', label: 'Aclarar' },
-  { id: 'addition', label: 'Sumar' },
-  { id: 'subtract', label: 'Restar' },
-  { id: 'difference', label: 'Diferencia' },
+  { id: 'normal', label: tx('Normal') },
+  { id: 'multiply', label: tx('Multiplicar') },
+  { id: 'screen', label: tx('Trama') },
+  { id: 'overlay', label: tx('Superponer') },
+  { id: 'hardlight', label: tx('Luz fuerte') },
+  { id: 'darken', label: tx('Oscurecer') },
+  { id: 'lighten', label: tx('Aclarar') },
+  { id: 'addition', label: tx('Sumar') },
+  { id: 'subtract', label: tx('Restar') },
+  { id: 'difference', label: tx('Diferencia') },
 ];
 
 // Curvas de los fundidos, como en VEGAS. «Rápido»: el cambio ocurre sobre todo al principio del fundido;
 // «lento», al final; «suave», lento-rápido-lento; «brusco», rápido-lento-rápido. Mismas fórmulas que el render
 // (afade de FFmpeg en audio: ipar, qua, hsin, ihsin; geq en video).
 export const FADE_CURVES = [
-  { id: 'linear', label: 'Lineal' },
-  { id: 'fast', label: 'Rápido' },
-  { id: 'slow', label: 'Lento' },
-  { id: 'smooth', label: 'Suave' },
-  { id: 'sharp', label: 'Brusco' },
+  { id: 'linear', label: tx('Lineal') },
+  { id: 'fast', label: tx('Rápido') },
+  { id: 'slow', label: tx('Lento') },
+  { id: 'smooth', label: tx('Suave') },
+  { id: 'sharp', label: tx('Brusco') },
 ];
 // Forma del fundido de entrada: progreso p (0…1) → factor. El de salida es 1 − fadeCurve(curva, progreso).
 export function fadeCurve(curve, p) {
@@ -301,7 +302,7 @@ export function fadeFactor(e, t, fades = { ...eventFades(e), curveIn: e.fadeInCu
 }
 
 export function formatFps(fps) {
-  return Number.isInteger(fps) ? String(fps) : fps.toFixed(3).replace(/0+$/, '').replace('.', ',');
+  return Number.isInteger(fps) ? String(fps) : point(fps.toFixed(3).replace(/0+$/, ''));
 }
 
 export function projectDuration(project) {
@@ -838,7 +839,7 @@ export function renderPayload(project, size = project.settings, range = null, op
       events: [...project.events, ...subEvents],
       media: [
         ...project.media,
-        ...cues.map((c) => ({ id: `sub~${c.id}`, kind: 'text', name: 'Subtítulo', text: subtitleParams(project.subtitles.style, c.text), isImage: true, hasVideo: true, hasAudio: false })),
+        ...cues.map((c) => ({ id: `sub~${c.id}`, kind: 'text', name: tx('Subtítulo'), text: subtitleParams(project.subtitles.style, c.text), isImage: true, hasVideo: true, hasAudio: false })),
       ],
     };
   }

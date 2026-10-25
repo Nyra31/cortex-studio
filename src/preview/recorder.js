@@ -4,6 +4,7 @@
 // Se abre el micrófono antes de empezar (prepare) y las muestras se guardan desde begin(), que App llama justo
 // cuando arranca el reloj de reproducción: así el principio del archivo coincide con el instante de partida.
 
+import { tx } from '../i18n/index.js';
 const WORKLET_SOURCE = `
 class CortexRecorder extends AudioWorkletProcessor {
   constructor() {
@@ -82,11 +83,11 @@ export async function listInputs() {
 // Mensaje entendible para los errores de getUserMedia.
 export function micError(err) {
   if (err?.name === 'NotAllowedError') {
-    return 'Windows no deja usar el micrófono. Actívalo en Configuración > Privacidad y seguridad > Micrófono (también «Permitir que las aplicaciones de escritorio accedan al micrófono»).';
+    return tx('Windows no deja usar el micrófono. Actívalo en Configuración > Privacidad y seguridad > Micrófono (también «Permitir que las aplicaciones de escritorio accedan al micrófono»).');
   }
-  if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') return 'No se ha encontrado ningún micrófono.';
-  if (err?.name === 'NotReadableError') return 'El micrófono está ocupado por otra aplicación o no responde.';
-  return `No se pudo abrir el micrófono: ${err?.message || err}`;
+  if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') return tx('No se ha encontrado ningún micrófono.');
+  if (err?.name === 'NotReadableError') return tx('El micrófono está ocupado por otra aplicación o no responde.');
+  return tx('No se pudo abrir el micrófono: {n}', { n: err?.message || err });
 }
 
 export class Recorder {

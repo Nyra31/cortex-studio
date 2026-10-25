@@ -6,16 +6,17 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { ffmpegPath, ffprobePath, run } = require('./ffmpeg');
+const { tx } = require('./i18n');
 
 const X26X_SPEEDS = [
-  ['ultrafast', 'Ultrarrápido'], ['superfast', 'Superrápido'], ['veryfast', 'Muy rápido'], ['faster', 'Más rápido'],
-  ['fast', 'Rápido'], ['medium', 'Medio'], ['slow', 'Lento'], ['slower', 'Más lento'], ['veryslow', 'Muy lento'],
+  ['ultrafast', tx('Ultrarrápido')], ['superfast', tx('Superrápido')], ['veryfast', tx('Muy rápido')], ['faster', tx('Más rápido')],
+  ['fast', tx('Rápido')], ['medium', tx('Medio')], ['slow', tx('Lento')], ['slower', tx('Más lento')], ['veryslow', tx('Muy lento')],
 ];
-const NVENC_SPEEDS = [1, 2, 3, 4, 5, 6, 7].map((n) => [`p${n}`, ['Muy rápido', 'Más rápido', 'Rápido', 'Medio', 'Lento', 'Más lento', 'Muy lento'][n - 1]]);
-const QSV_SPEEDS = [['veryfast', 'Muy rápido'], ['faster', 'Más rápido'], ['fast', 'Rápido'], ['medium', 'Medio'], ['slow', 'Lento'], ['slower', 'Más lento'], ['veryslow', 'Muy lento']];
-const AMF_SPEEDS = [['speed', 'Rápido'], ['balanced', 'Equilibrado'], ['quality', 'Calidad']];
-const VPX_SPEEDS = [5, 4, 3, 2, 1, 0].map((n, i) => [String(n), ['Muy rápido', 'Rápido', 'Medio', 'Lento', 'Más lento', 'Muy lento'][i]]);
-const AOM_SPEEDS = [8, 7, 6, 5, 4, 3].map((n, i) => [String(n), ['Muy rápido', 'Rápido', 'Medio', 'Lento', 'Más lento', 'Muy lento'][i]]);
+const NVENC_SPEEDS = [1, 2, 3, 4, 5, 6, 7].map((n) => [`p${n}`, [tx('Muy rápido'), tx('Más rápido'), tx('Rápido'), tx('Medio'), tx('Lento'), tx('Más lento'), tx('Muy lento')][n - 1]]);
+const QSV_SPEEDS = [['veryfast', tx('Muy rápido')], ['faster', tx('Más rápido')], ['fast', tx('Rápido')], ['medium', tx('Medio')], ['slow', tx('Lento')], ['slower', tx('Más lento')], ['veryslow', tx('Muy lento')]];
+const AMF_SPEEDS = [['speed', tx('Rápido')], ['balanced', tx('Equilibrado')], ['quality', tx('Calidad')]];
+const VPX_SPEEDS = [5, 4, 3, 2, 1, 0].map((n, i) => [String(n), [tx('Muy rápido'), tx('Rápido'), tx('Medio'), tx('Lento'), tx('Más lento'), tx('Muy lento')][i]]);
+const AOM_SPEEDS = [8, 7, 6, 5, 4, 3].map((n, i) => [String(n), [tx('Muy rápido'), tx('Rápido'), tx('Medio'), tx('Lento'), tx('Más lento'), tx('Muy lento')][i]]);
 
 const pixFmt = (o) => (o.tenBit ? 'yuv420p10le' : 'yuv420p');
 
@@ -25,7 +26,7 @@ const ENCODERS = [
   {
     id: 'x264', name: 'H.264 (x264)', codec: 'h264', lib: 'libx264', containers: ['mp4', 'mkv'],
     quality: { min: 0, max: 51, def: 22, name: 'RF' }, speeds: X26X_SPEEDS, defSpeed: 5, twoPass: true,
-    tunes: [['', 'Ninguno'], ['film', 'Película'], ['animation', 'Animación'], ['grain', 'Grano'], ['stillimage', 'Imagen fija'], ['fastdecode', 'Decodificación rápida']],
+    tunes: [['', tx('Ninguno')], ['film', tx('Película')], ['animation', tx('Animación')], ['grain', tx('Grano')], ['stillimage', tx('Imagen fija')], ['fastdecode', tx('Decodificación rápida')]],
     args: (o) => [
       '-c:v', 'libx264', '-preset', X26X_SPEEDS[o.speed][0], ...(o.tune ? ['-tune', o.tune] : []),
       ...(o.mode === 'quality' ? ['-crf', String(o.quality)] : ['-b:v', `${o.kbps}k`]),
@@ -36,7 +37,7 @@ const ENCODERS = [
   {
     id: 'x265', name: 'H.265 (x265)', codec: 'hevc', lib: 'libx265', containers: ['mp4', 'mkv'],
     quality: { min: 0, max: 51, def: 24, name: 'RF' }, speeds: X26X_SPEEDS, defSpeed: 5, twoPass: true, tenBit: true,
-    tunes: [['', 'Ninguno'], ['animation', 'Animación'], ['grain', 'Grano'], ['fastdecode', 'Decodificación rápida']],
+    tunes: [['', tx('Ninguno')], ['animation', tx('Animación')], ['grain', tx('Grano')], ['fastdecode', tx('Decodificación rápida')]],
     args: (o) => [
       '-c:v', 'libx265', '-preset', X26X_SPEEDS[o.speed][0], ...(o.tune ? ['-tune', o.tune] : []),
       ...(o.mode === 'quality' ? ['-crf', String(o.quality)] : ['-b:v', `${o.kbps}k`]),
@@ -55,7 +56,7 @@ const ENCODERS = [
     ],
   },
   {
-    id: 'av1', name: 'AV1 (libaom, lento)', codec: 'av1', lib: 'libaom-av1', containers: ['mp4', 'mkv', 'webm'],
+    id: 'av1', name: tx('AV1 (libaom, lento)'), codec: 'av1', lib: 'libaom-av1', containers: ['mp4', 'mkv', 'webm'],
     quality: { min: 0, max: 63, def: 32, name: 'CRF' }, speeds: AOM_SPEEDS, defSpeed: 2, twoPass: true, tenBit: true,
     args: (o) => [
       '-c:v', 'libaom-av1', ...(o.mode === 'quality' ? ['-crf', String(o.quality), '-b:v', '0'] : ['-b:v', `${o.kbps}k`]),
@@ -65,7 +66,7 @@ const ENCODERS = [
     ],
   },
   ...['h264', 'hevc', 'av1'].map((codec) => ({
-    id: `${codec}_nvenc`, name: `${{ h264: 'H.264', hevc: 'H.265', av1: 'AV1' }[codec]} (NVIDIA NVENC)`, codec, lib: `${codec}_nvenc`, hw: true,
+    id: `${codec}_nvenc`, name: tx('{n} (NVIDIA NVENC)', { n: { h264: 'H.264', hevc: 'H.265', av1: 'AV1' }[codec] }), codec, lib: `${codec}_nvenc`, hw: true,
     containers: codec === 'av1' ? ['mp4', 'mkv', 'webm'] : ['mp4', 'mkv'],
     quality: { min: 0, max: 51, def: codec === 'h264' ? 23 : 26, name: 'CQ' }, speeds: NVENC_SPEEDS, defSpeed: 4, tenBit: codec !== 'h264',
     args: (o) => [
@@ -75,7 +76,7 @@ const ENCODERS = [
     ],
   })),
   ...['h264', 'hevc', 'av1'].map((codec) => ({
-    id: `${codec}_qsv`, name: `${{ h264: 'H.264', hevc: 'H.265', av1: 'AV1' }[codec]} (Intel Quick Sync)`, codec, lib: `${codec}_qsv`, hw: true,
+    id: `${codec}_qsv`, name: tx('{n} (Intel Quick Sync)', { n: { h264: 'H.264', hevc: 'H.265', av1: 'AV1' }[codec] }), codec, lib: `${codec}_qsv`, hw: true,
     containers: codec === 'av1' ? ['mp4', 'mkv', 'webm'] : ['mp4', 'mkv'],
     quality: { min: 1, max: 51, def: codec === 'h264' ? 23 : 26, name: 'ICQ' }, speeds: QSV_SPEEDS, defSpeed: 3, tenBit: codec !== 'h264',
     args: (o) => [
@@ -85,7 +86,7 @@ const ENCODERS = [
     ],
   })),
   ...['h264', 'hevc', 'av1'].map((codec) => ({
-    id: `${codec}_amf`, name: `${{ h264: 'H.264', hevc: 'H.265', av1: 'AV1' }[codec]} (AMD AMF)`, codec, lib: `${codec}_amf`, hw: true,
+    id: `${codec}_amf`, name: tx('{n} (AMD AMF)', { n: { h264: 'H.264', hevc: 'H.265', av1: 'AV1' }[codec] }), codec, lib: `${codec}_amf`, hw: true,
     containers: codec === 'av1' ? ['mp4', 'mkv', 'webm'] : ['mp4', 'mkv'],
     quality: { min: 0, max: 51, def: codec === 'h264' ? 23 : 26, name: 'QP' }, speeds: AMF_SPEEDS, defSpeed: 1,
     args: (o) => [
@@ -126,10 +127,10 @@ const parseRate = (r) => {
 
 async function probe(file) {
   const r = await run(ffprobePath, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', '-show_chapters', file]);
-  if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || 'No se pudo leer el archivo');
+  if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || tx('No se pudo leer el archivo'));
   const j = JSON.parse(r.stdout.toString('utf8'));
   const v = (j.streams || []).find((s) => s.codec_type === 'video' && !s.disposition?.attached_pic);
-  if (!v) throw new Error('El archivo no tiene video');
+  if (!v) throw new Error(tx('El archivo no tiene video'));
   const rotation = Math.abs(Number(v.side_data_list?.find((s) => s.rotation != null)?.rotation ?? v.tags?.rotate ?? 0)) % 180 === 90;
   const [sn, sd] = String(v.sample_aspect_ratio || '1:1').split(':').map(Number);
   const sar = sn > 0 && sd > 0 ? sn / sd : 1;
@@ -289,7 +290,7 @@ function buildPasses(src, s, crop, outPath, log, range) {
   let kbps = s.kbps;
   if (s.mode === 'size') {
     kbps = sizeKbps(src, s, audio.kbpsTotal, src.duration);
-    if (kbps < 50) throw new Error(`${s.sizeMB} MB es demasiado poco para ${Math.round(src.duration)} s de video (bajaría a ${Math.max(0, kbps)} kbps)`);
+    if (kbps < 50) throw new Error(tx('{sizeMB} MB es demasiado poco para {round} s de video (bajaría a {max} kbps)', { sizeMB: s.sizeMB, round: Math.round(src.duration), max: Math.max(0, kbps) }));
   }
   const twoPass = mode === 'bitrate' && enc.twoPass && (s.mode === 'size' || s.twoPass);
   const input = [...(range ? ['-ss', range.start.toFixed(3), '-t', range.length.toFixed(3)] : []), '-i', src.path];
@@ -345,7 +346,7 @@ async function encode(src, s, crop, outPath, range, onProgress) {
       if (job.canceled) return { canceled: true };
       if (r.code !== 0) {
         const lines = r.stderr.trim().split('\n').filter((l) => !/^\s*$/.test(l));
-        throw new Error(lines.slice(-2).join(' · ') || `FFmpeg terminó con el código ${r.code}`);
+        throw new Error(lines.slice(-2).join(' · ') || tx('FFmpeg terminó con el código {code}', { code: r.code }));
       }
     }
     return { canceled: false };
@@ -392,11 +393,11 @@ async function prepare(file, s) {
 
 // Comprime un archivo. Devuelve { outPath, size, inSize } o { canceled: true }.
 async function compress(file, s, onProgress) {
-  if (current) throw new Error('Ya hay una compresión en marcha');
+  if (current) throw new Error(tx('Ya hay una compresión en marcha'));
   onProgress?.({ percent: 0, stage: 'analyzing' });
   const { src, crop } = await prepare(file, s);
   const enc = encoderById(s.encoder);
-  if (!enc.containers.includes(s.container)) throw new Error(`${enc.name} no se puede guardar en ${s.container.toUpperCase()}`);
+  if (!enc.containers.includes(s.container)) throw new Error(tx('{name} no se puede guardar en {toUpperCase}', { name: enc.name, toUpperCase: s.container.toUpperCase() }));
   const outPath = outputPathFor(file, s);
   await fs.promises.mkdir(path.dirname(outPath), { recursive: true });
   const part = `${outPath}.parcial`;
@@ -418,7 +419,7 @@ async function compress(file, s, onProgress) {
 // Muestra de 10 s desde el 40 % del video con los mismos ajustes: tamaño estimado del archivo completo y la muestra
 // para verla en el reproductor del sistema.
 async function sample(file, s, onProgress) {
-  if (current) throw new Error('Ya hay una compresión en marcha');
+  if (current) throw new Error(tx('Ya hay una compresión en marcha'));
   const { src, crop } = await prepare(file, s);
   const length = Math.min(10, src.duration);
   const start = Math.max(0, Math.min(src.duration * 0.4, src.duration - length));

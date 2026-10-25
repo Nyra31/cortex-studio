@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
+import { tx } from '../i18n/index.js';
 
 const STATUS = {
-  waiting: 'En espera',
-  rendering: 'Renderizando',
-  done: 'Terminado',
-  error: 'Error',
-  canceled: 'Cancelado',
+  waiting: tx('En espera'),
+  rendering: tx('Renderizando'),
+  done: tx('Terminado'),
+  error: tx('Error'),
+  canceled: tx('Cancelado'),
 };
 
 // Cola de render (como el renderizado por lotes): trabajos { id, name, outPath, status, progress, error } que se
@@ -24,12 +25,11 @@ export default function QueueDialog({ queue, running, onStart, onStop, onRemove,
   return (
     <div className="modal-backdrop">
       <div className="modal queue-dialog">
-        <div className="modal-title">Cola de render</div>
+        <div className="modal-title">{tx('Cola de render')}</div>
         <div className="modal-content">
           {queue.length === 0 ? (
             <p className="note">
-              La cola está vacía. En <em>Renderizar como…</em>, «Añadir a la cola» guarda un render (con el proyecto tal
-              como está en ese momento) para hacerlo después junto con otros.
+             {tx('La cola está vacía. En')} <em>{tx('Renderizar como…')}</em>{tx(', «Añadir a la cola» guarda un render (con el proyecto tal como está en ese momento) para hacerlo después junto con otros.')}
             </p>
           ) : (
             <div className="queue-list">
@@ -47,9 +47,9 @@ export default function QueueDialog({ queue, running, onStart, onStop, onRemove,
                     </div>
                   </div>
                   <div className="queue-actions">
-                    {j.status === 'done' && <button onClick={() => window.api.revealFile(j.outPath)}>Mostrar</button>}
-                    {(j.status === 'error' || j.status === 'canceled') && <button onClick={() => onRetry(j.id)}>Reintentar</button>}
-                    {j.status !== 'rendering' && <button onClick={() => onRemove(j.id)}>Quitar</button>}
+                    {j.status === 'done' && <button onClick={() => window.api.revealFile(j.outPath)}>{tx('Mostrar')}</button>}
+                    {(j.status === 'error' || j.status === 'canceled') && <button onClick={() => onRetry(j.id)}>{tx('Reintentar')}</button>}
+                    {j.status !== 'rendering' && <button onClick={() => onRemove(j.id)}>{tx('Quitar')}</button>}
                   </div>
                 </div>
               ))}
@@ -57,14 +57,14 @@ export default function QueueDialog({ queue, running, onStart, onStop, onRemove,
           )}
         </div>
         <div className="modal-actions">
-          <button onClick={onClearDone} disabled={!queue.some((j) => j.status === 'done')}>Quitar los terminados</button>
+          <button onClick={onClearDone} disabled={!queue.some((j) => j.status === 'done')}>{tx('Quitar los terminados')}</button>
           <span className="footer-spacer" />
           {running ? (
-            <button onClick={onStop}>Detener</button>
+            <button onClick={onStop}>{tx('Detener')}</button>
           ) : (
-            <button onClick={onStart} disabled={!pending}>Renderizar la cola</button>
+            <button onClick={onStart} disabled={!pending}>{tx('Renderizar la cola')}</button>
           )}
-          <button className="primary" onClick={onClose}>Cerrar</button>
+          <button className="primary" onClick={onClose}>{tx('Cerrar')}</button>
         </div>
       </div>
     </div>

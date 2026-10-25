@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { textBounds } from '../state/text.js';
+import { tx } from '../i18n/index.js';
 
 const SNAP_PX = 6; // al moverlo, el centro del texto se pega al centro del cuadro (Mayús: sin ajuste)
 const CORNERS = ['nw', 'ne', 'sw', 'se'];
@@ -88,7 +89,7 @@ export default function TextOverlay({ items, target, width, height, onSelect, on
       {box && (
         <div
           className="text-box"
-          title="Arrastra para mover el texto (Mayús: sin ajuste al centro); las esquinas cambian el tamaño; doble clic: editar"
+          title={tx('Arrastra para mover el texto (Mayús: sin ajuste al centro); las esquinas cambian el tamaño; doble clic: editar')}
           style={{
             left: `${box.left * 100}%`,
             top: `${box.top * 100}%`,

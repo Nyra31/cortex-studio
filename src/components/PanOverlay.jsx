@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { MAX_SCALE, MIN_SCALE, NO_CROP } from '../state/pan.js';
+import { tx } from '../i18n/index.js';
 
 const SNAP_PX = 6; // el centro se pega al centro del cuadro (Mayús: sin ajuste)
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -89,9 +90,9 @@ export default function PanOverlay({ values, crop = NO_CROP, fit, width: W, heig
         <line className="pan-center" x1={P[0]} y1={P[1] - W * 0.012} x2={P[0]} y2={P[1] + W * 0.012} />
       </svg>
       {corners.map((c, i) => (
-        <div key={i} className="pan-handle" style={pctPos(c)} onPointerDown={onScale} title="Arrastra para cambiar el zoom" />
+        <div key={i} className="pan-handle" style={pctPos(c)} onPointerDown={onScale} title={tx('Arrastra para cambiar el zoom')} />
       ))}
-      <div className="pan-handle rotate" style={pctPos(rotHandle)} onPointerDown={onRotate} title="Arrastra para girar (Mayús: de 15 en 15°)" />
+      <div className="pan-handle rotate" style={pctPos(rotHandle)} onPointerDown={onRotate} title={tx('Arrastra para girar (Mayús: de 15 en 15°)')} />
     </div>
   );
 }

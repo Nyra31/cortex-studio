@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatDuration } from '../util/time.js';
+import { locale, tx } from '../i18n/index.js';
 
 const VIDEO_FORMATS = [
   { id: 'mp4', name: 'MP4' },
   { id: 'mkv', name: 'MKV' },
-  { id: 'webm', name: 'WebM (VP9/AV1 + Opus)' },
+  { id: 'webm', name: tx('WebM (VP9/AV1 + Opus)') },
   { id: 'mov', name: 'MOV (H.264 + AAC)' },
 ];
 const AUDIO_FORMATS = [
   { id: 'mp3', name: 'MP3' },
   { id: 'm4a', name: 'M4A (AAC)' },
-  { id: 'opus', name: 'Opus' },
-  { id: 'flac', name: 'FLAC (sin pérdida)' },
-  { id: 'wav', name: 'WAV (sin comprimir)' },
+  { id: 'opus', name: tx('Opus') },
+  { id: 'flac', name: tx('FLAC (sin pérdida)') },
+  { id: 'wav', name: tx('WAV (sin comprimir)') },
 ];
 const AUDIO_QUALITY = [
-  { id: '0', name: 'La mejor' },
+  { id: '0', name: tx('La mejor') },
   { id: '320K', name: '320 kbps' },
   { id: '192K', name: '192 kbps' },
   { id: '128K', name: '128 kbps' },
@@ -45,17 +46,17 @@ function saveOptions(o) {
 const heightName = (h) => `${h}p${h >= 2160 ? ' (4K)' : h >= 1440 ? ' (2K)' : ''}`;
 const isUrl = (s) => /^https?:\/\/\S+$/i.test(s.trim());
 const fileName = (p) => p.split(/[\\/]/).pop();
-const mb = (bytes) => (bytes / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 1 });
+const mb = (bytes) => (bytes / 1048576).toLocaleString(locale, { maximumFractionDigits: 1 });
 const ytDate = (d) => (d && d.length === 8 ? `${d.slice(6)}/${d.slice(4, 6)}/${d.slice(0, 4)}` : '');
 
 // Texto del progreso de una descarga (también lo usa la barra de estado).
 export function youtubeProgressText(p) {
-  if (!p) return 'Empezando…';
-  if (p.stage === 'install') return `Instalando yt-dlp (solo la primera vez)${p.percent != null ? ` · ${Math.floor(p.percent)} %` : '…'}`;
-  if (p.stage === 'update') return 'Buscando actualizaciones de yt-dlp…';
-  const item = p.count > 1 ? `Video ${p.index} de ${p.count} · ` : '';
-  if (p.stage === 'processing') return `${item}Procesando (uniendo, convirtiendo y añadiendo los metadatos)…`;
-  const what = p.part === 'audio' ? 'Descargando el audio' : p.part === 'video' ? 'Descargando la imagen' : 'Descargando';
+  if (!p) return tx('Empezando…');
+  if (p.stage === 'install') return tx('Instalando yt-dlp (solo la primera vez){n}', { n: p.percent != null ? ` · ${Math.floor(p.percent)} %` : '…' });
+  if (p.stage === 'update') return tx('Buscando actualizaciones de yt-dlp…');
+  const item = p.count > 1 ? tx('Video {index} de {count} · ', { index: p.index, count: p.count }) : '';
+  if (p.stage === 'processing') return tx('{item}Procesando (uniendo, convirtiendo y añadiendo los metadatos)…', { item });
+  const what = p.part === 'audio' ? tx('Descargando el audio') : p.part === 'video' ? tx('Descargando la imagen') : tx('Descargando');
   const pct = p.percent != null ? ` · ${Math.floor(p.percent)} %` : '';
   const speed = p.speed ? ` · ${mb(p.speed)} MB/s` : '';
   const eta = p.eta != null && p.eta > 0 ? ` · quedan ${formatDuration(p.eta)}` : '';
@@ -107,12 +108,12 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
 
   const search = async (list = playlist) => {
     if (!isUrl(url)) {
-      setError('Pega un enlace de YouTube (https://…).');
+      setError(tx('Pega un enlace de YouTube (https://…).'));
       return;
     }
     setError('');
     setInfo(null);
-    setLoading(list ? 'Leyendo la lista…' : 'Buscando el video…');
+    setLoading(list ? tx('Leyendo la lista…') : tx('Buscando el video…'));
     try {
       setInfo(await window.api.youtubeInfo(url.trim(), list));
     } catch (err) {
@@ -127,7 +128,7 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
   };
 
   const pickDir = async () => {
-    const dir = await window.api.pickFolder('Carpeta de las descargas', opts.dir);
+    const dir = await window.api.pickFolder(tx('Carpeta de las descargas'), opts.dir);
     if (dir) change({ dir });
   };
 
@@ -146,10 +147,10 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
   return (
     <div className="modal-backdrop">
       <div className="modal youtube-dialog">
-        <div className="modal-title">Descargar de YouTube</div>
+        <div className="modal-title">{tx('Descargar de YouTube')}</div>
         <div className="modal-content">
           <label>
-            <span className="field-label">Enlace del video o de la lista</span>
+            <span className="field-label">{tx('Enlace del video o de la lista')}</span>
             <div className="youtube-url">
               <input
                 ref={urlRef}
@@ -160,14 +161,14 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
                 onChange={(e) => { setUrl(e.target.value); setInfo(null); setError(''); }}
                 onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
               />
-              <button onClick={() => search()} disabled={!!loading || !url.trim()}>Buscar</button>
+              <button onClick={() => search()} disabled={!!loading || !url.trim()}>{tx('Buscar')}</button>
             </div>
           </label>
           {hasList && (
             <div className="render-range">
               <label>
                 <input type="checkbox" checked={playlist} onChange={(e) => togglePlaylist(e.target.checked)} disabled={!!loading} />
-                Descargar la lista entera (si no, solo este video)
+               {tx('Descargar la lista entera (si no, solo este video)')}
               </label>
             </div>
           )}
@@ -184,8 +185,8 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
                     info.uploader,
                     info.playlist ? `Lista · ${info.count} videos` : info.duration ? formatDuration(info.duration) : '',
                     ytDate(info.date),
-                    info.chapters ? `${info.chapters} capítulos` : '',
-                    info.subtitles?.length ? `subtítulos: ${info.subtitles.slice(0, 6).join(', ')}${info.subtitles.length > 6 ? '…' : ''}` : '',
+                    info.chapters ? tx('{chapters} capítulos', { chapters: info.chapters }) : '',
+                    info.subtitles?.length ? tx('subtítulos: {join}{n}', { join: info.subtitles.slice(0, 6).join(', '), n: info.subtitles.length > 6 ? '…' : '' }) : '',
                   ].filter(Boolean).join(' · ')}
                 </div>
               </div>
@@ -196,14 +197,14 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
             <>
               <div className="render-grid">
                 <label>
-                  <span className="field-label">Descargar</span>
+                  <span className="field-label">{tx('Descargar')}</span>
                   <select value={opts.kind} onChange={(e) => change({ kind: e.target.value })}>
-                    <option value="video">Video con sonido</option>
-                    <option value="audio">Solo el audio</option>
+                    <option value="video">{tx('Video con sonido')}</option>
+                    <option value="audio">{tx('Solo el audio')}</option>
                   </select>
                 </label>
                 <label>
-                  <span className="field-label">Formato</span>
+                  <span className="field-label">{tx('Formato')}</span>
                   {audio ? (
                     <select value={opts.audioFormat} onChange={(e) => change({ audioFormat: e.target.value })}>
                       {AUDIO_FORMATS.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
@@ -216,7 +217,7 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
                 </label>
                 {audio ? (
                   <label className={['flac', 'wav'].includes(opts.audioFormat) ? 'disabled' : ''}>
-                    <span className="field-label">Calidad</span>
+                    <span className="field-label">{tx('Calidad')}</span>
                     <select value={opts.audioQuality} disabled={['flac', 'wav'].includes(opts.audioFormat)} onChange={(e) => change({ audioQuality: e.target.value })}>
                       {AUDIO_QUALITY.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
                     </select>
@@ -224,18 +225,18 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
                 ) : (
                   <>
                     <label>
-                      <span className="field-label">Resolución máxima</span>
+                      <span className="field-label">{tx('Resolución máxima')}</span>
                       <select value={opts.height} onChange={(e) => change({ height: Number(e.target.value) })}>
-                        <option value={0}>La mejor{!info.playlist && heights[0] ? ` (${heightName(heights[0])})` : ''}</option>
+                        <option value={0}>{tx('La mejor{n}', { n: !info.playlist && heights[0] ? ` (${heightName(heights[0])})` : '' })}</option>
                         {heights.map((h) => <option key={h} value={h}>{heightName(h)}</option>)}
                       </select>
                     </label>
                     {(opts.container === 'mp4' || opts.container === 'mkv') && (
-                      <label title="H.264 se reproduce en cualquier sitio, pero YouTube solo lo da hasta 1080p. VP9 y AV1 llegan a 4K u 8K.">
-                        <span className="field-label">Códec de video</span>
+                      <label title={tx('H.264 se reproduce en cualquier sitio, pero YouTube solo lo da hasta 1080p. VP9 y AV1 llegan a 4K u 8K.')}>
+                        <span className="field-label">{tx('Códec de video')}</span>
                         <select value={opts.compat ? 'h264' : 'best'} onChange={(e) => change({ compat: e.target.value === 'h264' })}>
-                          <option value="h264">H.264 (el más compatible, hasta 1080p)</option>
-                          <option value="best">El mejor (VP9 o AV1, hasta 4K)</option>
+                          <option value="h264">{tx('H.264 (el más compatible, hasta 1080p)')}</option>
+                          <option value="best">{tx('El mejor (VP9 o AV1, hasta 4K)')}</option>
                         </select>
                       </label>
                     )}
@@ -244,36 +245,36 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
               </div>
 
               <div className="render-range">
-                <span className="field-label">Incluir en el archivo</span>
+                <span className="field-label">{tx('Incluir en el archivo')}</span>
                 <label>
                   <input type="checkbox" checked={opts.metadata} onChange={(e) => change({ metadata: e.target.checked })} />
-                  Metadatos (título, autor, fecha, descripción y enlace)
+                 {tx('Metadatos (título, autor, fecha, descripción y enlace)')}
                 </label>
                 <label className={canThumb ? '' : 'disabled'}>
                   <input type="checkbox" checked={opts.thumbnail && canThumb} disabled={!canThumb} onChange={(e) => change({ thumbnail: e.target.checked })} />
-                  {canThumb ? 'Portada (la miniatura del video)' : `Portada (no se puede en ${ext.toUpperCase()})`}
+                  {canThumb ? tx('Portada (la miniatura del video)') : tx('Portada (no se puede en {toUpperCase})', { toUpperCase: ext.toUpperCase() })}
                 </label>
                 <label>
                   <input type="checkbox" checked={opts.chapters} onChange={(e) => change({ chapters: e.target.checked })} />
-                  Capítulos
+                 {tx('Capítulos')}
                 </label>
                 <label className={canSubs ? '' : 'disabled'}>
                   <input type="checkbox" checked={opts.subtitles && canSubs} disabled={!canSubs} onChange={(e) => change({ subtitles: e.target.checked })} />
-                  Subtítulos en español e inglés, si los hay
+                 {tx('Subtítulos en español e inglés, si los hay')}
                 </label>
               </div>
 
               <div className="youtube-dir">
-                <span className="field-label">Carpeta</span>
+                <span className="field-label">{tx('Carpeta')}</span>
                 <div className="youtube-url">
                   <input type="text" value={opts.dir} readOnly title={opts.dir} />
-                  <button onClick={pickDir}>Cambiar…</button>
+                  <button onClick={pickDir}>{tx('Cambiar…')}</button>
                 </div>
               </div>
               <div className="render-range">
                 <label>
                   <input type="checkbox" checked={opts.importAfter} onChange={(e) => change({ importAfter: e.target.checked })} />
-                  Importar al proyecto al terminar
+                 {tx('Importar al proyecto al terminar')}
                 </label>
               </div>
             </>
@@ -290,24 +291,24 @@ export default function YoutubeDialog({ job, onDownload, onCancel, onClose }) {
               )}
               {job.status === 'done' && (
                 <p className="note">
-                  {job.files.length === 1 ? `Descargado: ${fileName(job.files[0])}` : `Descargados ${job.files.length} archivos`}
-                  {job.imported ? ' (importado al proyecto)' : ''}
+                  {job.files.length === 1 ? tx('Descargado: {what}', { what: fileName(job.files[0]) }) : tx('Descargados {length} archivos', { length: job.files.length })}
+                  {job.imported ? tx(' (importado al proyecto)') : ''}
                   {' · '}
-                  <a href="#" onClick={(e) => { e.preventDefault(); window.api.revealFile(job.files[0]); }}>Mostrar en la carpeta</a>
+                  <a href="#" onClick={(e) => { e.preventDefault(); window.api.revealFile(job.files[0]); }}>{tx('Mostrar en la carpeta')}</a>
                 </p>
               )}
               {job.error && <p className="error">{job.status === 'done' ? `Alguno ha fallado: ${job.error}` : job.error}</p>}
-              {job.status === 'canceled' && <p className="note">Descarga cancelada.</p>}
+              {job.status === 'canceled' && <p className="note">{tx('Descarga cancelada.')}</p>}
             </div>
           )}
 
-          <p className="note">Descarga solo contenido que tengas derecho a usar. También funciona con muchos otros sitios de video.</p>
+          <p className="note">{tx('Descarga solo contenido que tengas derecho a usar. También funciona con muchos otros sitios de video.')}</p>
         </div>
         <div className="modal-actions">
-          {running && <button onClick={onCancel}>Cancelar la descarga</button>}
+          {running && <button onClick={onCancel}>{tx('Cancelar la descarga')}</button>}
           <span className="footer-spacer" />
-          <button onClick={onClose} title={running ? 'La descarga sigue; el progreso sale en la barra de estado' : ''}>Cerrar</button>
-          <button className="primary" onClick={download} disabled={!info || running || !opts.dir}>Descargar</button>
+          <button onClick={onClose} title={running ? tx('La descarga sigue; el progreso sale en la barra de estado') : ''}>{tx('Cerrar')}</button>
+          <button className="primary" onClick={download} disabled={!info || running || !opts.dir}>{tx('Descargar')}</button>
         </div>
       </div>
     </div>

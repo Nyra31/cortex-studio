@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { curveString, curveTable, parseCurve } from '../state/effects.js';
+import { tx } from '../i18n/index.js';
 
 // Rueda de color (corrector de tres vías): el punto marca hacia qué color se lleva el tramo y cuánto. Arrastrar lo
 // mueve (Mayús: más fino); doble clic vuelve al centro. onChange(x, y, record): record = primer cambio del arrastre.
@@ -46,7 +47,7 @@ export function ColorWheel({ x, y, onChange, size = 96 }) {
       style={{ width: size, height: size }}
       onPointerDown={down}
       onDoubleClick={() => onChange(0, 0, true)}
-      title="Arrastra hacia un color (Mayús: más fino); doble clic: sin cambio"
+      title={tx('Arrastra hacia un color (Mayús: más fino); doble clic: sin cambio')}
     >
       <span className="color-wheel-dot" style={{ left: R + x * R, top: R - y * R }} />
     </div>
@@ -56,7 +57,7 @@ export function ColorWheel({ x, y, onChange, size = 96 }) {
 // Editor de curvas (Todos, R, G, B): doble clic en un sitio libre añade un punto; los puntos se arrastran (los de los
 // extremos, solo en vertical); doble clic en un punto lo quita. values: { master, red, green, blue } en «x/y x/y …».
 const CHANNELS = [
-  { id: 'master', label: 'Todos', color: '#e8e8e8' },
+  { id: 'master', label: tx('Todos'), color: '#e8e8e8' },
   { id: 'red', label: 'R', color: '#ff6b6b' },
   { id: 'green', label: 'G', color: '#6bdc6b' },
   { id: 'blue', label: 'B', color: '#6b9bff' },
@@ -106,7 +107,7 @@ export function CurveEditor({ values, onChange, size = 200 }) {
             {c.label}
           </button>
         ))}
-        <button className="text-toggle wide" title="Volver a la línea recta" onClick={() => onChange(channel, '0/0 1/1', true)}>Recta</button>
+        <button className="text-toggle wide" title={tx('Volver a la línea recta')} onClick={() => onChange(channel, '0/0 1/1', true)}>{tx('Recta')}</button>
       </div>
       <svg
         ref={ref}

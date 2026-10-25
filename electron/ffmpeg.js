@@ -3,6 +3,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { tx } = require('./i18n');
 
 // En la app empaquetada los binarios viven fuera del archivo asar.
 const unpacked = (p) => p.replace('app.asar', 'app.asar.unpacked');
@@ -50,13 +51,13 @@ async function probe(file) {
   const { code, stdout, stderr } = await run(ffprobePath, [
     '-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file,
   ]);
-  if (code !== 0) throw new Error(stderr.trim() || 'No se pudo leer el archivo');
+  if (code !== 0) throw new Error(stderr.trim() || tx('No se pudo leer el archivo'));
   const info = JSON.parse(stdout.toString());
   const streams = info.streams || [];
   const video = streams.find((s) => s.codec_type === 'video' && !(s.disposition && s.disposition.attached_pic));
   const audio = streams.find((s) => s.codec_type === 'audio');
   const isImage = IMAGE_EXTENSIONS.has(path.extname(file).toLowerCase());
-  if (!video && !audio) throw new Error('El archivo no contiene video ni audio');
+  if (!video && !audio) throw new Error(tx('El archivo no contiene video ni audio'));
   const duration = parseFloat(info.format && info.format.duration) || parseFloat(video && video.duration) || 0;
   // Videos de móvil grabados en vertical: ancho y alto vienen antes de girar; FFmpeg y el navegador
   // los muestran ya girados, así que se intercambian para trabajar siempre con las medidas reales.
@@ -101,7 +102,7 @@ function needsProxy(format, videoCodec, audioCodec) {
 const STRIP_H = 72;
 async function filmstrip(file, out) {
   const info = await probe(file);
-  if (!info.hasVideo || info.isImage || !info.duration) throw new Error('No es un video');
+  if (!info.hasVideo || info.isImage || !info.duration) throw new Error(tx('No es un video'));
   const step = Math.max(0.5, info.duration / 200);
   const count = Math.max(1, Math.ceil(info.duration / step));
   const th = STRIP_H;
@@ -113,7 +114,7 @@ async function filmstrip(file, out) {
     '-y', '-v', 'error', ...fast, '-i', file, '-an', '-sn',
     '-vf', `fps=1/${step},scale=${tw}:${th},setsar=1,tile=${cols}x${rows}`, '-frames:v', '1', '-q:v', '5', out,
   ]);
-  if (r.code !== 0 || !fs.existsSync(out)) throw new Error(r.stderr.trim().split('\n').pop() || 'No se pudo hacer la tira');
+  if (r.code !== 0 || !fs.existsSync(out)) throw new Error(r.stderr.trim().split('\n').pop() || tx('No se pudo hacer la tira'));
   return { step, count, tw, th, cols };
 }
 
@@ -137,7 +138,7 @@ async function detectScenes(file, start, length, threshold = 0.3, { onProgress, 
         if (m && onProgress) onProgress(Math.min(1, Number(m[1]) / 1e6 / length));
       },
     });
-    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || 'No se pudieron detectar las escenas');
+    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || tx('No se pudieron detectar las escenas'));
     let text = '';
     try {
       text = await fs.promises.readFile(listPath, 'utf8');
@@ -154,7 +155,7 @@ async function detectScenes(file, start, length, threshold = 0.3, { onProgress, 
 // vertical), para congelar fotograma.
 async function extractFrame(file, time, out) {
   const r = await run(ffmpegPath, ['-y', '-v', 'error', '-ss', time.toFixed(6), '-i', file, '-frames:v', '1', '-update', '1', out]);
-  if (r.code !== 0 || !fs.existsSync(out)) throw new Error(r.stderr.trim().split('\n').pop() || 'No se pudo extraer el fotograma');
+  if (r.code !== 0 || !fs.existsSync(out)) throw new Error(r.stderr.trim().split('\n').pop() || tx('No se pudo extraer el fotograma'));
 }
 
 // Proxy para la vista previa: copia ligera en H.264 (como mucho 720 líneas, un fotograma clave cada 15 para
@@ -856,7 +857,7 @@ async function reverseClip(file, start, length, out, { hasVideo = true, hasAudio
         ...(hasAudio ? ['-map', '0:a:0?', '-af', 'areverse', '-c:a', 'pcm_s16le'] : []),
         part,
       ]);
-      if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+      if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || tx('FFmpeg terminó con el código {code}', { code: r.code }));
       onProgress?.((k + 1) / (count + 1));
     }
     const list = path.join(os.tmpdir(), `cortex-invertir-${stamp}.txt`);
@@ -868,7 +869,7 @@ async function reverseClip(file, start, length, out, { hasVideo = true, hasAudio
       ...(hasAudio ? ['-map', '0:a:0?', '-c:a', 'aac', '-b:a', '256k'] : []),
       '-movflags', '+faststart', out,
     ]);
-    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || tx('FFmpeg terminó con el código {code}', { code: r.code }));
     onProgress?.(1);
     return out;
   } finally {
@@ -891,7 +892,7 @@ async function stabilizeClip(file, start, length, out, { hasAudio = true, smooth
     let r = await run(ffmpegPath, [...input, '-map', '0:v:0', '-vf', `vidstabdetect=shakiness=8:accuracy=15:result=${trf}`, '-f', 'null', '-'], {
       cwd: os.tmpdir(), onLine: progress(0, 0.4),
     });
-    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || tx('FFmpeg terminó con el código {code}', { code: r.code }));
     r = await run(ffmpegPath, [
       ...input,
       '-map', '0:v:0', '-vf', `vidstabtransform=input=${trf}:smoothing=${Math.round(smoothing)}:optzoom=1:zoomspeed=0.25:interpol=bicubic,unsharp=5:5:0.6:3:3:0.3,format=yuv420p`,
@@ -899,7 +900,7 @@ async function stabilizeClip(file, start, length, out, { hasAudio = true, smooth
       ...(hasAudio ? ['-map', '0:a:0?', '-c:a', 'aac', '-b:a', '256k'] : []),
       '-movflags', '+faststart', out,
     ], { cwd: os.tmpdir(), onLine: progress(0.4, 0.6) });
-    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+    if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || tx('FFmpeg terminó con el código {code}', { code: r.code }));
     onProgress?.(1);
     return out;
   } finally {
@@ -925,7 +926,7 @@ async function denoiseClip(file, start, length, out, { strength = 'light', onPro
       if (m && onProgress) onProgress(Math.min(1, Number(m[1]) / 1e6 / length));
     },
   });
-  if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+  if (r.code !== 0) throw new Error(r.stderr.trim().split('\n').pop() || tx('FFmpeg terminó con el código {code}', { code: r.code }));
   return out;
 }
 

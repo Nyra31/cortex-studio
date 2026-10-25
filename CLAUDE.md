@@ -1,6 +1,6 @@
 # Cortex Studio
 
-Editor de video de escritorio (Electron 44 + React 18 + Vite 5 + FFmpeg). Toda la interfaz, los comentarios, los mensajes de commit y la documentación están en **español**.
+Editor de video de escritorio (Electron 44 + React 18 + Vite 5 + FFmpeg). Los comentarios, los mensajes de commit y la documentación están en **español**; la interfaz, en español e inglés (ver «Idiomas»).
 
 Repositorio: https://github.com/Nyra31/cortex-studio (rama `main`, etiqueta `v0.1.0` = primera versión con instalador).
 
@@ -13,6 +13,7 @@ npm start        # vite build + electron .
 npm run dev      # Vite en 127.0.0.1:5173 + Electron con recarga
 npm run dist     # instalador NSIS en release/Cortex-Studio-Setup-<versión>.exe
 npm run icon     # regenera build/icon.png (scripts/make-icon.js)
+npm run i18n     # comprueba la traducción inglesa (scripts/i18n-check.js)
 ```
 
 No hay tests ni linter. Para comprobar un cambio: `npm run build` (debe compilar sin errores) y probar la app con `npm start`.
@@ -57,6 +58,14 @@ Si Electron se comporta como Node, la variable `ELECTRON_RUN_AS_NODE` está defi
 - `src/preview/compositor.js`: compositor WebGL2 de la vista previa. Las transiciones son traducciones a GLSL de `vf_xfade.c` (P va de 1 = solo A a 0 = solo B; `mixx(a,b,m) = a·m + b·(1−m)`), para que la vista previa coincida con el render. Para añadir una transición: entrada en `transitions.js` + fragmento en `GLSL` del compositor. Hay un programa para las capas normales y uno por transición, compilado la primera vez que se usa (`programFor`): **no volver a meter todas las transiciones en un mismo shader** ni añadir ramas en `fit()`, que se copia en cada una; Direct3D tardaba hasta 30 s en compilarlo sin caché y la ventana no se pintaba (parecía que la app no arrancaba). Para comprobarlo, arrancar con una carpeta de datos nueva (`app.setPath('userData', …)`): las pruebas con caché no lo detectan. Los efectos se aplican antes de componer, a la imagen encajada (sin bandas), en búferes intermedios (`applyEffects`).
 - `src/components/`: MenuBar, Toolbar, Dock (con pestañas), MediaPool, TransitionsPanel, Preview (un `<video>` oculto por evento cercano al cursor; el compositor toma sus fotogramas), Timeline, Transport, Waveform y diálogos (Project, Render, Shortcuts).
 - `src/styles.css`: un único archivo de estilos, tema oscuro estilo editor clásico.
+
+## Idiomas (desde la v1.1)
+
+- Los textos de la interfaz se escriben **en español** en el código, envueltos en `tx('…')` (`src/i18n/index.js` en la interfaz, `electron/i18n/index.js` en el proceso principal). El texto español es la clave; la traducción inglesa está en **`electron/i18n/en.json`** (un solo diccionario para los dos procesos). Variables entre llaves: `tx('Invirtiendo «{name}»…', { name })`. Plurales: dos claves (`tx(n === 1 ? '{n} evento' : '{n} eventos', { n })`), sin pegar trozos sueltos. Si la misma palabra se traduce distinto según el sitio, contexto tras `|`, que no se muestra: `tx('Medios|tonos medios')` → «Midtones».
+- **Cualquier texto nuevo** va con `tx()` y su entrada en `en.json`; `npm run i18n` lista los que faltan, los que sobran y los que no tienen las mismas `{variables}` (termina con error si falta alguno). Los números con decimales, con `decimal(v, n)` / `point(v)`, y las fechas, con `locale` (no `'es-ES'` ni `.replace('.', ',')`).
+- El idioma lo decide el proceso principal al arrancar (`userData/idioma.json` o, si no existe, el idioma de Windows: español si es español, si no inglés) y la interfaz lo lee de forma síncrona (`api.lang` en `preload.js`). Es fijo durante la sesión, así que las listas que se crean al cargar los módulos (efectos, formatos, transiciones) pueden llevar `tx()`. *Ayuda → Idioma* llama a `api.setLanguage`, que lo guarda y cierra la ventana por el camino normal (pregunta si guardar los cambios) y la aplicación se vuelve a abrir (`relaunchOnClose`).
+- Las pruebas usan otra carpeta de datos (`scripts/pruebas/captura.js`): para probar en inglés, escribir `{"lang":"en"}` en `%TEMP%/cortex-pruebas/idioma.json`.
+- No se traducen: el registro de errores (`electron/log.js`), los nombres de las fuentes ni lo que escribe el usuario. El manual, el CHANGELOG y el README siguen solo en español.
 
 ## Convenciones del modelo
 
@@ -111,7 +120,7 @@ v0.7.0 (22/10/2026): curvas en las envolventes y envolvente de opacidad en las p
 
 v1.0.0 (23/10/2026): descargar de YouTube, compresor de video por lotes, render con la tarjeta gráfica, pantalla de inicio con proyectos recientes, invertir, estabilizar, reducir el ruido, subtítulos automáticos con Whisper, registro de errores y reproducción fluida en proyectos largos (lista «Para la v1.0» de abajo).
 
-**Siguiente paso**: la v1.1 (interfaz en inglés y firma con SignPath; la parte del README de la firma ya está, falta la solicitud del usuario; ver abajo). Preguntar al usuario qué más quiere añadir. Si nota tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma.
+**v1.1 en curso**: la interfaz en inglés está hecha (25/10/2026, sección «Idiomas»; sin publicar todavía). La firma con SignPath **queda en espera** (decisión del usuario, 25/10/2026): el proyecto aún no tiene reputación (0 estrellas, unas 8 descargas) y SignPath la pide; se solicitará cuando tenga algo de uso. **Siguiente paso**: que el usuario pruebe la interfaz en inglés y decidir si se publica la v1.1 solo con eso o con algo más. Preguntar al usuario qué más quiere añadir. Si nota tirones (sobre todo en un equipo con gráfica modesta), medir con un perfil de CPU (Electron + `webContents.debugger`, `Profiler.start/stop`) y contando fotogramas con `requestAnimationFrame` en reposo, reproduciendo y arrastrando, con y sin efectos y con cada pestaña del panel abierta. Candidatos: efectos pesados de GPU a resolución completa (desenfoque, brillo difuso) y el trabajo de React por fotograma.
 
 ## Firma del instalador (v1.1, con SignPath Foundation)
 
@@ -119,7 +128,7 @@ Repositorio público con licencia **GPL-3.0**. Firma gratuita de **SignPath Foun
 
 Hecho en el repo (25/10/2026): sección **«Code signing policy»** del README revisada con las condiciones de https://signpath.org/terms: el término exacto en inglés como título (SignPath lo exige así, en la página principal y en las de descarga), la frase de SignPath, los roles, la política de privacidad con cada conexión (actualizaciones en GitHub; a petición del usuario, yt-dlp, whisper.cpp y los modelos de Hugging Face) y los enlaces a las políticas de privacidad de GitHub, Google y Hugging Face. El flujo `.github/workflows/instalador.yml` ya compila el instalador como artefacto.
 
-Falta (lo hace el usuario): activar la verificación en dos pasos en GitHub para `Nyra31` (obligatoria) y enviar la solicitud en https://signpath.org/apply. Las notas de cada release desde la v1.1 deben enlazar a la «Code signing policy» del README.
+Falta (lo hace el usuario, **en espera hasta que el proyecto tenga reputación**): activar la verificación en dos pasos en GitHub para `Nyra31` (obligatoria) y enviar la solicitud en https://signpath.org/apply. Respuestas preparadas para el formulario (25/10/2026): Homepage y repositorio `https://github.com/Nyra31/cortex-studio`, Download URL `…#descarga`, Privacy Policy URL `…#code-signing-policy`, Maintainer Type «Individual», Build System «GitHub Actions», Tagline «Free and open source desktop video editor for Windows with a multitrack timeline.»; en *Reputation*, datos reales (no inflarlos). Alternativa si la rechazan: certificado Open Source de Certum (de pago, sin requisito de reputación). Las notas de cada release desde la v1.1 deben enlazar a la «Code signing policy» del README.
 
 Cuando acepten (SignPath da organization-id, project-slug y signing-policy-slug): token en el secreto `SIGNPATH_API_TOKEN`; `id` en el paso de `upload-artifact` y después `signpath/github-action-submit-signing-request` (`github-artifact-id: ${{ steps.<id>.outputs.artifact-id }}`, `wait-for-completion: true`, `output-artifact-directory`). **Ojo:** al firmar cambia el hash del .exe, así que `latest.yml` (sha512 y tamaño) y el `.blockmap` hay que regenerarlos con el .exe firmado o las actualizaciones automáticas fallan. Lo mejor es firmar también `Cortex Studio.exe` antes de empaquetar el NSIS (`sign` personalizado en electron-builder o dos pasadas). Metadatos que exige SignPath: nombre de producto «Cortex Studio» y la misma versión en todos los binarios firmados; FFmpeg/ffprobe (de terceros) no se firman con nuestra suscripción, pero pueden ir dentro del instalador.
 
@@ -158,4 +167,4 @@ Hecha también toda la lista de ideas de la 0.6 (envolventes con curvas y de opa
 
 ## Al terminar una función
 
-Actualizar `docs/MANUAL.md` (descripción de la función, atajos, limitaciones), añadirla a `CHANGELOG.md` en una sección «Sin publicar» (al publicar, pasa a ser la de la versión, con fecha) y la tabla de atajos de `ShortcutsDialog.jsx` si se añaden teclas. El README es corto a propósito (qué es, descarga, funciones en ocho líneas, desarrollo, licencia): tocarlo solo si cambia algo de eso.
+Actualizar `docs/MANUAL.md` (descripción de la función, atajos, limitaciones), añadirla a `CHANGELOG.md` en una sección «Sin publicar» (al publicar, pasa a ser la de la versión, con fecha) y la tabla de atajos de `ShortcutsDialog.jsx` si se añaden teclas. Los textos nuevos, con `tx()` y traducidos en `electron/i18n/en.json` (`npm run i18n` sin errores). El README es corto a propósito (qué es, descarga, funciones en ocho líneas, desarrollo, licencia): tocarlo solo si cambia algo de eso.

@@ -1,6 +1,7 @@
 // Compresor de video: ajustes por defecto, preajustes y los del usuario (localStorage `cortex-compress`).
 // Los argumentos de FFmpeg los monta electron/compressor.js.
 
+import { tx } from '../i18n/index.js';
 export const DEFAULT_SETTINGS = {
   encoder: 'x264',
   mode: 'quality', // 'quality' (calidad constante) | 'bitrate' | 'size' (tamaño de archivo, a dos pasadas)
@@ -32,15 +33,15 @@ export const DEFAULT_SETTINGS = {
 
 // Preajustes incluidos. `gpu: true` usa el primer codificador H.265 de la tarjeta gráfica que funcione.
 export const PRESETS = [
-  { id: 'general', name: 'Equilibrado (H.264, hasta 1080p)', settings: {} },
-  { id: 'fast', name: 'Rápido (H.264, hasta 1080p)', settings: { quality: 23, speed: 2 } },
-  { id: 'hq', name: 'Alta calidad (H.265, tamaño original)', settings: { encoder: 'x265', quality: 20, speed: 6, maxSize: 0, audio: { tracks: 'all', codec: 'aac', kbps: 192, mix: 'stereo' } } },
-  { id: 'small', name: 'Pequeño (H.265, hasta 1080p)', settings: { encoder: 'x265', quality: 26, audio: { tracks: 'all', codec: 'aac', kbps: 128, mix: 'stereo' } } },
-  { id: 'tiny', name: 'Muy pequeño (H.265, 720p)', settings: { encoder: 'x265', quality: 28, maxSize: 720, audio: { tracks: 'first', codec: 'aac', kbps: 96, mix: 'stereo' } } },
-  { id: 'send', name: 'Para enviar (cabe en 10 MB, 720p)', settings: { mode: 'size', sizeMB: 10, maxSize: 720, speed: 4, audio: { tracks: 'first', codec: 'aac', kbps: 96, mix: 'stereo' }, subtitles: 'none' } },
-  { id: 'gpu', name: 'Con la tarjeta gráfica (H.265, muy rápido)', gpu: true, settings: { quality: 26, maxSize: 0 } },
-  { id: 'web', name: 'Web (WebM VP9 + Opus)', settings: { encoder: 'vp9', quality: 32, speed: 2, container: 'webm', audio: { tracks: 'first', codec: 'opus', kbps: 128, mix: 'stereo' } } },
-  { id: 'archive', name: 'Archivo (AV1 + Opus, lento)', settings: { encoder: 'av1', quality: 30, speed: 2, container: 'mkv', maxSize: 0, audio: { tracks: 'all', codec: 'opus', kbps: 128, mix: 'keep' } } },
+  { id: 'general', name: tx('Equilibrado (H.264, hasta 1080p)'), settings: {} },
+  { id: 'fast', name: tx('Rápido (H.264, hasta 1080p)'), settings: { quality: 23, speed: 2 } },
+  { id: 'hq', name: tx('Alta calidad (H.265, tamaño original)'), settings: { encoder: 'x265', quality: 20, speed: 6, maxSize: 0, audio: { tracks: 'all', codec: 'aac', kbps: 192, mix: 'stereo' } } },
+  { id: 'small', name: tx('Pequeño (H.265, hasta 1080p)'), settings: { encoder: 'x265', quality: 26, audio: { tracks: 'all', codec: 'aac', kbps: 128, mix: 'stereo' } } },
+  { id: 'tiny', name: tx('Muy pequeño (H.265, 720p)'), settings: { encoder: 'x265', quality: 28, maxSize: 720, audio: { tracks: 'first', codec: 'aac', kbps: 96, mix: 'stereo' } } },
+  { id: 'send', name: tx('Para enviar (cabe en 10 MB, 720p)'), settings: { mode: 'size', sizeMB: 10, maxSize: 720, speed: 4, audio: { tracks: 'first', codec: 'aac', kbps: 96, mix: 'stereo' }, subtitles: 'none' } },
+  { id: 'gpu', name: tx('Con la tarjeta gráfica (H.265, muy rápido)'), gpu: true, settings: { quality: 26, maxSize: 0 } },
+  { id: 'web', name: tx('Web (WebM VP9 + Opus)'), settings: { encoder: 'vp9', quality: 32, speed: 2, container: 'webm', audio: { tracks: 'first', codec: 'opus', kbps: 128, mix: 'stereo' } } },
+  { id: 'archive', name: tx('Archivo (AV1 + Opus, lento)'), settings: { encoder: 'av1', quality: 30, speed: 2, container: 'mkv', maxSize: 0, audio: { tracks: 'all', codec: 'opus', kbps: 128, mix: 'keep' } } },
 ];
 
 // Ajustes de un preajuste sobre los de por defecto (sin tocar carpeta ni importar). `encoders` = los disponibles.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { setScopeListener } from '../preview/scopes.js';
+import { tx } from '../i18n/index.js';
 
 // Monitores de video (como los de VEGAS): histograma, forma de onda (luma por columnas) y vectorescopio, del
 // fotograma de la vista previa. Luma y croma con los coeficientes BT.709 (video HD), en % (0 = negro, 100 = blanco).
@@ -12,13 +13,13 @@ const chroma = (r, g, b) => {
   return [(b - y) / (2 * (1 - KB)), (r - y) / (2 * (1 - KR))]; // Cb, Cr de −0,5 a 0,5 (con r, g, b de 0 a 1)
 };
 const MODES = [
-  { id: 'histogram', label: 'Histograma' },
-  { id: 'waveform', label: 'Forma de onda' },
-  { id: 'rgbparade', label: 'Desfile RGB' },
-  { id: 'vectorscope', label: 'Vectorescopio' },
+  { id: 'histogram', label: tx('Histograma') },
+  { id: 'waveform', label: tx('Forma de onda') },
+  { id: 'rgbparade', label: tx('Desfile RGB') },
+  { id: 'vectorscope', label: tx('Vectorescopio') },
 ];
 // Colores al 75 % (barras de color) para las casillas del vectorescopio.
-const TARGETS = [['R', 0.75, 0, 0], ['Mg', 0.75, 0, 0.75], ['B', 0, 0, 0.75], ['Cy', 0, 0.75, 0.75], ['G', 0, 0.75, 0], ['Yl', 0.75, 0.75, 0]];
+const TARGETS = [['R', 0.75, 0, 0], [tx('Mg'), 0.75, 0, 0.75], ['B', 0, 0, 0.75], [tx('Cy'), 0, 0.75, 0.75], ['G', 0, 0.75, 0], [tx('Yl'), 0.75, 0.75, 0]];
 
 export default function Scopes() {
   const [mode, setMode] = useState(() => {
@@ -61,7 +62,7 @@ export default function Scopes() {
         <select className="dock-select" value={mode} onChange={(e) => setMode(e.target.value)}>
           {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
-        <span className="dock-toolbar-label">Fotograma de la vista previa</span>
+        <span className="dock-toolbar-label">{tx('Fotograma de la vista previa')}</span>
       </div>
       <canvas ref={canvasRef} className="scope-canvas" />
     </div>

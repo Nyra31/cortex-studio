@@ -7,12 +7,13 @@
 // suma a la panorámica fija de la pista y multiplica su volumen o la opacidad de sus eventos.
 // Ley de panorámica «balance»: hacia la derecha se baja el canal izquierdo y al revés.
 import { MIN_VOLUME_DB, eventFades, fadeAt, fadeCurve, sourceTime, volumeToGain } from './project.js';
+import { tx } from '../i18n/index.js';
 
 export const ENVELOPE_MAX_DB = 6;
 export const ENVELOPE_KINDS = {
-  volume: { name: 'Volumen', initial: 0, track: 'audio' },
-  pan: { name: 'Panorámica', initial: 0, track: 'audio' },
-  opacity: { name: 'Opacidad', initial: 1, track: 'video' },
+  volume: { name: tx('Volumen'), initial: 0, track: 'audio' },
+  pan: { name: tx('Panorámica'), initial: 0, track: 'audio' },
+  opacity: { name: tx('Opacidad'), initial: 1, track: 'video' },
 };
 export const envelopeKinds = (trackType) => Object.keys(ENVELOPE_KINDS).filter((k) => ENVELOPE_KINDS[k].track === trackType);
 
@@ -20,12 +21,12 @@ export const envelopeKinds = (trackType) => Object.keys(ENVELOPE_KINDS).filter((
 // «mantener», que conserva el valor hasta el punto siguiente y salta en él. (Lista escrita aquí y no copiada de
 // FADE_CURVES al cargar: project.js importa este archivo y aún no estaría definida.)
 export const ENVELOPE_CURVES = [
-  { id: 'linear', label: 'Lineal' },
-  { id: 'fast', label: 'Rápido' },
-  { id: 'slow', label: 'Lento' },
-  { id: 'smooth', label: 'Suave' },
-  { id: 'sharp', label: 'Brusco' },
-  { id: 'hold', label: 'Mantener' },
+  { id: 'linear', label: tx('Lineal') },
+  { id: 'fast', label: tx('Rápido') },
+  { id: 'slow', label: tx('Lento') },
+  { id: 'smooth', label: tx('Suave') },
+  { id: 'sharp', label: tx('Brusco') },
+  { id: 'hold', label: tx('Mantener') },
 ];
 const shape = (c, s) => (c === 'hold' ? 0 : fadeCurve(c, s));
 

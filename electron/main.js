@@ -9,6 +9,9 @@ const youtube = require('./youtube');
 const compressor = require('./compressor');
 const whisper = require('./whisper');
 const log = require('./log');
+const i18n = require('./i18n');
+
+const { tx } = i18n;
 
 // Registro de errores (ver log.js): antes de registrar ningún canal, para apuntar los errores de todos.
 log.setup();
@@ -46,10 +49,10 @@ const MIME_TYPES = {
 };
 
 const MEDIA_FILTERS = [
-  { name: 'Medios', extensions: ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'] },
-  { name: 'Todos los archivos', extensions: ['*'] },
+  { name: tx('Medios'), extensions: ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'] },
+  { name: tx('Todos los archivos'), extensions: ['*'] },
 ];
-const PROJECT_FILTERS = [{ name: 'Proyecto de Cortex Studio', extensions: ['cortex'] }];
+const PROJECT_FILTERS = [{ name: tx('Proyecto de Cortex Studio'), extensions: ['cortex'] }];
 
 // Copia de recuperación (guardado automático): la interfaz la escribe cada minuto si hay cambios sin guardar.
 // Se borra al cerrar la ventana normalmente; si sigue ahí al arrancar, la aplicación se cerró de golpe.
@@ -68,15 +71,16 @@ let mainWindow = null;
 let renderProcess = null;
 let projectDirty = false; // la interfaz avisa cuando hay cambios sin guardar
 let closeConfirmed = false;
+let relaunchOnClose = false; // cambio de idioma: la aplicación se vuelve a abrir al cerrarse
 
 async function serveMedia(request) {
   const filePath = new URL(request.url).searchParams.get('p');
-  if (!filePath || !allowedFiles.has(path.resolve(filePath))) return new Response('Prohibido', { status: 403 });
+  if (!filePath || !allowedFiles.has(path.resolve(filePath))) return new Response(tx('Prohibido'), { status: 403 });
   let stat;
   try {
     stat = await fs.promises.stat(filePath);
   } catch {
-    return new Response('No encontrado', { status: 404 });
+    return new Response(tx('No encontrado'), { status: 404 });
   }
   const size = stat.size;
   const type = MIME_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
@@ -140,9 +144,9 @@ function createWindow() {
     const choice = dialog.showMessageBoxSync(mainWindow, {
       type: 'warning',
       title: 'Cortex Studio',
-      message: '¿Guardar los cambios del proyecto antes de salir?',
-      detail: 'Si no los guardas, se perderán.',
-      buttons: ['Guardar', 'No guardar', 'Cancelar'],
+      message: tx('¿Guardar los cambios del proyecto antes de salir?'),
+      detail: tx('Si no los guardas, se perderán.'),
+      buttons: [tx('Guardar'), tx('No guardar'), tx('Cancelar')],
       defaultId: 0,
       cancelId: 2,
       noLink: true,
@@ -152,12 +156,14 @@ function createWindow() {
     } else if (choice === 1) {
       closeConfirmed = true;
       mainWindow.close();
+    } else {
+      relaunchOnClose = false;
     }
   });
   // Vista previa en otra pantalla (window.open de la interfaz con el nombre «cortex-externa»): ventana sin
   // marco a pantalla completa en una pantalla distinta de la del editor (o en la misma si solo hay una).
   mainWindow.webContents.setWindowOpenHandler(({ frameName }) => (frameName === 'cortex-externa'
-    ? { action: 'allow', overrideBrowserWindowOptions: { frame: false, show: false, backgroundColor: '#000000', title: 'Cortex Studio: vista previa' } }
+    ? { action: 'allow', overrideBrowserWindowOptions: { frame: false, show: false, backgroundColor: '#000000', title: tx('Cortex Studio: vista previa') } }
     : { action: 'deny' }));
   mainWindow.webContents.on('did-create-window', (child) => {
     const here = screen.getDisplayMatching(mainWindow.getBounds());
@@ -175,7 +181,7 @@ function createWindow() {
 
 ipcMain.handle('media:pick', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
-    title: 'Importar medios',
+    title: tx('Importar medios'),
     properties: ['openFile', 'multiSelections'],
     filters: MEDIA_FILTERS,
   });
@@ -194,18 +200,18 @@ ipcMain.handle('media:analyze', async (_e, filePath) => {
 // Subtítulos: leer un SRT/WebVTT (devuelve { path, text } o null) y guardar uno.
 ipcMain.handle('subtitles:import', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
-    title: 'Importar subtítulos',
+    title: tx('Importar subtítulos'),
     properties: ['openFile'],
-    filters: [{ name: 'Subtítulos (SRT, WebVTT)', extensions: ['srt', 'vtt'] }],
+    filters: [{ name: tx('Subtítulos (SRT, WebVTT)'), extensions: ['srt', 'vtt'] }],
   });
   if (res.canceled || !res.filePaths.length) return null;
   return { path: res.filePaths[0], text: await fs.promises.readFile(res.filePaths[0], 'utf8') };
 });
 ipcMain.handle('subtitles:export', async (_e, text, defaultName) => {
   const res = await dialog.showSaveDialog(mainWindow, {
-    title: 'Exportar subtítulos',
-    defaultPath: defaultName || 'Subtítulos.srt',
-    filters: [{ name: 'Subtítulos SRT', extensions: ['srt'] }],
+    title: tx('Exportar subtítulos'),
+    defaultPath: defaultName || tx('Subtítulos.srt'),
+    filters: [{ name: tx('Subtítulos SRT'), extensions: ['srt'] }],
   });
   if (res.canceled || !res.filePath) return null;
   await fs.promises.writeFile(res.filePath, `﻿${text}`, 'utf8'); // con BOM: así lo leen bien los reproductores
@@ -215,21 +221,21 @@ ipcMain.handle('subtitles:export', async (_e, text, defaultName) => {
 // LUT .cube del efecto LUT: elegir un archivo y leerlo (solo .cube) para la vista previa.
 ipcMain.handle('lut:pick', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
-    title: 'Elegir una LUT',
+    title: tx('Elegir una LUT'),
     properties: ['openFile'],
     filters: [{ name: 'LUT 3D (.cube)', extensions: ['cube'] }],
   });
   return res.canceled || !res.filePaths.length ? null : res.filePaths[0];
 });
 ipcMain.handle('lut:read', async (_e, filePath) => {
-  if (path.extname(filePath).toLowerCase() !== '.cube') throw new Error('No es un archivo .cube');
+  if (path.extname(filePath).toLowerCase() !== '.cube') throw new Error(tx('No es un archivo .cube'));
   return fs.promises.readFile(filePath, 'utf8');
 });
 
 // Detectar escenas: cortes de plano entre start y start + length (s del medio); devuelve los instantes desde start.
 ipcMain.handle('media:scenes', async (event, filePath, start, length) => {
   const file = path.resolve(filePath);
-  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  if (!allowedFiles.has(file)) throw new Error(tx('El archivo no está importado'));
   return ff.detectScenes(file, start, length, 0.3, {
     onProgress: (p) => event.sender.send('scenes:progress', p),
   });
@@ -239,15 +245,15 @@ ipcMain.handle('media:scenes', async (event, filePath, start, length) => {
 // aún no está guardado). opts = { hasVideo, hasAudio, fps }. Progreso por `reverse:progress`. Devuelve la ruta.
 ipcMain.handle('media:reverse', async (event, filePath, start, length, projectPath, opts) => {
   const file = path.resolve(filePath);
-  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  if (!allowedFiles.has(file)) throw new Error(tx('El archivo no está importado'));
   const dir = projectPath
-    ? path.join(path.dirname(projectPath), 'Invertidos')
-    : path.join(app.getPath('documents'), 'Cortex Studio', 'Invertidos');
+    ? path.join(path.dirname(projectPath), tx('Invertidos'))
+    : path.join(app.getPath('documents'), 'Cortex Studio', tx('Invertidos'));
   await fs.promises.mkdir(dir, { recursive: true });
   const base = path.basename(file, path.extname(file));
   const ext = opts?.hasVideo === false ? 'm4a' : 'mp4';
   let n = 1;
-  const name = (i) => path.join(dir, `${base} - invertido ${String(i).padStart(2, '0')}.${ext}`);
+  const name = (i) => path.join(dir, tx('{base} - invertido {i}.{ext}', { base, i: String(i).padStart(2, '0'), ext }));
   while (fs.existsSync(name(n))) n++;
   return ff.reverseClip(file, start, length, name(n), {
     ...opts,
@@ -259,14 +265,14 @@ ipcMain.handle('media:reverse', async (event, filePath, start, length, projectPa
 // proyecto. opts = { hasAudio, smoothing }. Progreso por `stabilize:progress`. Devuelve la ruta.
 ipcMain.handle('media:stabilize', async (event, filePath, start, length, projectPath, opts) => {
   const file = path.resolve(filePath);
-  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  if (!allowedFiles.has(file)) throw new Error(tx('El archivo no está importado'));
   const dir = projectPath
-    ? path.join(path.dirname(projectPath), 'Estabilizados')
-    : path.join(app.getPath('documents'), 'Cortex Studio', 'Estabilizados');
+    ? path.join(path.dirname(projectPath), tx('Estabilizados'))
+    : path.join(app.getPath('documents'), 'Cortex Studio', tx('Estabilizados'));
   await fs.promises.mkdir(dir, { recursive: true });
   const base = path.basename(file, path.extname(file));
   let n = 1;
-  const name = (i) => path.join(dir, `${base} - estabilizado ${String(i).padStart(2, '0')}.mp4`);
+  const name = (i) => path.join(dir, tx('{base} - estabilizado {i}.mp4', { base, i: String(i).padStart(2, '0') }));
   while (fs.existsSync(name(n))) n++;
   return ff.stabilizeClip(file, start, length, name(n), {
     ...opts,
@@ -278,14 +284,14 @@ ipcMain.handle('media:stabilize', async (event, filePath, start, length, project
 // proyecto. strength = 'light' | 'strong'. Progreso por `denoise:progress`. Devuelve la ruta.
 ipcMain.handle('media:denoise', async (event, filePath, start, length, projectPath, strength) => {
   const file = path.resolve(filePath);
-  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  if (!allowedFiles.has(file)) throw new Error(tx('El archivo no está importado'));
   const dir = projectPath
-    ? path.join(path.dirname(projectPath), 'Sin ruido')
-    : path.join(app.getPath('documents'), 'Cortex Studio', 'Sin ruido');
+    ? path.join(path.dirname(projectPath), tx('Sin ruido'))
+    : path.join(app.getPath('documents'), 'Cortex Studio', tx('Sin ruido'));
   await fs.promises.mkdir(dir, { recursive: true });
   const base = path.basename(file, path.extname(file));
   let n = 1;
-  const name = (i) => path.join(dir, `${base} - sin ruido ${String(i).padStart(2, '0')}.flac`);
+  const name = (i) => path.join(dir, tx('{base} - sin ruido {i}.flac', { base, i: String(i).padStart(2, '0') }));
   while (fs.existsSync(name(n))) n++;
   return ff.denoiseClip(file, start, length, name(n), {
     strength,
@@ -297,14 +303,14 @@ ipcMain.handle('media:denoise', async (event, filePath, start, length, projectPa
 // proyecto (o en Documentos si aún no está guardado). Devuelve la ruta.
 ipcMain.handle('media:frame', async (_e, filePath, time, projectPath) => {
   const file = path.resolve(filePath);
-  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  if (!allowedFiles.has(file)) throw new Error(tx('El archivo no está importado'));
   const dir = projectPath
-    ? path.join(path.dirname(projectPath), 'Fotogramas')
-    : path.join(app.getPath('documents'), 'Cortex Studio', 'Fotogramas');
+    ? path.join(path.dirname(projectPath), tx('Fotogramas'))
+    : path.join(app.getPath('documents'), 'Cortex Studio', tx('Fotogramas'));
   await fs.promises.mkdir(dir, { recursive: true });
   const base = path.basename(file, path.extname(file));
   let n = 1;
-  const name = (i) => path.join(dir, `${base} - fotograma ${String(i).padStart(2, '0')}.png`);
+  const name = (i) => path.join(dir, tx('{base} - fotograma {i}.png', { base, i: String(i).padStart(2, '0') }));
   while (fs.existsSync(name(n))) n++;
   const out = name(n);
   await ff.extractFrame(file, time, out);
@@ -316,7 +322,7 @@ ipcMain.handle('media:frame', async (_e, filePath, time, projectPath) => {
 let stripQueue = Promise.resolve();
 ipcMain.handle('media:filmstrip', (_e, filePath) => {
   const file = path.resolve(filePath);
-  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  if (!allowedFiles.has(file)) throw new Error(tx('El archivo no está importado'));
   const job = stripQueue.then(async () => {
     const dir = path.join(app.getPath('userData'), 'miniaturas');
     const base = path.join(dir, path.basename(proxyPathFor(file), '.mp4'));
@@ -365,7 +371,7 @@ const proxyJobs = new Map(); // original → promesa del proxy
 
 ipcMain.handle('proxy:make', (_e, filePath) => {
   const file = path.resolve(filePath);
-  if (!allowedFiles.has(file)) throw new Error('El archivo no está importado');
+  if (!allowedFiles.has(file)) throw new Error(tx('El archivo no está importado'));
   const ready = existingProxy(file);
   if (ready) {
     allowedFiles.add(ready);
@@ -385,7 +391,7 @@ ipcMain.handle('proxy:make', (_e, filePath) => {
     proxyProc = null;
     if (r.code !== 0) {
       fs.promises.unlink(part).catch(() => {});
-      throw new Error(r.stderr.trim().split('\n').pop() || `FFmpeg terminó con el código ${r.code}`);
+      throw new Error(r.stderr.trim().split('\n').pop() || tx('FFmpeg terminó con el código {code}', { code: r.code }));
     }
     await fs.promises.rename(part, out);
     allowedFiles.add(out);
@@ -424,8 +430,8 @@ ipcMain.handle('project:save', async (_e, data, filePath) => {
   let target = filePath;
   if (!target) {
     const res = await dialog.showSaveDialog(mainWindow, {
-      title: 'Guardar proyecto',
-      defaultPath: 'Proyecto.cortex',
+      title: tx('Guardar proyecto'),
+      defaultPath: tx('Proyecto.cortex'),
       filters: PROJECT_FILTERS,
     });
     if (res.canceled || !res.filePath) return null;
@@ -455,13 +461,13 @@ async function writeProject(target, data) {
 // Devuelve { path, map (original → copia), missing } o null si se cancela.
 ipcMain.handle('project:collect', async (event, data, currentPath) => {
   const res = await dialog.showOpenDialog(mainWindow, {
-    title: 'Recopilar medios: elige o crea la carpeta del proyecto',
+    title: tx('Recopilar medios: elige o crea la carpeta del proyecto'),
     properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
   });
   if (res.canceled || !res.filePaths.length) return null;
   const dir = res.filePaths[0];
-  const target = path.join(dir, currentPath ? path.basename(currentPath) : 'Proyecto.cortex');
-  const mediaDir = path.join(dir, 'Medios');
+  const target = path.join(dir, currentPath ? path.basename(currentPath) : tx('Proyecto.cortex'));
+  const mediaDir = path.join(dir, tx('Medios'));
   await fs.promises.mkdir(mediaDir, { recursive: true });
   const files = [...new Set((data.media || []).filter((m) => m.path).map((m) => path.resolve(m.path)))];
   const map = {};
@@ -588,7 +594,7 @@ ipcMain.handle('recent:remove', async (_e, filePath) => {
 ipcMain.handle('project:openPath', async (_e, filePath) => {
   const key = path.resolve(filePath).toLowerCase();
   if (!/\.cortex$/i.test(key) || !(await readRecent()).some((r) => path.resolve(r.path).toLowerCase() === key)) {
-    throw new Error('El proyecto no está en la lista de recientes');
+    throw new Error(tx('El proyecto no está en la lista de recientes'));
   }
   const data = await readProject(filePath);
   await noteRecent(filePath);
@@ -597,7 +603,7 @@ ipcMain.handle('project:openPath', async (_e, filePath) => {
 
 ipcMain.handle('project:open', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
-    title: 'Abrir proyecto',
+    title: tx('Abrir proyecto'),
     properties: ['openFile'],
     filters: PROJECT_FILTERS,
   });
@@ -611,15 +617,15 @@ ipcMain.handle('project:open', async () => {
 // type = { name, ext } del formato elegido en la ventana de render.
 ipcMain.handle('render:pickPath', async (_e, defaultName, type) => {
   const res = await dialog.showSaveDialog(mainWindow, {
-    title: 'Renderizar como',
-    defaultPath: defaultName || 'Video.mp4',
-    filters: [type?.ext ? { name: type.name, extensions: [type.ext] } : { name: 'Video MP4 (H.264/AAC)', extensions: ['mp4'] }],
+    title: tx('Renderizar como'),
+    defaultPath: defaultName || tx('Video.mp4'),
+    filters: [type?.ext ? { name: type.name, extensions: [type.ext] } : { name: tx('Video MP4 (H.264/AAC)'), extensions: ['mp4'] }],
   });
   return res.canceled ? null : res.filePath;
 });
 
 ipcMain.handle('render:start', async (event, project, settings, outPath) => {
-  if (renderProcess) return { ok: false, error: 'Ya hay un renderizado en curso.' };
+  if (renderProcess) return { ok: false, error: tx('Ya hay un renderizado en curso.') };
   let canceled = false;
   try {
     const result = await ff.render(project, settings, outPath, {
@@ -687,11 +693,11 @@ function wavHeader(rate, bytes) {
 }
 ipcMain.handle('record:start', async (_e, projectPath, rate) => {
   const dir = projectPath
-    ? path.join(path.dirname(projectPath), 'Grabaciones')
-    : path.join(app.getPath('documents'), 'Cortex Studio', 'Grabaciones');
+    ? path.join(path.dirname(projectPath), tx('Grabaciones'))
+    : path.join(app.getPath('documents'), 'Cortex Studio', tx('Grabaciones'));
   await fs.promises.mkdir(dir, { recursive: true });
   let n = 1;
-  const name = (i) => path.join(dir, `Voz en off ${String(i).padStart(2, '0')}.wav`);
+  const name = (i) => path.join(dir, tx('Voz en off {i}.wav', { i: String(i).padStart(2, '0') }));
   while (fs.existsSync(name(n))) n++;
   const file = name(n);
   const fd = fs.openSync(file, 'w');
@@ -759,6 +765,18 @@ ipcMain.handle('update:check', async () => {
 });
 ipcMain.handle('update:state', () => updateState);
 ipcMain.handle('app:version', () => app.getVersion());
+
+// Idioma (ver i18n/index.js): la interfaz lo lee al cargar el preload; al cambiarlo se guarda y la aplicación
+// se cierra como siempre (preguntando si hay cambios sin guardar) y se vuelve a abrir.
+ipcMain.on('i18n:lang', (event) => {
+  event.returnValue = i18n.lang;
+});
+ipcMain.handle('i18n:set', (_e, value) => {
+  if (value === i18n.lang) return;
+  i18n.saveLanguage(value);
+  relaunchOnClose = true;
+  mainWindow.close();
+});
 // Reiniciar e instalar. Si hay cambios sin guardar, primero la pregunta de siempre al cerrar.
 ipcMain.handle('update:install', () => {
   if (!autoUpdater || updateState.status !== 'ready') return;
@@ -793,7 +811,7 @@ ipcMain.handle('whisper:tempPath', () => {
   return p;
 });
 ipcMain.handle('whisper:transcribe', async (event, wavPath, opts) => {
-  if (!whisperTemps.has(wavPath)) throw new Error('Archivo no válido');
+  if (!whisperTemps.has(wavPath)) throw new Error(tx('Archivo no válido'));
   try {
     return await whisper.transcribe(wavPath, opts, (s) => event.sender.send('whisper:progress', s));
   } finally {
@@ -820,9 +838,9 @@ ipcMain.handle('compress:cancel', () => compressor.cancel());
 ipcMain.handle('compress:openSample', (_e, file) => (samples.has(file) ? shell.openPath(file) : null));
 ipcMain.handle('compress:pick', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
-    title: 'Videos para comprimir',
+    title: tx('Videos para comprimir'),
     properties: ['openFile', 'multiSelections'],
-    filters: [{ name: 'Videos', extensions: ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'wmv', 'flv', 'mpg', 'mpeg', 'ts', 'mts', 'm2ts', '3gp', 'ogv', 'vob', 'mxf'] }, { name: 'Todos los archivos', extensions: ['*'] }],
+    filters: [{ name: tx('Videos'), extensions: ['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'wmv', 'flv', 'mpg', 'mpeg', 'ts', 'mts', 'm2ts', '3gp', 'ogv', 'vob', 'mxf'] }, { name: tx('Todos los archivos'), extensions: ['*'] }],
   });
   return res.canceled ? [] : res.filePaths;
 });
@@ -859,6 +877,10 @@ app.on('window-all-closed', () => {
   compressor.cancel();
   whisper.cancel();
   // «Reiniciar y actualizar»: el instalador (sin preguntas) sustituye la aplicación y la vuelve a abrir.
-  if (installOnClose && autoUpdater) autoUpdater.quitAndInstall(true, true);
-  else if (process.platform !== 'darwin') app.quit();
+  if (installOnClose && autoUpdater) {
+    autoUpdater.quitAndInstall(true, true);
+  } else {
+    if (relaunchOnClose) app.relaunch();
+    if (process.platform !== 'darwin' || relaunchOnClose) app.quit();
+  }
 });

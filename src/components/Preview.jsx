@@ -18,6 +18,7 @@ import { setLutListener } from '../preview/effects-gl.js';
 import { hasRamp, speedAt } from '../state/speed.js';
 import { AudioEngine, renderOfflineAudio } from '../preview/audio-engine.js';
 import { setMeterEngine } from '../preview/meters.js';
+import { tx } from '../i18n/index.js';
 
 // Para las pruebas automáticas: procesar un sonido con la misma cadena de efectos que la vista previa.
 window.cortexPruebas = { renderOfflineAudio, activeEffects };
@@ -504,7 +505,7 @@ export default function Preview({
     if (!win) return false;
     externalWin.current = win;
     const doc = win.document;
-    doc.title = 'Cortex Studio: vista previa';
+    doc.title = tx('Cortex Studio: vista previa');
     doc.body.style.cssText = 'margin:0;background:#000;overflow:hidden;cursor:none';
     const video = doc.createElement('video');
     video.style.cssText = 'width:100vw;height:100vh;object-fit:contain;display:block';
@@ -545,7 +546,7 @@ export default function Preview({
       return;
     }
     if ((await window.api.displayCount()) > 1 && openExternal()) {
-      onMessage?.('Vista previa en la otra pantalla. Para quitarla: Alt+Mayús+4, Esc o doble clic en ella.');
+      onMessage?.(tx('Vista previa en la otra pantalla. Para quitarla: Alt+Mayús+4, Esc o doble clic en ella.'));
       return;
     }
     previewRef.current.requestFullscreen().catch(() => {});
@@ -556,28 +557,28 @@ export default function Preview({
   return (
     <div className="preview-window">
       <div className="dock-toolbar">
-        <button className="tool" title="Propiedades del proyecto (Alt+Intro)" onClick={onOpenProperties}>
+        <button className="tool" title={tx('Propiedades del proyecto (Alt+Intro)')} onClick={onOpenProperties}>
           <Icon name="properties" />
         </button>
-        <select className="dock-select" value={quality} onChange={(e) => setQuality(e.target.value)} title="Calidad de la vista previa (no afecta al render)">
-          <option value="draft">Borrador (¼)</option>
-          <option value="preview">Vista previa (½)</option>
-          <option value="good">Buena</option>
-          <option value="best">Óptima (tamaño del proyecto)</option>
+        <select className="dock-select" value={quality} onChange={(e) => setQuality(e.target.value)} title={tx('Calidad de la vista previa (no afecta al render)')}>
+          <option value="draft">{tx('Borrador (¼)')}</option>
+          <option value="preview">{tx('Vista previa (½)')}</option>
+          <option value="good">{tx('Buena')}</option>
+          <option value="best">{tx('Óptima (tamaño del proyecto)')}</option>
         </select>
-        <select className="dock-select" value={guides} onChange={(e) => setGuides(e.target.value)} title="Guías sobre la imagen (no salen en el render)">
-          <option value="none">Sin guías</option>
-          <option value="safe">Zona segura</option>
-          <option value="thirds">Tercios</option>
-          <option value="all">Zona segura y tercios</option>
+        <select className="dock-select" value={guides} onChange={(e) => setGuides(e.target.value)} title={tx('Guías sobre la imagen (no salen en el render)')}>
+          <option value="none">{tx('Sin guías')}</option>
+          <option value="safe">{tx('Zona segura')}</option>
+          <option value="thirds">{tx('Tercios')}</option>
+          <option value="all">{tx('Zona segura y tercios')}</option>
         </select>
         <span className="footer-spacer" />
-        <button className="tool" title="Exportar el fotograma como imagen PNG (Ctrl+Mayús+E)" onClick={onExportFrame}>
+        <button className="tool" title={tx('Exportar el fotograma como imagen PNG (Ctrl+Mayús+E)')} onClick={onExportFrame}>
           <Icon name="camera" />
         </button>
         <button
           className={`tool${external ? ' active' : ''}`}
-          title="Vista previa a pantalla completa (Alt+Mayús+4 o doble clic en la imagen; con dos pantallas, en la otra)"
+          title={tx('Vista previa a pantalla completa (Alt+Mayús+4 o doble clic en la imagen; con dos pantallas, en la otra)')}
           onClick={toggleFullScreen}
         >
           <Icon name="fullscreen" />
@@ -588,7 +589,7 @@ export default function Preview({
           className="screen"
           style={{ '--aspect': width / height }}
           onDoubleClick={(e) => !e.target.closest('.pan-overlay') && toggleFullScreen()}
-          title={full ? 'Doble clic o Esc: salir de la pantalla completa' : undefined}
+          title={full ? tx('Doble clic o Esc: salir de la pantalla completa') : undefined}
         >
           <canvas ref={canvasRef} />
           {!full && guides !== 'none' && <Guides kind={guides} width={width} height={height} />}
@@ -613,28 +614,28 @@ export default function Preview({
               onChange={onPanChange}
             />
           )}
-          {glError && <div className="preview-error">No se puede mostrar la vista previa: {glError}</div>}
+          {glError && <div className="preview-error">{tx('No se puede mostrar la vista previa: {glError}', { glError })}</div>}
         </div>
         <div className="preview-sources" ref={sourcesRef} />
       </div>
       <div className="preview-info">
         <div>
-          Proyecto: <span>{width}×{height}, {formatFps(fps)}p</span>
+         {tx('Proyecto:')} <span>{width}×{height}, {formatFps(fps)}p</span>
         </div>
         <div>
-          Fotograma: <span>{frameNumber(time, fps)}</span>
+         {tx('Fotograma:')} <span>{frameNumber(time, fps)}</span>
         </div>
         <div>
-          Vista previa: <span>{backing.width}×{backing.height}, {formatFps(fps)}p</span>
+         {tx('Vista previa:')} <span>{backing.width}×{backing.height}, {formatFps(fps)}p</span>
         </div>
         <div>
-          Pantalla: <span>{display.width}×{display.height}</span>
+         {tx('Pantalla:')} <span>{display.width}×{display.height}</span>
         </div>
         <div>
-          Tiempo: <span>{formatTimecode(time, fps)}</span>
+         {tx('Tiempo:')} <span>{formatTimecode(time, fps)}</span>
         </div>
         <div>
-          Orientación: <span>{height > width ? 'vertical' : width === height ? 'cuadrada' : 'horizontal'}</span>
+         {tx('Orientación:')} <span>{height > width ? tx('vertical') : width === height ? tx('cuadrada') : tx('horizontal')}</span>
         </div>
       </div>
     </div>

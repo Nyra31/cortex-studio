@@ -1,4 +1,5 @@
 import Icon from './Icon.jsx';
+import { tx } from '../i18n/index.js';
 
 function ToolButton({ icon, title, onClick, disabled, active }) {
   return (
@@ -14,26 +15,25 @@ export default function Toolbar({
 }) {
   return (
     <div className="toolbar">
-      <ToolButton icon="newFile" title="Nuevo proyecto (Ctrl+N)" onClick={onNew} />
-      <ToolButton icon="open" title="Abrir proyecto (Ctrl+O)" onClick={onOpen} />
-      <ToolButton icon="save" title="Guardar (Ctrl+S)" onClick={onSave} />
+      <ToolButton icon="newFile" title={tx('Nuevo proyecto (Ctrl+N)')} onClick={onNew} />
+      <ToolButton icon="open" title={tx('Abrir proyecto (Ctrl+O)')} onClick={onOpen} />
+      <ToolButton icon="save" title={tx('Guardar (Ctrl+S)')} onClick={onSave} />
       <span className="tool-sep" />
-      <ToolButton icon="importMedia" title="Importar medios (Ctrl+I)" onClick={onImport} />
-      <ToolButton icon="webDownload" title="Descargar de YouTube (Ctrl+Mayús+D)" onClick={onYoutube} />
-      <ToolButton icon="properties" title="Propiedades del proyecto (Alt+Intro)" onClick={onProperties} />
-      <ToolButton icon="render" title="Renderizar como… (Ctrl+M)" onClick={onRender} disabled={!canRender} />
+      <ToolButton icon="importMedia" title={tx('Importar medios (Ctrl+I)')} onClick={onImport} />
+      <ToolButton icon="webDownload" title={tx('Descargar de YouTube (Ctrl+Mayús+D)')} onClick={onYoutube} />
+      <ToolButton icon="properties" title={tx('Propiedades del proyecto (Alt+Intro)')} onClick={onProperties} />
+      <ToolButton icon="render" title={tx('Renderizar como… (Ctrl+M)')} onClick={onRender} disabled={!canRender} />
       <span className="tool-sep" />
-      <ToolButton icon="undo" title="Deshacer (Ctrl+Z)" onClick={onUndo} disabled={!canUndo} />
-      <ToolButton icon="redo" title="Rehacer (Ctrl+Y)" onClick={onRedo} disabled={!canRedo} />
+      <ToolButton icon="undo" title={tx('Deshacer (Ctrl+Z)')} onClick={onUndo} disabled={!canUndo} />
+      <ToolButton icon="redo" title={tx('Rehacer (Ctrl+Y)')} onClick={onRedo} disabled={!canRedo} />
       <span className="tool-sep" />
-      <ToolButton icon="split" title="Dividir en el cursor (S)" onClick={onSplit} />
-      <ToolButton icon="trash" title="Eliminar eventos seleccionados (Supr)" onClick={onDelete} disabled={!hasSelection} />
+      <ToolButton icon="split" title={tx('Dividir en el cursor (S)')} onClick={onSplit} />
+      <ToolButton icon="trash" title={tx('Eliminar eventos seleccionados (Supr)')} onClick={onDelete} disabled={!hasSelection} />
       <span className="tool-sep" />
-      <ToolButton icon="magnet" title="Ajuste a bordes y cursor (F8)" onClick={onToggleSnap} active={snap} />
+      <ToolButton icon="magnet" title={tx('Ajuste a bordes y cursor (F8)')} onClick={onToggleSnap} active={snap} />
       <ToolButton
         icon="ripple"
-        title={`Edición en cascada (Ctrl+L): al borrar, recortar, mover o pegar, lo que va detrás se desplaza${
-          ripple ? ` (activada: ${ripple === 'all' ? 'en todas las pistas' : 'en las pistas afectadas'})` : ''}`}
+        title={tx('Edición en cascada (Ctrl+L): al borrar, recortar, mover o pegar, lo que va detrás se desplaza{n}', { n: ripple ? tx(' (activada: {where})', { where: ripple === 'all' ? tx('en todas las pistas') : tx('en las pistas afectadas') }) : '' })}
         onClick={onToggleRipple}
         active={!!ripple}
       />

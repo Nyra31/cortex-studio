@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { EFFECT_MIME, EFFECTS, activeEffects, effectDefaults, effectGroups } from '../state/effects.js';
 import { Compositor } from '../preview/compositor.js';
 import { renderOfflineAudio } from '../preview/audio-engine.js';
+import { tx } from '../i18n/index.js';
 
 const THUMB_W = 112;
 const THUMB_H = 63;
 const SAMPLE = { width: 320, height: 180 };
-const ALL = 'Todos';
+const ALL = tx('Todos');
 
 // Imagen de ejemplo para las miniaturas: cielo, sol, colinas, un recuadro verde (para el croma) y texto.
 function sampleImage() {
@@ -136,7 +137,7 @@ function EffectTile({ item }) {
         e.dataTransfer.setData(EFFECT_MIME, item.id);
         e.dataTransfer.effectAllowed = 'copy';
       }}
-      title={`${item.group}: ${item.name}\nArrastra sobre un evento de ${item.kind === 'audio' ? 'audio' : 'video'} para añadírselo`}
+      title={tx('{group}: {name}\nArrastra sobre un evento de {n} para añadírselo', { group: item.group, name: item.name, n: item.kind === 'audio' ? 'audio' : 'video' })}
     >
       <canvas ref={ref} width={THUMB_W} height={THUMB_H} />
       <div className="transition-name">{item.name}</div>
@@ -177,8 +178,7 @@ export default function EffectsPanel({ kind = 'video' }) {
     <div className="transitions-panel">
       <div className="dock-toolbar">
         <span className="dock-toolbar-label">
-          Arrastra un efecto sobre un evento de {kind === 'audio' ? 'audio' : 'video'}, o pulsa el botón «fx» del evento para
-          ver y ajustar sus efectos
+         {tx('Arrastra un efecto sobre un evento de {n}, o pulsa el botón «fx» del evento para ver y ajustar sus efectos', { n: kind === 'audio' ? 'audio' : 'video' })}
         </span>
       </div>
       <div className="transitions-body">

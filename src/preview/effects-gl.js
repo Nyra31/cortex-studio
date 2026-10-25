@@ -6,6 +6,7 @@
 // la pasada anterior), uSrc (imagen que entró al efecto) y uSize (tamaño en px). Los colores van sin
 // premultiplicar y el canal alfa se conserva (lo crea el croma).
 import { blurSigma, curveTable, gradeChannels, pixelBlock, sepiaMatrix } from '../state/effects.js';
+import { tx } from '../i18n/index.js';
 
 // Conversión RGB ↔ YUV de rango limitado (BT.601), la que usa FFmpeg al pasar una imagen a yuv420p:
 // los filtros eq, hue y vignette trabajan sobre esos valores.
@@ -74,7 +75,7 @@ export function parseCube(text) {
       if (v.length >= 3) values.push(v[0], v[1], v[2]);
     }
   }
-  if (!size || values.length < size * size * size * 3) throw new Error('No es una LUT 3D .cube válida');
+  if (!size || values.length < size * size * size * 3) throw new Error(tx('No es una LUT 3D .cube válida'));
   const data = new Uint8Array(size * size * size * 4);
   for (let b = 0; b < size; b++) {
     for (let g = 0; g < size; g++) {

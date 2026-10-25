@@ -8,6 +8,7 @@ const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { ffmpegPath, ffprobePath } = require('./ffmpeg');
+const { tx } = require('./i18n');
 
 const ASSET = { win32: 'yt-dlp.exe', darwin: 'yt-dlp_macos', linux: 'yt-dlp_linux' }[process.platform];
 const DOWNLOAD_URL = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${ASSET}`;
@@ -55,13 +56,13 @@ function exec(args, { onLine, onSpawn } = {}) {
 function errorText(stderr, code) {
   const lines = stderr.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('ERROR:'));
   const last = lines.pop();
-  return last ? last.replace(/^ERROR:\s*(\[[^\]]+\]\s*)?([\w-]+:\s*)?/, '') : `yt-dlp terminó con el código ${code}`;
+  return last ? last.replace(/^ERROR:\s*(\[[^\]]+\]\s*)?([\w-]+:\s*)?/, '') : tx('yt-dlp terminó con el código {code}', { code });
 }
 
 async function install(onStatus) {
   await fs.promises.mkdir(binDir(), { recursive: true });
   const res = await net.fetch(DOWNLOAD_URL);
-  if (!res.ok) throw new Error(`No se pudo descargar yt-dlp (${res.status})`);
+  if (!res.ok) throw new Error(tx('No se pudo descargar yt-dlp ({status})', { status: res.status }));
   const total = Number(res.headers.get('content-length')) || 0;
   const part = `${binPath()}.parcial`;
   const file = fs.createWriteStream(part);
@@ -98,7 +99,7 @@ async function update(onStatus) {
 let ready = null;
 // Instala yt-dlp si falta y lo actualiza si toca (una vez por sesión).
 function ensure(onStatus = () => {}) {
-  if (!ASSET) return Promise.reject(new Error('Las descargas no funcionan en este sistema'));
+  if (!ASSET) return Promise.reject(new Error(tx('Las descargas no funcionan en este sistema')));
   if (!ready) {
     ready = (async () => {
       if (!fs.existsSync(binPath())) await install(onStatus);
@@ -125,7 +126,7 @@ async function info(url, playlist) {
   const thumb = (t) => t?.filter((x) => x.url && !/\.webp/.test(x.url)).pop()?.url || t?.at(-1)?.url || null;
   if (j._type === 'playlist') {
     const entries = (j.entries || []).map((e) => ({ title: e.title || e.id, duration: e.duration || null }));
-    return { playlist: true, title: j.title || 'Lista', uploader, count: j.playlist_count || entries.length, thumbnail: thumb(j.thumbnails) || thumb(j.entries?.[0]?.thumbnails), entries };
+    return { playlist: true, title: j.title || tx('Lista'), uploader, count: j.playlist_count || entries.length, thumbnail: thumb(j.thumbnails) || thumb(j.entries?.[0]?.thumbnails), entries };
   }
   const heights = [...new Set((j.formats || []).filter((f) => f.vcodec && f.vcodec !== 'none' && f.height).map((f) => f.height))].sort((a, b) => b - a);
   return {
@@ -185,7 +186,7 @@ let current = null; // { proc, temps, canceled }
 // Descarga y devuelve { files, error } (en una lista, los que se hayan podido bajar aunque falle alguno).
 // onProgress({ stage: 'download' | 'processing', percent, speed, eta, index, count, title, part: 'video' | 'audio' }).
 async function download(opts, onProgress) {
-  if (current) throw new Error('Ya hay una descarga en marcha');
+  if (current) throw new Error(tx('Ya hay una descarga en marcha'));
   await fs.promises.mkdir(opts.dir, { recursive: true });
   const job = { proc: null, temps: new Set(), canceled: false };
   current = job;
@@ -226,7 +227,7 @@ async function download(opts, onProgress) {
       return { files: [], canceled: true };
     }
     const error = r.code !== 0 ? errorText(r.stderr, r.code) : null;
-    if (!files.length) throw new Error(error || 'No se ha descargado nada');
+    if (!files.length) throw new Error(error || tx('No se ha descargado nada'));
     return { files, error };
   } finally {
     current = null;

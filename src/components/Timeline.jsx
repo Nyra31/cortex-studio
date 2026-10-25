@@ -21,6 +21,7 @@ import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
 import { isText } from '../state/text.js';
 import { removeCue, updateCue } from '../state/subtitles.js';
 import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
+import { tx } from '../i18n/index.js';
 
 export const MEDIA_MIME = 'application/x-cortex-media';
 const EMPTY = [];
@@ -62,11 +63,11 @@ function RegionBar({ region, pps, fps, onDown }) {
   const width = Math.max(1, (region.end - region.start) * pps);
   return (
     <>
-      <div className="region-line" style={{ left, width }} onPointerDown={(e) => onDown(e, 'move')} title="Arrastra para mover la selección">
+      <div className="region-line" style={{ left, width }} onPointerDown={(e) => onDown(e, 'move')} title={tx('Arrastra para mover la selección')}>
         <span className="region-length">+{formatTimecode(region.end - region.start, fps)}</span>
       </div>
-      <div className="region-handle" style={{ left }} onPointerDown={(e) => onDown(e, 'start')} title="Principio de la selección" />
-      <div className="region-handle" style={{ left: left + width }} onPointerDown={(e) => onDown(e, 'end')} title="Final de la selección" />
+      <div className="region-handle" style={{ left }} onPointerDown={(e) => onDown(e, 'start')} title={tx('Principio de la selección')} />
+      <div className="region-handle" style={{ left: left + width }} onPointerDown={(e) => onDown(e, 'end')} title={tx('Final de la selección')} />
     </>
   );
 }
@@ -82,7 +83,7 @@ function MarkStrip({ markers, regions, pps, editing, onDown, onDouble, onMenu, o
           key={r.id}
           className="mark-region"
           style={{ left: r.start * pps, width: Math.max(2, (r.end - r.start) * pps) }}
-          title={`Región ${label(r)} (arrastra para moverla; doble clic: seleccionarla y cambiar el nombre)`}
+          title={tx('Región {label} (arrastra para moverla; doble clic: seleccionarla y cambiar el nombre)', { label: label(r) })}
           onPointerDown={(e) => onDown(e, 'region', r, 'move')}
           onDoubleClick={() => onDouble('region', r)}
           onContextMenu={(e) => onMenu(e, 'region', r)}
@@ -97,7 +98,7 @@ function MarkStrip({ markers, regions, pps, editing, onDown, onDouble, onMenu, o
           key={m.id}
           className="mark-marker"
           style={{ left: m.time * pps }}
-          title={`Marcador ${label(m)} (tecla ${m.number <= 9 ? m.number : '—'}; arrastra para moverlo; doble clic: cambiar el nombre)`}
+          title={tx('Marcador {label} (tecla {n}; arrastra para moverlo; doble clic: cambiar el nombre)', { label: label(m), n: m.number <= 9 ? m.number : '—' })}
           onPointerDown={(e) => onDown(e, 'marker', m, 'move')}
           onDoubleClick={() => onDouble('marker', m)}
           onContextMenu={(e) => onMenu(e, 'marker', m)}
@@ -120,7 +121,7 @@ function SubtitleStrip({ cues, pps, onDown, onDouble, onMenu }) {
           key={c.id}
           className="sub-cue"
           style={{ left: c.start * pps, width: Math.max(2, (c.end - c.start) * pps) }}
-          title={`${c.text || '(sin texto)'}\n(arrastra para moverlo; doble clic: editar el texto)`}
+          title={tx('{n}\n(arrastra para moverlo; doble clic: editar el texto)', { n: c.text || tx('(sin texto)') })}
           onPointerDown={(e) => onDown(e, c, 'move')}
           onDoubleClick={() => onDouble(c)}
           onContextMenu={(e) => onMenu(e, c)}
@@ -140,7 +141,7 @@ function MarkInput({ value, onDone }) {
       className="mark-input"
       autoFocus
       defaultValue={value}
-      placeholder="Nombre"
+      placeholder={tx('Nombre')}
       onFocus={(e) => e.target.select()}
       onPointerDown={(e) => e.stopPropagation()}
       onBlur={(e) => onDone(e.target.value.trim())}
@@ -178,7 +179,7 @@ const Ruler = memo(function Ruler({
       {region && <div className="region-shade" style={{ left: region.start * pps, width: (region.end - region.start) * pps }} />}
       <div
         className="marker-bar"
-        title="Arrastra para seleccionar un tramo de tiempo (clic: quitar la selección)"
+        title={tx('Arrastra para seleccionar un tramo de tiempo (clic: quitar la selección)')}
         onPointerDown={(e) => onRegionDown(e, 'new')}
       >
         <RegionBar region={region} pps={pps} fps={fps} onDown={onRegionDown} />
@@ -186,7 +187,7 @@ const Ruler = memo(function Ruler({
       <MarkStrip markers={markers} regions={regions} pps={pps} {...markProps} />
       <SubtitleStrip cues={cues} pps={pps} {...subProps} />
       {ticks}
-      <div className="cursor-head" style={{ left: time * pps }} title="Arrastra para ajustar el cursor (Mayús: sin ajuste)" />
+      <div className="cursor-head" style={{ left: time * pps }} title={tx('Arrastra para ajustar el cursor (Mayús: sin ajuste)')} />
     </div>
   );
 });
@@ -222,7 +223,7 @@ function keyTimes(ev) {
   return [...new Set(list)].filter((t) => t >= 0 && t <= ev.duration);
 }
 
-const HANDLE_TITLE = 'Arrastra para recortar (Ctrl: cambiar la velocidad, como en VEGAS)';
+const HANDLE_TITLE = tx('Arrastra para recortar (Ctrl: cambiar la velocidad, como en VEGAS)');
 
 // Fundido con transición hacia la pista de debajo: el nombre de la transición en la esquina del fundido.
 function FadeTransition({ side, width, height, label }) {
@@ -230,7 +231,7 @@ function FadeTransition({ side, width, height, label }) {
     <div
       className={`fade-transition ${side}`}
       style={{ top: TITLE_H, width, height }}
-      title={`${side === 'in' ? 'Entrada' : 'Salida'} con transición: ${label} (clic derecho sobre el fundido: quitarla)`}
+      title={side === 'in' ? tx('Entrada con transición: {label} (clic derecho sobre el fundido: quitarla)', { label }) : tx('Salida con transición: {label} (clic derecho sobre el fundido: quitarla)', { label })}
     >
       {width > 30 && <span>{label}</span>}
     </div>
@@ -243,7 +244,7 @@ function TransitionZone({ width, height, label, onReset }) {
     <div
       className="transition-zone"
       style={{ top: TITLE_H, width, height }}
-      title={onReset ? `${label} (doble clic: volver a disolución cruzada)` : label}
+      title={onReset ? tx('{label} (doble clic: volver a disolución cruzada)', { label }) : label}
       onDoubleClick={onReset}
     >
       <svg width={width} height={height}>
@@ -272,7 +273,7 @@ function SpeedEnvelope({ ev, width, height, pps, onPointDown, onLineDouble, onPo
       <line className="ref" x1={0} y1={y100} x2={width} y2={y100} />
       <polyline className="line" points={line} />
       <polyline className="hit" points={line} onDoubleClick={(e) => onLineDouble(e, ev)}>
-        <title>Envolvente de velocidad (doble clic: añadir un punto)</title>
+        <title>{tx('Envolvente de velocidad (doble clic: añadir un punto)')}</title>
       </polyline>
       {pts.map((p, i) => (p.t >= -1e-6 && p.t <= ev.duration + 1e-6 ? (
         <circle
@@ -283,7 +284,7 @@ function SpeedEnvelope({ ev, width, height, pps, onPointDown, onLineDouble, onPo
           onPointerDown={(e) => onPointDown(e, ev, i)}
           onContextMenu={(e) => onPointMenu(e, ev, i)}
         >
-          <title>{`${Math.round(p.v * 100)} % (arrastra; clic derecho: eliminar o 100 %)`}</title>
+          <title>{tx('{round} % (arrastra; clic derecho: eliminar o 100 %)', { round: Math.round(p.v * 100) })}</title>
         </circle>
       ) : null))}
     </svg>
@@ -316,18 +317,18 @@ const EventView = memo(function EventView({
       onContextMenu={(e) => onMenu(e, ev)}
       onDoubleClick={(e) => !e.target.closest('.fade-handle, .gain-handle, .transition-zone, .speed-env, button') && onDouble(ev)}
       data-event={ev.id}
-      title={media?.missing ? `Archivo no encontrado: ${media.path}` : media?.name}
+      title={media?.missing ? tx('Archivo no encontrado: {path}', { path: media.path }) : media?.name}
     >
       <div className="event-title">
         {name}
         {rate !== 1 && <span className="event-rate"> · {formatRate(rate)}</span>}
-        {hasRamp(ev) && <span className="event-rate"> · rampa</span>}
+        {hasRamp(ev) && <span className="event-rate"> {tx('· rampa')}</span>}
         {type === 'audio' && volume !== 0 && <span className="event-gain"> · {formatVolume(volume)}</span>}
       </div>
       {type === 'video' && width > 70 && (
         <button
           className={`event-fx event-pan${panActive(ev.pan) ? ' active' : ''}`}
-          title="Panorámica/recorte del evento"
+          title={tx('Panorámica/recorte del evento')}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => onPan(ev.id)}
         >
@@ -344,7 +345,7 @@ const EventView = memo(function EventView({
       {isText(media) && width > 90 && (
         <button
           className="event-fx event-text"
-          title="Editar el texto"
+          title={tx('Editar el texto')}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => onText(ev.id)}
         >
@@ -356,13 +357,13 @@ const EventView = memo(function EventView({
           className={`event-fx${ev.effects?.length ? ' active' : ''}`}
           title={
             ev.effects?.length
-              ? `Efectos del evento: ${ev.effects.map((fx) => EFFECTS.get(fx.type)?.name ?? fx.type).join(', ')}`
-              : 'Efectos del evento'
+              ? tx('Efectos del evento: {join}', { join: ev.effects.map((fx) => EFFECTS.get(fx.type)?.name ?? fx.type).join(', ') })
+              : tx('Efectos del evento')
           }
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => onFx(ev.id)}
         >
-          fx
+         {tx('fx')}
         </button>
       )}
       <div className="event-body" style={bodyStyle}>
@@ -404,7 +405,7 @@ const EventView = memo(function EventView({
         <TransitionZone
           width={Math.min(width, overlapIn * pps)}
           height={height}
-          label={type === 'video' ? transitionLabel(transition) : 'Fundido cruzado'}
+          label={type === 'video' ? transitionLabel(transition) : tx('Fundido cruzado')}
           onReset={type === 'video' && transition ? () => onReset(ev, 'transition') : undefined}
         />
       )}
@@ -414,7 +415,7 @@ const EventView = memo(function EventView({
         <div
           className="gain-handle"
           style={{ top: TITLE_H + gainY - 3 }}
-          title={`Volumen del evento: ${formatVolume(volume)} (doble clic: 0 dB)`}
+          title={tx('Volumen del evento: {formatVolume} (doble clic: 0 dB)', { formatVolume: formatVolume(volume) })}
           onPointerDown={(e) => onDown(e, ev, 'gain')}
           onDoubleClick={() => onReset(ev, 'gain')}
         />
@@ -423,7 +424,7 @@ const EventView = memo(function EventView({
         <div
           className={`fade-handle${fadeIn > 0 ? ' active' : ''}`}
           style={{ left: fadeHandleX(fadeIn * pps) }}
-          title="Fundido de entrada (doble clic: quitar; clic derecho en el fundido: curva)"
+          title={tx('Fundido de entrada (doble clic: quitar; clic derecho en el fundido: curva)')}
           onPointerDown={(e) => onDown(e, ev, 'fadeIn')}
           onDoubleClick={() => onReset(ev, 'fadeIn')}
         />
@@ -432,7 +433,7 @@ const EventView = memo(function EventView({
         <div
           className={`fade-handle${fadeOut > 0 ? ' active' : ''}`}
           style={{ left: fadeHandleX(width - fadeOut * pps) }}
-          title="Fundido de salida (doble clic: quitar; clic derecho en el fundido: curva)"
+          title={tx('Fundido de salida (doble clic: quitar; clic derecho en el fundido: curva)')}
           onPointerDown={(e) => onDown(e, ev, 'fadeOut')}
           onDoubleClick={() => onReset(ev, 'fadeOut')}
         />
@@ -467,7 +468,7 @@ export function envelopeValue(kind, y, h) {
   const g = f * f * maxGain;
   return g <= volumeToGain(MIN_VOLUME_DB) ? MIN_VOLUME_DB : Math.round(20 * Math.log10(g) * 10) / 10;
 }
-export const formatPan = (v) => (Math.abs(v) < 0.005 ? 'Centro' : `${Math.round(Math.abs(v) * 100)} % ${v < 0 ? 'I' : 'D'}`);
+export const formatPan = (v) => (Math.abs(v) < 0.005 ? tx('Centro') : `${Math.round(Math.abs(v) * 100)} % ${v < 0 ? tx('I|izquierda') : tx('D|derecha')}`);
 const formatEnv = (kind, v) => (kind === 'volume' ? formatVolume(v) : kind === 'opacity' ? `${Math.round(v * 100)} %` : formatPan(v));
 
 // Línea de la envolvente en píxeles: los tramos con curva se dibujan a pasos (los de volumen, también los
@@ -501,7 +502,7 @@ function EnvelopeLines({ track, pps, laneWidth, height, onPointDown, onLineDoubl
     return (
       <svg key={kind} className={`track-envelope ${kind}`} width={laneWidth} height={height}>
         <polyline className="env-hit" points={d} onDoubleClick={(e) => onLineDouble(e, track.id, kind)}>
-          <title>{`Envolvente de ${ENVELOPE_KINDS[kind].name.toLowerCase()} (doble clic: añadir un punto)`}</title>
+          <title>{tx('Envolvente de {toLowerCase} (doble clic: añadir un punto)', { toLowerCase: ENVELOPE_KINDS[kind].name.toLowerCase() })}</title>
         </polyline>
         <polyline className="env-line" points={d} />
         {coords.map(([x, y], i) => (
@@ -515,7 +516,7 @@ function EnvelopeLines({ track, pps, laneWidth, height, onPointDown, onLineDoubl
             onPointerDown={(e) => onPointDown(e, track.id, kind, i)}
             onContextMenu={(e) => onPointMenu(e, track.id, kind, i)}
           >
-            <title>{`${formatEnv(kind, pts[i].v)} (arrastra para moverlo; clic derecho: eliminar)`}</title>
+            <title>{tx('{formatEnv} (arrastra para moverlo; clic derecho: eliminar)', { formatEnv: formatEnv(kind, pts[i].v) })}</title>
           </rect>
         ))}
       </svg>
@@ -526,8 +527,8 @@ function EnvelopeLines({ track, pps, laneWidth, height, onPointDown, onLineDoubl
 function PanSlider({ value, onChange }) {
   const first = useRef(true);
   return (
-    <div className="track-slider" title="Panorámica de la pista (doble clic: centro)">
-      <span className="slider-label">Pan:</span>
+    <div className="track-slider" title={tx('Panorámica de la pista (doble clic: centro)')}>
+      <span className="slider-label">{tx('Pan:')}</span>
       <input
         type="range"
         min={-1}
@@ -573,7 +574,7 @@ function TrackName({ name, onRename }) {
     );
   }
   return (
-    <span className="track-name" title="Doble clic para cambiar el nombre" onDoubleClick={() => setEditing(true)}>
+    <span className="track-name" title={tx('Doble clic para cambiar el nombre')} onDoubleClick={() => setEditing(true)}>
       {name}
     </span>
   );
@@ -583,8 +584,8 @@ function VolumeSlider({ value, onChange }) {
   const first = useRef(true);
   const label = formatVolume(value);
   return (
-    <div className="track-slider" title="Volumen de la pista (doble clic: 0 dB)">
-      <span className="slider-label">Vol:</span>
+    <div className="track-slider" title={tx('Volumen de la pista (doble clic: 0 dB)')}>
+      <span className="slider-label">{tx('Vol:')}</span>
       <input
         type="range"
         min={MIN_VOLUME_DB}
@@ -620,7 +621,7 @@ const TrackRow = memo(function TrackRow({
         className="track-header"
         onPointerDown={(e) => onTrackDown(e, track.id)}
         onContextMenu={(e) => onTrackMenu(e, track.id)}
-        title="Arrastra para mover la pista; clic derecho: envolventes y más"
+        title={tx('Arrastra para mover la pista; clic derecho: envolventes y más')}
       >
         <div className="track-strip">{number}</div>
         <div className="track-main">
@@ -630,7 +631,7 @@ const TrackRow = memo(function TrackRow({
             {track.type === 'audio' && (
               <button
                 className={`track-btn arm${armed ? ' active' : ''}`}
-                title={armed ? 'Pista armada: aquí se graba la voz en off (Ctrl+R)' : 'Armar para grabar (voz en off desde el micrófono)'}
+                title={armed ? tx('Pista armada: aquí se graba la voz en off (Ctrl+R)') : tx('Armar para grabar (voz en off desde el micrófono)')}
                 onClick={() => onArm(track.id)}
               >
                 <Icon name="record" size={11} />
@@ -638,25 +639,25 @@ const TrackRow = memo(function TrackRow({
             )}
             <button
               className={`track-btn mute${track.muted ? ' active' : ''}`}
-              title={track.type === 'video' ? 'Ocultar pista' : 'Silenciar pista'}
+              title={track.type === 'video' ? tx('Ocultar pista') : tx('Silenciar pista')}
               onClick={() => update({ muted: !track.muted })}
             >
               <Icon name="mute" size={12} />
             </button>
             <button
               className={`track-btn solo${track.solo ? ' active' : ''}`}
-              title="Solo"
+              title={tx('Solo')}
               onClick={() => update({ solo: !track.solo })}
             >
               <Icon name="solo" size={12} />
             </button>
-            <button className="track-btn" title="Eliminar pista" onClick={() => onDelete(track.id)}>
+            <button className="track-btn" title={tx('Eliminar pista')} onClick={() => onDelete(track.id)}>
               <Icon name="close" size={11} />
             </button>
           </div>
           {track.type === 'video' && (
-            <label className="track-slider track-blend" title="Modo de fusión con las pistas de debajo" onPointerDown={(e) => e.stopPropagation()}>
-              <span className="slider-label">Fusión:</span>
+            <label className="track-slider track-blend" title={tx('Modo de fusión con las pistas de debajo')} onPointerDown={(e) => e.stopPropagation()}>
+              <span className="slider-label">{tx('Fusión:')}</span>
               <select value={track.blend || 'normal'} onChange={(e) => update({ blend: e.target.value === 'normal' ? undefined : e.target.value })}>
                 {BLEND_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
               </select>
@@ -666,7 +667,7 @@ const TrackRow = memo(function TrackRow({
             <>
               <VolumeSlider value={track.volume ?? 0} onChange={(volume, record) => update({ volume }, record)} />
               <PanSlider value={track.pan ?? 0} onChange={(pan, record) => update({ pan }, record)} />
-              <Meter id={track.id} title="Nivel de la pista (izquierda arriba, derecha abajo)" />
+              <Meter id={track.id} title={tx('Nivel de la pista (izquierda arriba, derecha abajo)')} />
             </>
           )}
         </div>
@@ -719,7 +720,7 @@ const TrackRow = memo(function TrackRow({
             className="recording-box"
             style={{ left: recordingBox.start * pps, width: Math.max(1, (recordingBox.end - recordingBox.start) * pps) }}
           >
-            ● Grabando
+           {tx('● Grabando')}
           </div>
         )}
         {track.envelopes && (
@@ -964,8 +965,8 @@ const Timeline = forwardRef(function Timeline({
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: 'Editar el texto', action: () => onEditSubtitle(cue.id) },
-        { label: 'Eliminar el subtítulo', action: () => setProject((p) => removeCue(p, cue.id)) },
+        { label: tx('Editar el texto'), action: () => onEditSubtitle(cue.id) },
+        { label: tx('Eliminar el subtítulo'), action: () => setProject((p) => removeCue(p, cue.id)) },
       ],
     });
   }, [onContextMenu, onEditSubtitle, setProject]);
@@ -1105,7 +1106,7 @@ const Timeline = forwardRef(function Timeline({
           dt = Math.max(dt, -(m.duration - o.inPoint - used) / r); // ni después del final
         }
         update = (o) => (mediaOf(o)?.isImage ? {} : { inPoint: Math.max(0, o.inPoint - dt * (o.rate || 1)) });
-        onMessage(`Deslizar: el evento empieza en ${formatTimecode(primary.inPoint - dt * (primary.rate || 1), live.current.project.settings.fps)} del medio`);
+        onMessage(tx('Deslizar: el evento empieza en {formatTimecode} del medio', { formatTimecode: formatTimecode(primary.inPoint - dt * (primary.rate || 1), live.current.project.settings.fps) }));
       } else if (mode === 'move') {
         dt = snapDelta(dt, [primary.start, primary.start + primary.duration], me.shiftKey ? [] : points, threshold);
         const minStart = Math.min(...[...origin.values()].map((o) => o.start));
@@ -1263,7 +1264,7 @@ const Timeline = forwardRef(function Timeline({
       const type = ev && p.tracks.find((tr) => tr.id === ev.trackId)?.type;
       const kind = EFFECTS.get(effect)?.kind;
       if (type !== kind) {
-        onMessage(`Suelta el efecto encima de un evento de una pista de ${kind === 'audio' ? 'audio' : 'video'}.`);
+        onMessage(tx('Suelta el efecto encima de un evento de una pista de {n}.', { n: kind === 'audio' ? 'audio' : 'video' }));
         return;
       }
       setProject((cur) => ({
@@ -1280,7 +1281,7 @@ const Timeline = forwardRef(function Timeline({
       const at = timeAt(e.clientX);
       const track = p.tracks.find((tr) => tr.id === target);
       if (!track || track.type !== 'video') {
-        onMessage('Las transiciones se colocan en pistas de video. En audio, los solapamientos ya son fundidos cruzados.');
+        onMessage(tx('Las transiciones se colocan en pistas de video. En audio, los solapamientos ya son fundidos cruzados.'));
       } else if (!overlapAt(p, target, at)) {
         // Sin solapamiento: transición del fundido de entrada o de salida del evento (hacia la pista de debajo).
         const ev = p.events
@@ -1289,14 +1290,14 @@ const Timeline = forwardRef(function Timeline({
         const res = resolveTimeline(p);
         const f = ev && res.fades.get(ev.id);
         if (!ev) {
-          onMessage('Suelta la transición sobre el solapamiento de dos eventos o sobre el principio o el final de un evento (para entrar o salir hacia la pista de debajo).');
+          onMessage(tx('Suelta la transición sobre el solapamiento de dos eventos o sobre el principio o el final de un evento (para entrar o salir hacia la pista de debajo).'));
           return;
         }
         const local = at - ev.start;
         const side = f.fadeIn > 0 && local < f.fadeIn ? 'in'
           : f.fadeOut > 0 && local > ev.duration - f.fadeOut ? 'out' : local < ev.duration / 2 ? 'in' : 'out';
         if (side === 'in' ? res.incoming.has(ev.id) : res.outgoing.has(ev.id)) {
-          onMessage('Ese borde ya tiene una transición con otro evento.');
+          onMessage(tx('Ese borde ya tiene una transición con otro evento.'));
           return;
         }
         const fadeKey = side === 'in' ? 'fadeIn' : 'fadeOut';
@@ -1307,7 +1308,7 @@ const Timeline = forwardRef(function Timeline({
             ? { ...x, [fadeKey]: length, [side === 'in' ? 'fadeInTransition' : 'fadeOutTransition']: transition }
             : x)),
         }));
-        onMessage(`${transitionLabel(transition)} en el fundido de ${side === 'in' ? 'entrada' : 'salida'}. Arrastra la esquina del evento para cambiar su duración.`);
+        onMessage(tx(side === 'in' ? '{transitionLabel} en el fundido de entrada. Arrastra la esquina del evento para cambiar su duración.' : '{transitionLabel} en el fundido de salida. Arrastra la esquina del evento para cambiar su duración.', { transitionLabel: transitionLabel(transition) }));
       } else {
         setProject((cur) => setTransitionAt(cur, target, at, transition));
         onMessage('');
@@ -1329,16 +1330,16 @@ const Timeline = forwardRef(function Timeline({
         .sort((a, b) => b.start - a.start)[0];
       const media = p.media.find((m) => m.id === mediaId);
       if (!ev || !media) {
-        onMessage('Con Ctrl, suelta el medio sobre un evento para sustituir el suyo.');
+        onMessage(tx('Con Ctrl, suelta el medio sobre un evento para sustituir el suyo.'));
         return;
       }
       const res = replaceMedia(p, ev.id, media);
       if (!res.changed) {
-        onMessage(`«${media.name}» no tiene ${p.tracks.find((t) => t.id === target).type === 'video' ? 'imagen' : 'sonido'}: no puede sustituir a ese evento.`);
+        onMessage(tx(p.tracks.find((t) => t.id === target).type === 'video' ? '«{name}» no tiene imagen: no puede sustituir a ese evento.' : '«{name}» no tiene sonido: no puede sustituir a ese evento.', { name: media.name }));
         return;
       }
       setProject(res.project);
-      onMessage(`Medio sustituido por «${media.name}».`);
+      onMessage(tx('Medio sustituido por «{name}».', { name: media.name }));
       return;
     }
     if (mediaId) {
@@ -1409,7 +1410,7 @@ const Timeline = forwardRef(function Timeline({
       const v = envelopeValue(kind, me.clientY - row.top, row.height);
       setEnvelope(trackId, kind, (pts) => pts.map((p, i) => (i === index ? { ...p, t, v } : p)), first);
       first = false;
-      onMessage(`${ENVELOPE_KINDS[kind].name}: ${formatEnv(kind, v)} en ${formatTimecode(t, live.current.project.settings.fps)}`);
+      onMessage(tx('{name}: {formatEnv} en {formatTimecode}', { name: ENVELOPE_KINDS[kind].name, formatEnv: formatEnv(kind, v), formatTimecode: formatTimecode(t, live.current.project.settings.fps) }));
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
@@ -1455,7 +1456,7 @@ const Timeline = forwardRef(function Timeline({
       const points = moveSpeedPoint(ev.speed, index, Math.min(ev.duration, Math.max(0, t)), v);
       setSpeed(ev, points, first);
       first = false;
-      onMessage(`Velocidad: ${Math.round(points[index].v * 100)} % en ${formatTimecode(ev.start + points[index].t, fps)}`);
+      onMessage(tx('Velocidad: {round} % en {formatTimecode}', { round: Math.round(points[index].v * 100), formatTimecode: formatTimecode(ev.start + points[index].t, fps) }));
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
@@ -1479,10 +1480,10 @@ const Timeline = forwardRef(function Timeline({
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: 'Eliminar el punto', action: () => setSpeed(ev, removeSpeedPoint(ev.speed, index)) },
-        { label: 'Poner a 100 %', action: () => setSpeed(ev, moveSpeedPoint(ev.speed, index, ev.speed[index].t, 1)) },
+        { label: tx('Eliminar el punto'), action: () => setSpeed(ev, removeSpeedPoint(ev.speed, index)) },
+        { label: tx('Poner a 100 %'), action: () => setSpeed(ev, moveSpeedPoint(ev.speed, index, ev.speed[index].t, 1)) },
         'separator',
-        { label: 'Quitar la rampa de velocidad', action: () => setSpeed(ev, null) },
+        { label: tx('Quitar la rampa de velocidad'), action: () => setSpeed(ev, null) },
       ],
     });
   }, [onContextMenu, setSpeed]);
@@ -1497,24 +1498,24 @@ const Timeline = forwardRef(function Timeline({
       y: e.clientY,
       items: [
         {
-          label: 'Eliminar el punto',
+          label: tx('Eliminar el punto'),
           action: () => setEnvelope(trackId, kind, (pts) => pts.filter((_, i) => i !== index)),
           disabled: points.length < 2,
         },
         {
-          label: { volume: 'Poner a 0 dB', pan: 'Poner en el centro', opacity: 'Poner a 100 %' }[kind],
+          label: { volume: tx('Poner a 0 dB'), pan: tx('Poner en el centro'), opacity: tx('Poner a 100 %') }[kind],
           action: () => setEnvelope(trackId, kind, (pts) => pts.map((p, i) => (i === index ? { ...p, v: ENVELOPE_KINDS[kind].initial } : p))),
         },
         'separator',
         // Curva del tramo que va de este punto al siguiente (como el menú de los puntos de VEGAS).
         ...ENVELOPE_CURVES.map((c) => ({
-          label: `Curva: ${c.label.toLowerCase()}`,
+          label: tx('Curva: {toLowerCase}', { toLowerCase: c.label.toLowerCase() }),
           checked: (points[index].c || 'linear') === c.id,
           disabled: index >= points.length - 1,
           action: () => setEnvelope(trackId, kind, (pts) => setEnvelopeCurve(pts, index, c.id)),
         })),
         'separator',
-        { label: `Quitar la envolvente de ${ENVELOPE_KINDS[kind].name.toLowerCase()}`, action: () => setEnvelope(trackId, kind, () => null) },
+        { label: tx('Quitar la envolvente de {toLowerCase}', { toLowerCase: ENVELOPE_KINDS[kind].name.toLowerCase() }), action: () => setEnvelope(trackId, kind, () => null) },
       ],
     });
   }, [onContextMenu, setEnvelope]);
@@ -1531,7 +1532,7 @@ const Timeline = forwardRef(function Timeline({
       y: e.clientY,
       items: [
         ...envelopeKinds(track.type).map((kind) => ({
-          label: `Envolvente de ${ENVELOPE_KINDS[kind].name.toLowerCase()}`,
+          label: tx('Envolvente de {toLowerCase}', { toLowerCase: ENVELOPE_KINDS[kind].name.toLowerCase() }),
           checked: !!env[kind],
           action: () => toggle(kind),
         })),
@@ -1541,15 +1542,15 @@ const Timeline = forwardRef(function Timeline({
           ? live.current.project.tracks
             .filter((t) => t.type === 'audio' && t.id !== trackId)
             .map((voice) => ({
-              label: `Bajar el volumen cuando suene «${voice.name}» (ducking)`,
+              label: tx('Bajar el volumen cuando suene «{name}» (ducking)', { name: voice.name }),
               action: () => {
                 const points = duckingEnvelope(live.current.project, voice.id);
                 if (!points) {
-                  onMessage(`No se ha encontrado voz en «${voice.name}».`);
+                  onMessage(tx('No se ha encontrado voz en «{name}».', { name: voice.name }));
                   return;
                 }
                 setEnvelope(trackId, 'volume', () => points);
-                onMessage(`Ducking: envolvente de volumen creada (−12 dB mientras suena «${voice.name}»). Sus puntos se pueden ajustar.`);
+                onMessage(tx('Ducking: envolvente de volumen creada (−12 dB mientras suena «{name}»). Sus puntos se pueden ajustar.', { name: voice.name }));
               },
             }))
             .concat(live.current.project.tracks.some((t) => t.type === 'audio' && t.id !== trackId) ? ['separator'] : [])
@@ -1558,7 +1559,7 @@ const Timeline = forwardRef(function Timeline({
         ...(track.type === 'video'
           ? [
             ...BLEND_MODES.map((m) => ({
-              label: `Fusión: ${m.label.toLowerCase()}`,
+              label: tx('Fusión: {toLowerCase}', { toLowerCase: m.label.toLowerCase() }),
               checked: (track.blend || 'normal') === m.id,
               action: () => setProject((p) => ({
                 ...p,
@@ -1568,7 +1569,7 @@ const Timeline = forwardRef(function Timeline({
             'separator',
           ]
           : []),
-        { label: 'Eliminar la pista', action: () => onDeleteTrackRef.current(trackId) },
+        { label: tx('Eliminar la pista'), action: () => onDeleteTrackRef.current(trackId) },
       ],
     });
   }, [onContextMenu, onMessage, setEnvelope, setProject]);
@@ -1580,7 +1581,7 @@ const Timeline = forwardRef(function Timeline({
 
   const onDeleteTrack = useCallback((trackId) => {
     const hasEvents = live.current.project.events.some((e) => e.trackId === trackId);
-    if (hasEvents && !window.confirm('La pista contiene eventos. ¿Eliminarla de todos modos?')) return;
+    if (hasEvents && !window.confirm(tx('La pista contiene eventos. ¿Eliminarla de todos modos?'))) return;
     setProject((p) => deleteTrack(p, trackId));
   }, [setProject]);
   onDeleteTrackRef.current = onDeleteTrack;
@@ -1718,13 +1719,13 @@ const Timeline = forwardRef(function Timeline({
           ))}
           <div className="track-row empty" onDragOver={allowDrop} onDrop={(e) => onDrop(e, 'new')}>
             <div className="track-header">
-              <span>Suelta aquí para crear pistas nuevas</span>
+              <span>{tx('Suelta aquí para crear pistas nuevas')}</span>
               <div className="add-track-buttons">
-                <button onClick={() => onAddTrack('video')} title="Insertar pista de video, arriba del todo (Ctrl+Mayús+Q)">
-                  <Icon name="film" size={12} /> Pista de video
+                <button onClick={() => onAddTrack('video')} title={tx('Insertar pista de video, arriba del todo (Ctrl+Mayús+Q)')}>
+                  <Icon name="film" size={12} /> {tx('Pista de video')}
                 </button>
-                <button onClick={() => onAddTrack('audio')} title="Insertar pista de audio, abajo del todo (Ctrl+Q)">
-                  <Icon name="speaker" size={12} /> Pista de audio
+                <button onClick={() => onAddTrack('audio')} title={tx('Insertar pista de audio, abajo del todo (Ctrl+Q)')}>
+                  <Icon name="speaker" size={12} /> {tx('Pista de audio')}
                 </button>
               </div>
             </div>
@@ -1757,25 +1758,25 @@ const Timeline = forwardRef(function Timeline({
       <div className="timeline-footer">
         {footer}
         <span className="footer-spacer" />
-        <span className="footer-info">Máster</span>
-        <Meter id="master" withLabel title="Nivel del máster: lo que sale por los altavoces (y en el render). Rojo: satura" />
+        <span className="footer-info">{tx('Máster')}</span>
+        <Meter id="master" withLabel title={tx('Nivel del máster: lo que sale por los altavoces (y en el render). Rojo: satura')} />
         {region && (
           <span className="footer-info">
-            Selección: <strong>{formatTimecode(region.start, fps)}</strong> – <strong>{formatTimecode(region.end, fps)}</strong>
+           {tx('Selección:')} <strong>{formatTimecode(region.start, fps)}</strong> – <strong>{formatTimecode(region.end, fps)}</strong>
             {' '}({formatTimecode(region.end - region.start, fps)})
           </span>
         )}
         <span className="footer-info">
-          Duración: <strong>{formatTimecode(duration, fps)}</strong>
+         {tx('Duración:')} <strong>{formatTimecode(duration, fps)}</strong>
         </span>
         <div className="zoom-buttons">
-          <button className="transport-btn" title="Alejar (↓)" onClick={() => setPps((v) => clampPps(v * 0.8))}>
+          <button className="transport-btn" title={tx('Alejar (↓)')} onClick={() => setPps((v) => clampPps(v * 0.8))}>
             <Icon name="zoomOut" size={14} />
           </button>
-          <button className="transport-btn" title="Acercar (↑)" onClick={() => setPps((v) => clampPps(v * 1.25))}>
+          <button className="transport-btn" title={tx('Acercar (↑)')} onClick={() => setPps((v) => clampPps(v * 1.25))}>
             <Icon name="zoomIn" size={14} />
           </button>
-          <button className="transport-btn" title="Ajustar el proyecto a la ventana" onClick={zoomToFit}>
+          <button className="transport-btn" title={tx('Ajustar el proyecto a la ventana')} onClick={zoomToFit}>
             <Icon name="fit" size={14} />
           </button>
         </div>

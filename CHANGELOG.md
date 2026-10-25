@@ -2,6 +2,10 @@
 
 Los instaladores de cada versión están en las [releases de GitHub](https://github.com/Nyra31/cortex-studio/releases). Los proyectos guardados con versiones anteriores se siguen abriendo.
 
+## Sin publicar
+
+- **Interfaz en inglés** (*Ayuda → Idioma*): toda la aplicación, también los diálogos de Windows, los mensajes de error y los nombres de las carpetas y archivos que crea (Reversed, Recordings…). La primera vez se usa el idioma de Windows (español si Windows está en español; si no, inglés). Cambiar el idioma reinicia la aplicación (pregunta antes si hay cambios sin guardar). Los números usan el separador decimal del idioma y los subtítulos automáticos proponen el idioma de la interfaz.
+
 ## 1.0.0 (23/10/2026)
 
 - **Descargar de YouTube** (Ctrl+Mayús+D): video en MP4, MKV, WebM o MOV o solo el audio en MP3, M4A, Opus, FLAC o WAV, con los metadatos, la portada, los capítulos y los subtítulos dentro del archivo; listas enteras; se importa al proyecto al terminar.

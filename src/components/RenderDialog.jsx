@@ -4,6 +4,7 @@ import { formatTimecode } from '../util/time.js';
 import {
   AUDIO_KBPS, FORMATS, FRAME_RATE_CHOICES, QUALITY_LEVELS, SIZES, TEMPLATES, formatInfo, outputSize,
 } from '../state/render-formats.js';
+import { decimal, tx } from '../i18n/index.js';
 
 const STORAGE_KEY = 'cortex-render'; // últimos ajustes (comodidad: si no se pueden leer, se usa la primera plantilla)
 const defaults = (t = TEMPLATES[0]) => ({
@@ -20,10 +21,10 @@ const defaults = (t = TEMPLATES[0]) => ({
 });
 // Normalizar la sonoridad del render (LUFS integrados), como piden las plataformas.
 const LOUDNESS = [
-  { value: '', label: 'Sin normalizar' },
-  { value: '-14', label: '−14 LUFS: YouTube, Spotify, redes sociales' },
-  { value: '-16', label: '−16 LUFS: pódcast, Apple' },
-  { value: '-23', label: '−23 LUFS: televisión (EBU R128)' },
+  { value: '', label: tx('Sin normalizar') },
+  { value: '-14', label: tx('−14 LUFS: YouTube, Spotify, redes sociales') },
+  { value: '-16', label: tx('−16 LUFS: pódcast, Apple') },
+  { value: '-23', label: tx('−23 LUFS: televisión (EBU R128)') },
 ];
 function loadSettings() {
   try {
@@ -93,14 +94,14 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
     if (format.audioKbps) kbps += opts.audioKbps;
     else if (format.id === 'wav') kbps += 1536;
     const mb = (kbps * length) / 8 / 1000;
-    return mb >= 1000 ? `${(mb / 1000).toFixed(1).replace('.', ',')} GB` : `${Math.max(0.1, mb).toFixed(1).replace('.', ',')} MB`;
+    return mb >= 1000 ? `${decimal(mb / 1000, 1)} GB` : `${decimal(Math.max(0.1, mb), 1)} MB`;
   })();
 
   // Subtítulos: quemados en la imagen, como pista aparte (MP4, MOV y WebM) o fuera. Sin imagen, nunca.
   const softOk = ['mp4-h264', 'mp4-h265', 'mov-prores', 'webm'].includes(format.id);
   const wanted = opts.subtitles || 'burn';
   const subtitleMode = !hasSubtitles || !format.video ? 'none' : wanted === 'soft' && !softOk ? 'burn' : wanted;
-  const GPU_NAMES = { nvenc: 'Tarjeta gráfica NVIDIA (NVENC)', qsv: 'Gráfica Intel (Quick Sync)', amf: 'Tarjeta gráfica AMD (AMF)' };
+  const GPU_NAMES = { nvenc: tx('Tarjeta gráfica NVIDIA (NVENC)'), qsv: tx('Gráfica Intel (Quick Sync)'), amf: tx('Tarjeta gráfica AMD (AMF)') };
   const hwFormat = format.id === 'mp4-h264' || format.id === 'mp4-h265';
   const hw = hwFormat && gpus.includes(opts.hw) ? opts.hw : null;
   const renderSettings = {
@@ -116,7 +117,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
     hw,
   };
   const baseFile = defaultName.replace(/\.[^.]+$/, '');
-  const regionLabel = (r) => (r.name ? r.name : `Región ${r.number}`);
+  const regionLabel = (r) => (r.name ? r.name : tx('Región {number}', { number: r.number }));
   // Trabajo para la cola: el proyecto tal como está ahora (se puede seguir editando mientras se renderiza).
   const job = (r, target, name) => ({
     name,
@@ -131,11 +132,11 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
       if (!first) return;
       const dir = first.slice(0, Math.max(first.lastIndexOf('\\'), first.lastIndexOf('/')) + 1);
       const safe = (s) => s.replace(/[\\/:*?"<>|]/g, '_');
-      onEnqueue(regions.map((r, i) => job(r, i === 0 ? first : `${dir}${safe(`${baseFile} - ${regionLabel(r)}`)}.${format.ext}`, `Región ${r.number}${r.name ? ` «${r.name}»` : ''}`)), startNow);
+      onEnqueue(regions.map((r, i) => job(r, i === 0 ? first : `${dir}${safe(`${baseFile} - ${regionLabel(r)}`)}.${format.ext}`, tx('Región {number}{n}', { number: r.number, n: r.name ? ` «${r.name}»` : '' }))), startNow);
     } else {
       const target = await window.api.pickRenderPath(`${baseFile}.${format.ext}`, { name: format.name, ext: format.ext });
       if (!target) return;
-      onEnqueue([job(range, target, what === 'all' ? 'Todo el proyecto' : what === 'selection' ? 'Selección de tiempo' : `Región ${range.number}`)], startNow);
+      onEnqueue([job(range, target, what === 'all' ? tx('Todo el proyecto') : what === 'selection' ? tx('Selección de tiempo') : tx('Región {number}', { number: range.number }))], startNow);
     }
     onClose();
   }
@@ -163,7 +164,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
       }
       else if (result.canceled) setPhase('settings');
       else {
-        setError(result.error || 'Error desconocido');
+        setError(result.error || tx('Error desconocido'));
         setPhase('error');
       }
     } finally {
@@ -174,20 +175,20 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
   return (
     <div className="modal-backdrop">
       <div className="modal render-dialog">
-        <div className="modal-title">Renderizar como</div>
+        <div className="modal-title">{tx('Renderizar como')}</div>
         <div className="modal-content">
           {phase === 'settings' && (
             <>
               <label>
-                <span className="field-label">Plantilla</span>
+                <span className="field-label">{tx('Plantilla')}</span>
                 <select value={opts.template} onChange={(e) => applyTemplate(e.target.value)}>
                   {TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  {opts.template === 'custom' && <option value="custom">Personalizada</option>}
+                  {opts.template === 'custom' && <option value="custom">{tx('Personalizada')}</option>}
                 </select>
               </label>
               <div className="render-grid">
                 <label className="wide">
-                  <span className="field-label">Formato</span>
+                  <span className="field-label">{tx('Formato')}</span>
                   <select value={opts.format} onChange={(e) => change({ format: e.target.value })}>
                     {FORMATS.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
@@ -195,7 +196,7 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
                 {format.video && (
                   <>
                     <label>
-                      <span className="field-label">Tamaño</span>
+                      <span className="field-label">{tx('Tamaño')}</span>
                       <select value={opts.size} onChange={(e) => change({ size: e.target.value })}>
                         {SIZES.map((s) => (
                           <option key={s.id} value={s.id}>
@@ -205,16 +206,16 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
                       </select>
                     </label>
                     <label>
-                      <span className="field-label">Velocidad de fotogramas</span>
+                      <span className="field-label">{tx('Velocidad de fotogramas')}</span>
                       <select value={opts.fps ?? ''} onChange={(e) => change({ fps: e.target.value === '' ? null : Number(e.target.value) })}>
                         {FRAME_RATE_CHOICES.map((f) => (
-                          <option key={f ?? 'p'} value={f ?? ''}>{f === null ? `La del proyecto (${formatFps(settings.fps)} fps)` : `${formatFps(f)} fps`}</option>
+                          <option key={f ?? 'p'} value={f ?? ''}>{f === null ? tx('La del proyecto ({formatFps} fps)', { formatFps: formatFps(settings.fps) }) : `${formatFps(f)} fps`}</option>
                         ))}
                       </select>
                     </label>
                     {opts.size === 'custom' && (
                       <div className="render-custom wide">
-                        <span className="field-label">Ancho × alto (px)</span>
+                        <span className="field-label">{tx('Ancho × alto (px)')}</span>
                         <input
                           type="number" min={16} max={7680} step={2} value={opts.custom.w}
                           onChange={(e) => change({ custom: { ...opts.custom, w: Number(e.target.value) } })}
@@ -229,17 +230,17 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
                   </>
                 )}
                 {hwFormat && gpus.length > 0 && (
-                  <label className="wide" title="Con la tarjeta gráfica, el render en 4K o en H.265 es varias veces más rápido (en 1080p la diferencia es menor). Si la tarjeta falla, se renderiza con el procesador.">
-                    <span className="field-label">Codificar con</span>
+                  <label className="wide" title={tx('Con la tarjeta gráfica, el render en 4K o en H.265 es varias veces más rápido (en 1080p la diferencia es menor). Si la tarjeta falla, se renderiza con el procesador.')}>
+                    <span className="field-label">{tx('Codificar con')}</span>
                     <select value={hw || ''} onChange={(e) => setOpts((o) => ({ ...o, hw: e.target.value }))}>
-                      <option value="">El procesador (mejor calidad por tamaño)</option>
-                      {gpus.map((g) => <option key={g} value={g}>{GPU_NAMES[g]} (más rápido, sobre todo en 4K y H.265)</option>)}
+                      <option value="">{tx('El procesador (mejor calidad por tamaño)')}</option>
+                      {gpus.map((g) => <option key={g} value={g}>{tx('{n} (más rápido, sobre todo en 4K y H.265)', { n: GPU_NAMES[g] })}</option>)}
                     </select>
                   </label>
                 )}
                 {format.quality && (
                   <label>
-                    <span className="field-label">Calidad del video</span>
+                    <span className="field-label">{tx('Calidad del video')}</span>
                     <select
                       value={opts.quality.mode === 'bitrate' ? 'bitrate' : opts.quality.level}
                       onChange={(e) => change({
@@ -249,13 +250,13 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
                       })}
                     >
                       {QUALITY_LEVELS.map((q) => <option key={q.id} value={q.id}>{q.label}</option>)}
-                      <option value="bitrate">Tasa de bits fija…</option>
+                      <option value="bitrate">{tx('Tasa de bits fija…')}</option>
                     </select>
                   </label>
                 )}
                 {format.quality && opts.quality.mode === 'bitrate' && (
                   <label>
-                    <span className="field-label">Tasa de bits (Mbps)</span>
+                    <span className="field-label">{tx('Tasa de bits (Mbps)')}</span>
                     <input
                       type="number" min={0.5} max={200} step={0.5} value={opts.quality.mbps}
                       onChange={(e) => change({ quality: { mode: 'bitrate', mbps: Math.max(0.1, Number(e.target.value) || 1) } })}
@@ -264,25 +265,25 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
                 )}
                 {format.audioKbps && (
                   <label>
-                    <span className="field-label">Audio</span>
+                    <span className="field-label">{tx('Audio')}</span>
                     <select value={opts.audioKbps} onChange={(e) => change({ audioKbps: Number(e.target.value) })}>
-                      {AUDIO_KBPS.map((k) => <option key={k} value={k}>{k} kbps</option>)}
+                      {AUDIO_KBPS.map((k) => <option key={k} value={k}>{tx('{k} kbps', { k })}</option>)}
                     </select>
                   </label>
                 )}
                 {hasSubtitles && format.video && (
-                  <label title="Quemados: forman parte de la imagen. Como pista aparte: el reproductor los puede activar y desactivar.">
-                    <span className="field-label">Subtítulos</span>
+                  <label title={tx('Quemados: forman parte de la imagen. Como pista aparte: el reproductor los puede activar y desactivar.')}>
+                    <span className="field-label">{tx('Subtítulos')}</span>
                     <select value={subtitleMode} onChange={(e) => change({ subtitles: e.target.value })}>
-                      <option value="burn">Quemados en la imagen</option>
-                      <option value="soft" disabled={!softOk}>Como pista aparte (se activan en el reproductor){softOk ? '' : ': no en este formato'}</option>
-                      <option value="none">No incluir</option>
+                      <option value="burn">{tx('Quemados en la imagen')}</option>
+                      <option value="soft" disabled={!softOk}>{tx('Como pista aparte (se activan en el reproductor){n}', { n: softOk ? '' : tx(': no en este formato') })}</option>
+                      <option value="none">{tx('No incluir')}</option>
                     </select>
                   </label>
                 )}
                 {format.id !== 'gif' && (
-                  <label title="Sube o baja el volumen de todo el render para que suene tan fuerte como pide la plataforma (mide antes el sonido: tarda un poco más)">
-                    <span className="field-label">Sonoridad</span>
+                  <label title={tx('Sube o baja el volumen de todo el render para que suene tan fuerte como pide la plataforma (mide antes el sonido: tarda un poco más)')}>
+                    <span className="field-label">{tx('Sonoridad')}</span>
                     <select value={opts.loudness ?? ''} onChange={(e) => change({ loudness: e.target.value ? Number(e.target.value) : null })}>
                       {LOUDNESS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
                     </select>
@@ -291,61 +292,61 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
               </div>
 
               <div className="render-range">
-                <span className="field-label">Qué renderizar</span>
+                <span className="field-label">{tx('Qué renderizar')}</span>
                 <label>
                   <input type="radio" checked={what === 'all'} onChange={() => setWhat('all')} />
-                  Todo el proyecto
+                 {tx('Todo el proyecto')}
                 </label>
                 <label className={region ? '' : 'disabled'}>
                   <input type="radio" checked={what === 'selection'} disabled={!region} onChange={() => setWhat('selection')} />
                   {region
-                    ? `Solo la selección de tiempo (${formatTimecode(region.start, settings.fps)} – ${formatTimecode(region.end, settings.fps)})`
-                    : 'Solo la selección de tiempo (no hay ninguna: arrástrala en la barra de arriba de la regla)'}
+                    ? tx('Solo la selección de tiempo ({formatTimecode} – {formatTimecode2})', { formatTimecode: formatTimecode(region.start, settings.fps), formatTimecode2: formatTimecode(region.end, settings.fps) })
+                    : tx('Solo la selección de tiempo (no hay ninguna: arrástrala en la barra de arriba de la regla)')}
                 </label>
                 {regions.map((r) => (
                   <label key={r.id}>
                     <input type="radio" checked={what === r.id} onChange={() => setWhat(r.id)} />
-                    {`Región ${r.number}${r.name ? ` «${r.name}»` : ''} (${formatTimecode(r.start, settings.fps)} – ${formatTimecode(r.end, settings.fps)})`}
+                    {tx('Región {number}{n} ({formatTimecode} – {formatTimecode2})', { number: r.number, n: r.name ? ` «${r.name}»` : '', formatTimecode: formatTimecode(r.start, settings.fps), formatTimecode2: formatTimecode(r.end, settings.fps) })}
                   </label>
                 ))}
                 {regions.length > 1 && (
                   <label>
                     <input type="radio" checked={what === 'eachRegion'} onChange={() => setWhat('eachRegion')} />
-                    {`Cada región en su archivo (${regions.length} archivos, con la cola de render)`}
+                    {tx('Cada región en su archivo ({length} archivos, con la cola de render)', { length: regions.length })}
                   </label>
                 )}
               </div>
 
               <div className="render-summary">
-                <div>Archivo: <strong>.{format.ext}</strong>{format.video ? '' : ' (solo audio)'}{format.id === 'gif' ? ' (sin sonido)' : ''}</div>
+                <div>{tx('Archivo:')} <strong>.{format.ext}</strong>{format.video ? '' : tx(' (solo audio)')}{format.id === 'gif' ? tx(' (sin sonido)') : ''}</div>
                 {format.video && (
                   <div>
-                    Imagen: <strong>{out.w} × {out.h}, {formatFps(fps)} fps</strong>
-                    {bands && <span className="note"> (el proyecto, {inner.w} × {inner.h}, va con bandas negras)</span>}
+                   {tx('Imagen:')} <strong>{tx('{w} × {h}, {formatFps} fps', { w: out.w, h: out.h, formatFps: formatFps(fps) })}</strong>
+                    {bands && <span className="note"> {tx('(el proyecto, {w} × {h}, va con bandas negras)', { w: inner.w, h: inner.h })}</span>}
                   </div>
                 )}
-                <div>Duración: <strong>{formatTimecode(length, settings.fps)}</strong></div>
-                {estimate && <div>Tamaño aproximado: <strong>{estimate}</strong></div>}
+                <div>{tx('Duración:')} <strong>{formatTimecode(length, settings.fps)}</strong></div>
+                {estimate && <div>{tx('Tamaño aproximado:')} <strong>{estimate}</strong></div>}
               </div>
             </>
           )}
           {phase === 'rendering' && (
             <>
-              <p className="note">Renderizando en {outPath}</p>
+              <p className="note">{tx('Renderizando en {outPath}', { outPath })}</p>
               <div className="progress"><div style={{ width: `${(progress * 100).toFixed(1)}%` }} /></div>
               <p className="progress-label">{Math.floor(progress * 100)} %</p>
             </>
           )}
           {phase === 'done' && (
             <>
-              <p>Renderizado completado.</p>
+              <p>{tx('Renderizado completado.')}</p>
               <p className="note">{outPath}</p>
-              {fallback && <p className="note">La tarjeta gráfica dio un error ({fallback}) y se ha renderizado con el procesador.</p>}
+              {fallback && <p className="note">{tx('La tarjeta gráfica dio un error ({fallback}) y se ha renderizado con el procesador.', { fallback })}</p>}
             </>
           )}
           {phase === 'error' && (
             <>
-              <p>No se pudo renderizar:</p>
+              <p>{tx('No se pudo renderizar:')}</p>
               <pre className="error">{error}</pre>
             </>
           )}
@@ -353,22 +354,22 @@ export default function RenderDialog({ makePayload, settings, region, regions = 
         <div className="modal-actions">
           {phase === 'settings' && (
             <>
-              <button onClick={onClose}>Cancelar</button>
-              <button onClick={() => enqueue(false)} title="Guarda este render (con el proyecto tal como está ahora) para hacerlo después con otros: Archivo → Cola de render">Añadir a la cola</button>
-              <button className="primary" onClick={start}>Elegir destino y renderizar</button>
+              <button onClick={onClose}>{tx('Cancelar')}</button>
+              <button onClick={() => enqueue(false)} title={tx('Guarda este render (con el proyecto tal como está ahora) para hacerlo después con otros: Archivo → Cola de render')}>{tx('Añadir a la cola')}</button>
+              <button className="primary" onClick={start}>{tx('Elegir destino y renderizar')}</button>
             </>
           )}
-          {phase === 'rendering' && <button onClick={() => window.api.cancelRender()}>Cancelar renderizado</button>}
+          {phase === 'rendering' && <button onClick={() => window.api.cancelRender()}>{tx('Cancelar renderizado')}</button>}
           {phase === 'done' && (
             <>
-              <button onClick={() => window.api.revealFile(outPath)}>Mostrar en la carpeta</button>
-              <button className="primary" onClick={onClose}>Cerrar</button>
+              <button onClick={() => window.api.revealFile(outPath)}>{tx('Mostrar en la carpeta')}</button>
+              <button className="primary" onClick={onClose}>{tx('Cerrar')}</button>
             </>
           )}
           {phase === 'error' && (
             <>
-              <button onClick={() => setPhase('settings')}>Volver</button>
-              <button className="primary" onClick={onClose}>Cerrar</button>
+              <button onClick={() => setPhase('settings')}>{tx('Volver')}</button>
+              <button className="primary" onClick={onClose}>{tx('Cerrar')}</button>
             </>
           )}
         </div>

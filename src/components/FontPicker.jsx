@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BUNDLED_FONTS, installedFonts, isBundledFont } from '../state/fonts.js';
 import { TEXT_FONTS } from '../state/text.js';
+import { tx } from '../i18n/index.js';
 
 const fontCss = (family) => `"${family}", sans-serif`;
 
@@ -54,7 +55,7 @@ export default function FontPicker({ value, onChange }) {
         ref={button}
         className="font-picker-btn"
         style={{ fontFamily: fontCss(value) }}
-        title="Fuente del texto"
+        title={tx('Fuente del texto')}
         onClick={() => setOpen((v) => !v)}
       >
         <span>{value}</span>
@@ -65,7 +66,7 @@ export default function FontPicker({ value, onChange }) {
           <input
             ref={search}
             className="font-picker-search"
-            placeholder="Buscar fuente…"
+            placeholder={tx('Buscar fuente…')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -77,7 +78,7 @@ export default function FontPicker({ value, onChange }) {
           <div className="font-picker-list">
             {typed && (
               <button className="font-picker-item" onClick={() => choose(typed)}>
-                Usar «{typed}»
+               {tx('Usar «{typed}»', { typed })}
               </button>
             )}
             {categories.map((cat) => {
@@ -101,7 +102,7 @@ export default function FontPicker({ value, onChange }) {
             })}
             {systemList.length > 0 && (
               <div>
-                <div className="font-picker-group">Instaladas en este equipo (pueden faltar en otros)</div>
+                <div className="font-picker-group">{tx('Instaladas en este equipo (pueden faltar en otros)')}</div>
                 {systemList.map((f) => (
                   <button
                     key={f}
@@ -114,7 +115,7 @@ export default function FontPicker({ value, onChange }) {
                 ))}
               </div>
             )}
-            {system === null && <div className="font-picker-group">Buscando las fuentes instaladas…</div>}
+            {system === null && <div className="font-picker-group">{tx('Buscando las fuentes instaladas…')}</div>}
           </div>
         </div>
       )}

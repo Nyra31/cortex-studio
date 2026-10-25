@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import Icon from './Icon.jsx';
+import { tx } from '../i18n/index.js';
 
 function TransportButton({ icon, title, onClick, onContextMenu, active, className = '' }) {
   return (
@@ -31,7 +32,7 @@ export function LevelMeter({ source }) {
     return () => cancelAnimationFrame(raf);
   }, []);
   return (
-    <div className="level-meter" title="Nivel del micrófono (rojo: satura; baja la ganancia del micrófono)">
+    <div className="level-meter" title={tx('Nivel del micrófono (rojo: satura; baja la ganancia del micrófono)')}>
       <div ref={bar} className="level-fill" />
     </div>
   );
@@ -45,7 +46,7 @@ export default function Transport({
       <TransportButton
         icon="record"
         className="record"
-        title={recording ? 'Terminar la grabación (Ctrl+R)' : 'Grabar voz en off en la pista armada (Ctrl+R); clic derecho: opciones'}
+        title={recording ? tx('Terminar la grabación (Ctrl+R)') : tx('Grabar voz en off en la pista armada (Ctrl+R); clic derecho: opciones')}
         onClick={onRecord}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -54,19 +55,19 @@ export default function Transport({
         active={recording}
       />
       {recording && <LevelMeter source={() => recorder.current?.level} />}
-      <TransportButton icon="play" title="Reproducir (Espacio)" onClick={onPlay} active={playing && !recording} />
-      <TransportButton icon="pause" title="Pausa (Intro)" onClick={onPause} />
-      <TransportButton icon="stop" title="Detener y volver (Espacio)" onClick={onStop} />
+      <TransportButton icon="play" title={tx('Reproducir (Espacio)')} onClick={onPlay} active={playing && !recording} />
+      <TransportButton icon="pause" title={tx('Pausa (Intro)')} onClick={onPause} />
+      <TransportButton icon="stop" title={tx('Detener y volver (Espacio)')} onClick={onStop} />
       <span className="transport-sep" />
-      <TransportButton icon="start" title="Ir al inicio (Inicio)" onClick={onStart} />
-      <TransportButton icon="end" title="Ir al final (Fin)" onClick={onEnd} />
+      <TransportButton icon="start" title={tx('Ir al inicio (Inicio)')} onClick={onStart} />
+      <TransportButton icon="end" title={tx('Ir al final (Fin)')} onClick={onEnd} />
       <span className="transport-sep" />
-      <TransportButton icon="prevFrame" title="Fotograma anterior (←)" onClick={onPrevFrame} />
-      <TransportButton icon="nextFrame" title="Fotograma siguiente (→)" onClick={onNextFrame} />
+      <TransportButton icon="prevFrame" title={tx('Fotograma anterior (←)')} onClick={onPrevFrame} />
+      <TransportButton icon="nextFrame" title={tx('Fotograma siguiente (→)')} onClick={onNextFrame} />
       <span className="transport-sep" />
       <TransportButton
         icon="loop"
-        title="Reproducción en bucle de la selección de tiempo (Q)"
+        title={tx('Reproducción en bucle de la selección de tiempo (Q)')}
         onClick={onToggleLoop}
         active={loop}
       />

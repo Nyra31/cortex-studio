@@ -18,6 +18,7 @@
 // fórmulas con shaders: ver preview/effects-gl.js.
 import { uid } from './project.js';
 import { AUDIO_EFFECT_GROUPS } from './audio-effects.js';
+import { tx } from '../i18n/index.js';
 
 export { AUDIO_EFFECT_GROUPS };
 
@@ -128,25 +129,25 @@ export function lutName(file) {
 
 export const EFFECT_GROUPS = [
   {
-    name: 'Color',
+    name: tx('Color'),
     items: [
       {
         id: 'brightness',
-        name: 'Brillo y contraste',
+        name: tx('Brillo y contraste'),
         params: [
-          { id: 'brightness', label: 'Brillo', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
-          { id: 'contrast', label: 'Contraste', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
+          { id: 'brightness', label: tx('Brillo'), type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
+          { id: 'contrast', label: tx('Contraste'), type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
         ],
         ffmpeg: (p, ctx) => (ctx.keep || p.brightness || p.contrast ? `eq=brightness=${n(p.brightness)}:contrast=${n(1 + p.contrast)}` : ''),
       },
       {
         id: 'colorcorrect',
-        name: 'Corrección de color',
+        name: tx('Corrección de color'),
         params: [
-          { id: 'red', label: 'Rojo', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
-          { id: 'green', label: 'Verde', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
-          { id: 'blue', label: 'Azul', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
-          { id: 'saturation', label: 'Saturación', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
+          { id: 'red', label: tx('Rojo'), type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
+          { id: 'green', label: tx('Verde'), type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
+          { id: 'blue', label: tx('Azul'), type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
+          { id: 'saturation', label: tx('Saturación'), type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
         ],
         ffmpeg: (p, ctx) =>
           [
@@ -157,19 +158,19 @@ export const EFFECT_GROUPS = [
       {
         // Como el «Corrector de color (tres vías)» de VEGAS: una rueda y un nivel para sombras, medios y luces.
         id: 'colorwheels',
-        name: 'Corrector de color (tres vías)',
+        name: tx('Corrector de color (tres vías)'),
         animatable: false, // las expresiones de lutrgb llevan comas y no se pueden mandar como comando
         params: [
-          { id: 'liftX', label: 'Sombras', type: 'range', min: -1, max: 1, step: 0.01, default: 0, wheel: 'liftY' },
+          { id: 'liftX', label: tx('Sombras'), type: 'range', min: -1, max: 1, step: 0.01, default: 0, wheel: 'liftY' },
           { id: 'liftY', type: 'range', min: -1, max: 1, step: 0.01, default: 0, hidden: true },
-          { id: 'lift', label: 'Nivel de sombras', type: 'range', min: -0.5, max: 0.5, step: 0.005, default: 0, format: pct },
-          { id: 'gammaX', label: 'Medios', type: 'range', min: -1, max: 1, step: 0.01, default: 0, wheel: 'gammaY' },
+          { id: 'lift', label: tx('Nivel de sombras'), type: 'range', min: -0.5, max: 0.5, step: 0.005, default: 0, format: pct },
+          { id: 'gammaX', label: tx('Medios|tonos medios'), type: 'range', min: -1, max: 1, step: 0.01, default: 0, wheel: 'gammaY' },
           { id: 'gammaY', type: 'range', min: -1, max: 1, step: 0.01, default: 0, hidden: true },
-          { id: 'gamma', label: 'Nivel de medios', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
-          { id: 'gainX', label: 'Luces', type: 'range', min: -1, max: 1, step: 0.01, default: 0, wheel: 'gainY' },
+          { id: 'gamma', label: tx('Nivel de medios'), type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
+          { id: 'gainX', label: tx('Luces'), type: 'range', min: -1, max: 1, step: 0.01, default: 0, wheel: 'gainY' },
           { id: 'gainY', type: 'range', min: -1, max: 1, step: 0.01, default: 0, hidden: true },
-          { id: 'gain', label: 'Nivel de luces', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
-          { id: 'saturation', label: 'Saturación', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
+          { id: 'gain', label: tx('Nivel de luces'), type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
+          { id: 'saturation', label: tx('Saturación'), type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
         ],
         ffmpeg: (p) => {
           const { lift, gamma, gain } = gradeChannels(p);
@@ -183,13 +184,13 @@ export const EFFECT_GROUPS = [
       },
       {
         id: 'curves',
-        name: 'Curvas',
+        name: tx('Curvas'),
         animatable: false,
         params: [
-          { id: 'master', label: 'Todos', type: 'curve', default: IDENTITY_CURVE },
-          { id: 'red', label: 'Rojo', type: 'curve', default: IDENTITY_CURVE },
-          { id: 'green', label: 'Verde', type: 'curve', default: IDENTITY_CURVE },
-          { id: 'blue', label: 'Azul', type: 'curve', default: IDENTITY_CURVE },
+          { id: 'master', label: tx('Todos'), type: 'curve', default: IDENTITY_CURVE },
+          { id: 'red', label: tx('Rojo'), type: 'curve', default: IDENTITY_CURVE },
+          { id: 'green', label: tx('Verde'), type: 'curve', default: IDENTITY_CURVE },
+          { id: 'blue', label: tx('Azul'), type: 'curve', default: IDENTITY_CURVE },
         ],
         ffmpeg: (p) => {
           const parts = [['m', p.master], ['r', p.red], ['g', p.green], ['b', p.blue]]
@@ -203,8 +204,8 @@ export const EFFECT_GROUPS = [
         name: 'LUT (.cube)',
         animatable: false,
         params: [
-          { id: 'file', label: 'Archivo', type: 'file', default: '', filter: { name: 'LUT 3D (.cube)', extensions: ['cube'] } },
-          { id: 'intensity', label: 'Intensidad', type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct },
+          { id: 'file', label: tx('Archivo'), type: 'file', default: '', filter: { name: 'LUT 3D (.cube)', extensions: ['cube'] } },
+          { id: 'intensity', label: tx('Intensidad'), type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct },
         ],
         // Con intensidad parcial, la imagen con la LUT se mezcla con la original.
         graph: (p, ctx, inL, outL, tag) => {
@@ -219,25 +220,25 @@ export const EFFECT_GROUPS = [
       },
       {
         id: 'hsl',
-        name: 'Tono, saturación y luminosidad',
+        name: tx('Tono, saturación y luminosidad'),
         params: [
-          { id: 'hue', label: 'Tono', type: 'range', min: -180, max: 180, step: 1, default: 0, format: deg },
-          { id: 'saturation', label: 'Saturación', type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
-          { id: 'lightness', label: 'Luminosidad', type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
+          { id: 'hue', label: tx('Tono'), type: 'range', min: -180, max: 180, step: 1, default: 0, format: deg },
+          { id: 'saturation', label: tx('Saturación'), type: 'range', min: 0, max: 2, step: 0.01, default: 1, format: pct },
+          { id: 'lightness', label: tx('Luminosidad'), type: 'range', min: -1, max: 1, step: 0.01, default: 0, format: pct },
         ],
         ffmpeg: (p, ctx) =>
           ctx.keep || p.hue || p.saturation !== 1 || p.lightness ? `hue=h=${n(p.hue)}:s=${n(p.saturation)}:b=${n(p.lightness * 10)}` : '',
       },
       {
         id: 'blackwhite',
-        name: 'Blanco y negro',
-        params: [{ id: 'amount', label: 'Cantidad', type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct }],
+        name: tx('Blanco y negro'),
+        params: [{ id: 'amount', label: tx('Cantidad'), type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct }],
         ffmpeg: (p, ctx) => (ctx.keep || p.amount ? `hue=s=${n(1 - p.amount)}` : ''),
       },
       {
         id: 'sepia',
-        name: 'Sepia',
-        params: [{ id: 'amount', label: 'Cantidad', type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct }],
+        name: tx('Sepia'),
+        params: [{ id: 'amount', label: tx('Cantidad'), type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct }],
         ffmpeg: (p, ctx) => {
           if (!p.amount && !ctx.keep) return '';
           const m = sepiaMatrix(p.amount);
@@ -247,8 +248,8 @@ export const EFFECT_GROUPS = [
       },
       {
         id: 'invert',
-        name: 'Invertir',
-        params: [{ id: 'amount', label: 'Cantidad', type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct }],
+        name: tx('Invertir'),
+        params: [{ id: 'amount', label: tx('Cantidad'), type: 'range', min: 0, max: 1, step: 0.01, default: 1, format: pct }],
         ffmpeg: (p, ctx) => {
           if (!p.amount && !ctx.keep) return '';
           const e = `val*${n(1 - p.amount)}+negval*${n(p.amount)}`;
@@ -258,14 +259,14 @@ export const EFFECT_GROUPS = [
     ],
   },
   {
-    name: 'Desenfoque y nitidez',
+    name: tx('Desenfoque y nitidez'),
     items: [
       {
         id: 'blur',
-        name: 'Desenfoque gaussiano',
+        name: tx('Desenfoque gaussiano'),
         params: [
-          { id: 'horizontal', label: 'Horizontal', type: 'range', min: 0, max: 1, step: 0.01, default: 0.2, format: pct },
-          { id: 'vertical', label: 'Vertical', type: 'range', min: 0, max: 1, step: 0.01, default: 0.2, format: pct },
+          { id: 'horizontal', label: tx('Horizontal'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.2, format: pct },
+          { id: 'vertical', label: tx('Vertical'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.2, format: pct },
         ],
         ffmpeg: (p, ctx) => {
           const sx = blurSigma(p.horizontal, ctx.h);
@@ -275,9 +276,9 @@ export const EFFECT_GROUPS = [
       },
       {
         id: 'sharpen',
-        name: 'Enfocar',
+        name: tx('Enfocar'),
         animatable: false,
-        params: [{ id: 'amount', label: 'Cantidad', type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct }],
+        params: [{ id: 'amount', label: tx('Cantidad'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct }],
         ffmpeg: (p, ctx) => {
           const size = odd(ctx.h * 0.005);
           return p.amount ? `unsharp=lx=${size}:ly=${size}:la=${n(p.amount * 2)}:cx=3:cy=3:ca=0` : '';
@@ -285,11 +286,11 @@ export const EFFECT_GROUPS = [
       },
       {
         id: 'glow',
-        name: 'Brillo difuso',
+        name: tx('Brillo difuso'),
         params: [
-          { id: 'threshold', label: 'Umbral', type: 'range', min: 0, max: 1, step: 0.01, default: 0.6, format: pct, animatable: false },
-          { id: 'intensity', label: 'Intensidad', type: 'range', min: 0, max: 1, step: 0.01, default: 0.6, format: pct },
-          { id: 'radius', label: 'Radio', type: 'range', min: 0, max: 1, step: 0.01, default: 0.3, format: pct },
+          { id: 'threshold', label: tx('Umbral'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.6, format: pct, animatable: false },
+          { id: 'intensity', label: tx('Intensidad'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.6, format: pct },
+          { id: 'radius', label: tx('Radio'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.3, format: pct },
         ],
         // Las zonas por encima del umbral se desenfocan y se suman en modo "trama" (screen).
         graph: (p, ctx, inL, outL, tag) => {
@@ -307,12 +308,12 @@ export const EFFECT_GROUPS = [
     ],
   },
   {
-    name: 'Estilizar',
+    name: tx('Estilizar'),
     items: [
       {
         id: 'pixelate',
-        name: 'Pixelar',
-        params: [{ id: 'size', label: 'Tamaño', type: 'range', min: 0, max: 1, step: 0.01, default: 0.2, format: pct }],
+        name: tx('Pixelar'),
+        params: [{ id: 'size', label: tx('Tamaño'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.2, format: pct }],
         ffmpeg: (p, ctx) => {
           const b = Math.max(2, Math.round(pixelBlock(p.size, ctx.h)));
           return `pixelize=width=${b}:height=${b}:mode=avg`;
@@ -320,9 +321,9 @@ export const EFFECT_GROUPS = [
       },
       {
         id: 'vignette',
-        name: 'Viñeta',
+        name: tx('Viñeta'),
         animatable: false,
-        params: [{ id: 'amount', label: 'Intensidad', type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct }],
+        params: [{ id: 'amount', label: tx('Intensidad'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct }],
         // vignette no admite alfa: con transparencia se aparta el alfa y se vuelve a poner después.
         graph: (p, ctx, inL, outL, tag) => {
           if (!p.amount) return `[${inL}]null[${outL}]`;
@@ -333,26 +334,26 @@ export const EFFECT_GROUPS = [
       },
       {
         id: 'mirror',
-        name: 'Espejo',
+        name: tx('Espejo'),
         params: [
-          { id: 'horizontal', label: 'Voltear en horizontal', type: 'bool', default: true },
-          { id: 'vertical', label: 'Voltear en vertical', type: 'bool', default: false },
+          { id: 'horizontal', label: tx('Voltear en horizontal'), type: 'bool', default: true },
+          { id: 'vertical', label: tx('Voltear en vertical'), type: 'bool', default: false },
         ],
         ffmpeg: (p) => [p.horizontal ? 'hflip' : '', p.vertical ? 'vflip' : ''].filter(Boolean).join(','),
       },
     ],
   },
   {
-    name: 'Composición',
+    name: tx('Composición'),
     items: [
       {
         id: 'chromakey',
-        name: 'Croma',
+        name: tx('Croma'),
         alpha: true,
         params: [
-          { id: 'color', label: 'Color', type: 'color', default: '#00ff00' },
-          { id: 'similarity', label: 'Similitud', type: 'range', min: 0.01, max: 1, step: 0.01, default: 0.3, format: pct },
-          { id: 'blend', label: 'Suavizado', type: 'range', min: 0, max: 1, step: 0.01, default: 0.1, format: pct },
+          { id: 'color', label: tx('Color'), type: 'color', default: '#00ff00' },
+          { id: 'similarity', label: tx('Similitud'), type: 'range', min: 0.01, max: 1, step: 0.01, default: 0.3, format: pct },
+          { id: 'blend', label: tx('Suavizado'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.1, format: pct },
         ],
         // colorkey sustituye el alfa; si la imagen ya tenía transparencia, se multiplica por la de antes
         // (igual que la vista previa), para que lo transparente siga siéndolo.

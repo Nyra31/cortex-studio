@@ -3,9 +3,10 @@ import Icon from './Icon.jsx';
 import {
   MAX_SCALE, MIN_SCALE, NO_CROP, addKeyframe, keyframeAt, moveKeyframe, newPan, panAt, removeKeyframe, setPanValues,
 } from '../state/pan.js';
+import { point, tx } from '../i18n/index.js';
 
 const pct = (v) => `${Math.round(v * 100)} %`;
-const deg = (v) => `${Math.round(v * 10) / 10}°`.replace('.', ',');
+const deg = (v) => `${point(Math.round(v * 10) / 10)}°`;
 
 // Ventana de panorámica/recorte del evento (como en VEGAS). Arriba, la tira de fotogramas clave del evento
 // (clic: llevar el cursor ahí; arrastrar un rombo: cambiarlo de momento); debajo, los valores en el cursor.
@@ -46,7 +47,7 @@ export default function PanDialog({ event, mediaName, fps, time, fill, onChange,
   const range = (label, value, min, max, step, format, apply, reset) => (
     <label key={label} className="fx-param">
       <span className="fx-param-label">{label}</span>
-      <input type="range" min={min} max={max} step={step} value={value} {...live(apply)} onDoubleClick={reset} title="Doble clic: valor por defecto" />
+      <input type="range" min={min} max={max} step={step} value={value} {...live(apply)} onDoubleClick={reset} title={tx('Doble clic: valor por defecto')} />
       <span className="fx-param-value">{format}</span>
     </label>
   );
@@ -107,19 +108,19 @@ export default function PanDialog({ event, mediaName, fps, time, fill, onChange,
   return (
     <div className="fx-window pan-window" style={{ left: pos.x, top: pos.y }}>
       <div className="fx-title" onPointerDown={startDrag}>
-        <span>Panorámica/recorte del evento: {mediaName}</span>
-        <button className="track-btn" title="Cerrar (Esc)" onClick={onClose}>
+        <span>{tx('Panorámica/recorte del evento: {mediaName}', { mediaName })}</span>
+        <button className="track-btn" title={tx('Cerrar (Esc)')} onClick={onClose}>
           <Icon name="close" size={11} />
         </button>
       </div>
       <div className="fx-params">
-        <div className="pan-strip" ref={stripRef} onPointerDown={onStripDown} title="Clic: llevar el cursor ahí">
+        <div className="pan-strip" ref={stripRef} onPointerDown={onStripDown} title={tx('Clic: llevar el cursor ahí')}>
           {kfs.map((k, i) => (
             <span
               key={i}
               className={`pan-key${i === at ? ' active' : ''}`}
               style={{ left: `${(k.t / event.duration) * 100}%` }}
-              title="Fotograma clave (arrastra para moverlo)"
+              title={tx('Fotograma clave (arrastra para moverlo)')}
               onPointerDown={(e) => onKeyframeDown(e, i)}
             />
           ))}
@@ -128,50 +129,49 @@ export default function PanDialog({ event, mediaName, fps, time, fill, onChange,
           )}
         </div>
         <div className="text-row pan-keys">
-          <button title="Fotograma clave anterior" onClick={() => jump(-1)} disabled={!kfs.some((k) => k.t < local - 1e-6)}>◀</button>
-          <button title="Fotograma clave siguiente" onClick={() => jump(1)} disabled={!kfs.some((k) => k.t > local + 1e-6)}>▶</button>
-          <button onClick={() => change((p) => addKeyframe(p, local))} disabled={at >= 0}>+ Fotograma clave</button>
-          <button onClick={() => change((p) => removeKeyframe(p, at))} disabled={at < 0 || kfs.length < 2}>Quitar</button>
-          <label className="pan-smooth" title="El movimiento desde este fotograma clave acelera y frena (si no, es uniforme)">
+          <button title={tx('Fotograma clave anterior')} onClick={() => jump(-1)} disabled={!kfs.some((k) => k.t < local - 1e-6)}>◀</button>
+          <button title={tx('Fotograma clave siguiente')} onClick={() => jump(1)} disabled={!kfs.some((k) => k.t > local + 1e-6)}>▶</button>
+          <button onClick={() => change((p) => addKeyframe(p, local))} disabled={at >= 0}>{tx('+ Fotograma clave')}</button>
+          <button onClick={() => change((p) => removeKeyframe(p, at))} disabled={at < 0 || kfs.length < 2}>{tx('Quitar')}</button>
+          <label className="pan-smooth" title={tx('El movimiento desde este fotograma clave acelera y frena (si no, es uniforme)')}>
             <input
               type="checkbox"
               checked={!!kfs[segment]?.smooth}
               disabled={kfs.length < 2}
               onChange={(e) => change((p) => ({ ...p, keyframes: p.keyframes.map((k, i) => (i === segment ? { ...k, smooth: e.target.checked } : k)) }))}
             />
-            Suave
+           {tx('Suave')}
           </label>
         </div>
         <p className="pan-hint">
-          {kfs.length < 2
-            ? 'Sin animación: los valores valen para todo el evento. Para animarlo, añade fotogramas clave en otros momentos.'
-            : `${kfs.length} fotogramas clave. Al cambiar un valor donde no hay ninguno, se crea uno nuevo.`}
-          {' '}En la vista previa: arrastra la imagen para moverla, las esquinas para el zoom y el círculo para girarla.
+          {tx('{n} En la vista previa: arrastra la imagen para moverla, las esquinas para el zoom y el círculo para girarla.', { n: kfs.length < 2
+            ? tx('Sin animación: los valores valen para todo el evento. Para animarlo, añade fotogramas clave en otros momentos.')
+            : tx('{length} fotogramas clave. Al cambiar un valor donde no hay ninguno, se crea uno nuevo.', { length: kfs.length }) })}
         </p>
 
-        {range('Horizontal', values.x, -0.5, 1.5, 0.001, pct(values.x), (v, r) => setValues({ x: v }, r), () => setValues({ x: 0.5 }, true))}
-        {range('Vertical', values.y, -0.5, 1.5, 0.001, pct(values.y), (v, r) => setValues({ y: v }, r), () => setValues({ y: 0.5 }, true))}
-        {range('Zoom', logScale, Math.log2(MIN_SCALE), Math.log2(MAX_SCALE), 0.01, pct(values.scale),
+        {range(tx('Horizontal'), values.x, -0.5, 1.5, 0.001, pct(values.x), (v, r) => setValues({ x: v }, r), () => setValues({ x: 0.5 }, true))}
+        {range(tx('Vertical'), values.y, -0.5, 1.5, 0.001, pct(values.y), (v, r) => setValues({ y: v }, r), () => setValues({ y: 0.5 }, true))}
+        {range(tx('Zoom'), logScale, Math.log2(MIN_SCALE), Math.log2(MAX_SCALE), 0.01, pct(values.scale),
           (v, r) => setValues({ scale: Math.round(2 ** v * 1000) / 1000 }, r), () => setValues({ scale: 1 }, true))}
-        {range('Rotación', values.rotation, -180, 180, 0.5, deg(values.rotation), (v, r) => setValues({ rotation: v }, r), () => setValues({ rotation: 0 }, true))}
+        {range(tx('Rotación'), values.rotation, -180, 180, 0.5, deg(values.rotation), (v, r) => setValues({ rotation: v }, r), () => setValues({ rotation: 0 }, true))}
         <div className="text-row">
           <button className="text-toggle wide" onClick={() => setValues({ x: 0.5, y: 0.5, scale: 1, rotation: 0 }, true)}>
-            Encajar en el cuadro
+           {tx('Encajar en el cuadro')}
           </button>
           <button className="text-toggle wide" onClick={() => setValues({ x: 0.5, y: 0.5, scale: Math.round(fill * 1000) / 1000, rotation: 0 }, true)} disabled={!fill}>
-            Llenar el cuadro
+           {tx('Llenar el cuadro')}
           </button>
         </div>
 
-        <div className="text-section">Recorte (para todo el evento)</div>
+        <div className="text-section">{tx('Recorte (para todo el evento)')}</div>
         {['left', 'right', 'top', 'bottom'].map((side) => range(
-          { left: 'Izquierda', right: 'Derecha', top: 'Arriba', bottom: 'Abajo' }[side],
+          { left: tx('Izquierda'), right: tx('Derecha'), top: tx('Arriba'), bottom: tx('Abajo') }[side],
           crop[side], 0, 0.45, 0.001, pct(crop[side]),
           (v, r) => change((p) => ({ ...p, crop: { ...NO_CROP, ...p.crop, [side]: v } }), r),
           () => change((p) => ({ ...p, crop: { ...NO_CROP, ...p.crop, [side]: 0 } })),
         ))}
         <div className="text-actions">
-          <button onClick={() => onChange(() => null, true)}>Quitar panorámica y recorte</button>
+          <button onClick={() => onChange(() => null, true)}>{tx('Quitar panorámica y recorte')}</button>
         </div>
       </div>
     </div>

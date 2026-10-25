@@ -5,9 +5,10 @@
 // Las medidas son relativas: el tamaño de letra, a la altura del cuadro; contorno, sombra y espaciado,
 // al tamaño de letra; la posición (x, y) es el centro del bloque de texto en fracciones del cuadro.
 import { uid } from './project.js';
+import { tx } from '../i18n/index.js';
 
 export const TEXT_DEFAULTS = {
-  text: 'Texto de ejemplo',
+  text: tx('Texto de ejemplo'),
   font: 'Arial',
   size: 0.1,
   bold: false,
@@ -45,39 +46,39 @@ export const TEXT_FONTS = [
 // ya hay. Lo que no dicen vuelve al valor por defecto.
 export const TEXT_TEMPLATES = [
   {
-    id: 'title', name: 'Título grande',
+    id: 'title', name: tx('Título grande'),
     params: { font: 'Montserrat', bold: true, size: 0.12, shadow: true, shadowBlur: 0.15, shadowOffset: 0.04, animIn: 'fade', animInDur: 0.8, animOut: 'fade', animOutDur: 0.8 },
   },
   {
-    id: 'lower', name: 'Rótulo inferior (nombre y cargo)',
+    id: 'lower', name: tx('Rótulo inferior (nombre y cargo)'),
     params: { font: 'Roboto', bold: true, size: 0.055, align: 'left', x: 0.27, y: 0.83, shadow: true, shadowBlur: 0.2, shadowOffset: 0.05, animIn: 'left', animInDur: 0.6, animOut: 'left', animOutDur: 0.5 },
   },
   {
-    id: 'subtitle', name: 'Subtítulo',
+    id: 'subtitle', name: tx('Subtítulo'),
     params: { font: 'Open Sans', size: 0.05, y: 0.88, outline: 0.08, animIn: 'fade', animInDur: 0.15, animOut: 'fade', animOutDur: 0.15 },
   },
   {
-    id: 'cinema', name: 'Cine',
+    id: 'cinema', name: tx('Cine'),
     params: { font: 'Cinzel', size: 0.08, tracking: 0.25, color: '#f2e6c9', animIn: 'fade', animInDur: 1.5, animOut: 'fade', animOutDur: 1.5 },
   },
   {
-    id: 'impact', name: 'Impacto',
+    id: 'impact', name: tx('Impacto'),
     params: { font: 'Anton', size: 0.16, color: '#ffd400', outline: 0.06, animIn: 'zoom', animInDur: 0.35, animOut: 'fade', animOutDur: 0.4 },
   },
   {
-    id: 'neon', name: 'Neón',
+    id: 'neon', name: tx('Neón'),
     params: { font: 'Audiowide', size: 0.1, color: '#c8fbff', shadow: true, shadowColor: '#00e5ff', shadowBlur: 0.5, shadowOffset: 0, animIn: 'reveal', animInDur: 0.8, animOut: 'fade', animOutDur: 0.5 },
   },
   {
-    id: 'typewriter', name: 'Máquina de escribir',
+    id: 'typewriter', name: tx('Máquina de escribir'),
     params: { font: 'Special Elite', size: 0.07, color: '#f0f0f0', animIn: 'typewriter', animInDur: 1.5, animOut: 'fade', animOutDur: 0.5 },
   },
   {
-    id: 'retro', name: 'Videojuego retro',
+    id: 'retro', name: tx('Videojuego retro'),
     params: { font: 'Press Start 2P', size: 0.06, color: '#39ff14', shadow: true, shadowColor: '#0a3d00', shadowBlur: 0, shadowOffset: 0.12, animIn: 'bottom', animInDur: 0.5, animOut: 'top', animOutDur: 0.5 },
   },
   {
-    id: 'handwritten', name: 'Manuscrito',
+    id: 'handwritten', name: tx('Manuscrito'),
     params: { font: 'Pacifico', size: 0.1, shadow: true, shadowBlur: 0.2, shadowOffset: 0.03, animIn: 'reveal', animInDur: 1.2, animOut: 'fade', animOutDur: 0.6 },
   },
 ];
@@ -86,7 +87,7 @@ export const isText = (m) => m?.kind === 'text';
 
 // Nombre del medio: la primera línea del texto (como en la lista de medios de VEGAS).
 export function textName(params) {
-  const line = (params.text || '').split('\n').find((l) => l.trim())?.trim() || 'Texto';
+  const line = (params.text || '').split('\n').find((l) => l.trim())?.trim() || tx('Texto');
   return line.length > 40 ? `${line.slice(0, 40)}…` : line;
 }
 
@@ -105,15 +106,15 @@ export function withTextThumb(media, aspect) {
 // llevan el bloque de texto desde fuera del cuadro (o hasta fuera); la de zoom lo agranda desde el 20 % mientras
 // aparece; revelar lo descubre de izquierda a derecha; la máquina de escribir enseña las letras de una en una.
 export const TEXT_ANIMS = [
-  { id: 'none', in: 'Ninguna', out: 'Ninguna' },
-  { id: 'fade', in: 'Aparecer', out: 'Desaparecer' },
-  { id: 'left', in: 'Entrar desde la izquierda', out: 'Salir por la izquierda' },
-  { id: 'right', in: 'Entrar desde la derecha', out: 'Salir por la derecha' },
-  { id: 'top', in: 'Bajar desde arriba', out: 'Salir por arriba' },
-  { id: 'bottom', in: 'Subir desde abajo', out: 'Salir por abajo' },
-  { id: 'zoom', in: 'Acercar (zoom)', out: 'Alejar (zoom)' },
-  { id: 'reveal', in: 'Revelar de izquierda a derecha', out: 'Ocultar de derecha a izquierda' },
-  { id: 'typewriter', in: 'Máquina de escribir', out: 'Borrar letra a letra' },
+  { id: 'none', in: tx('Ninguna'), out: tx('Ninguna') },
+  { id: 'fade', in: tx('Aparecer'), out: tx('Desaparecer') },
+  { id: 'left', in: tx('Entrar desde la izquierda'), out: tx('Salir por la izquierda') },
+  { id: 'right', in: tx('Entrar desde la derecha'), out: tx('Salir por la derecha') },
+  { id: 'top', in: tx('Bajar desde arriba'), out: tx('Salir por arriba') },
+  { id: 'bottom', in: tx('Subir desde abajo'), out: tx('Salir por abajo') },
+  { id: 'zoom', in: tx('Acercar (zoom)'), out: tx('Alejar (zoom)') },
+  { id: 'reveal', in: tx('Revelar de izquierda a derecha'), out: tx('Ocultar de derecha a izquierda') },
+  { id: 'typewriter', in: tx('Máquina de escribir'), out: tx('Borrar letra a letra') },
 ];
 export const hasTextAnim = (params) => {
   const p = { ...TEXT_DEFAULTS, ...params };

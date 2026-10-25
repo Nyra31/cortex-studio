@@ -5,6 +5,7 @@ Descripción detallada de las funciones, atajos de teclado y limitaciones conoci
 ## Funciones
 
 - **Interfaz al estilo de los editores clásicos:** barra de menús, barra de iconos, ventanas acopladas, contador de tiempo grande, pistas de colores y transporte bajo la línea de tiempo.
+- **Idioma** (*Ayuda → Idioma*): español o inglés. La primera vez se usa el de Windows (español si Windows está en español; si no, inglés). Al cambiarlo, la aplicación se reinicia (si hay cambios sin guardar, pregunta antes). Se traduce todo: menús, ventanas, mensajes, diálogos de Windows y los nombres de las carpetas y archivos que crea la aplicación (*Invertidos*/*Reversed*, *Grabaciones*/*Recordings*…); los ya creados no se renombran.
 - **Pantalla de inicio:** al abrir Cortex Studio salen, a la izquierda, los últimos proyectos abiertos o guardados (con la fecha y la carpeta; un clic los abre, la × los quita de la lista sin borrarlos y los que ya no existen aparecen atenuados) y *Abrir otro proyecto…*; a la derecha, el proyecto nuevo. Se vuelve a ella con *Archivo → Proyectos recientes…*.
 - **Proyecto nuevo:** al empezar se elige la orientación (horizontal o vertical), la resolución (de SD a 4K, o personalizada) y la velocidad de fotogramas (23,976 a 60 fps). Se puede cambiar en cualquier momento en *Archivo → Propiedades del proyecto* (Alt+Intro).
 - **Medios del proyecto:** importa videos, audios e imágenes con *Importar medios* o arrastrándolos desde el Explorador. Muestra una miniatura, la duración y la resolución de cada archivo.

@@ -4,6 +4,7 @@ import { formatTimecode } from '../util/time.js';
 import {
   SUB_STYLE, addCue, cueAt, importCues, parseSubtitles, removeCue, setSubtitleOptions, subtitlesOf, toSrt, updateCue,
 } from '../state/subtitles.js';
+import { tx } from '../i18n/index.js';
 
 // Lee un tiempo escrito como hh:mm:ss:ff (fotogramas), hh:mm:ss,mmm o en segundos. null si no se entiende.
 function parseTime(s, fps) {
@@ -57,16 +58,16 @@ export default function SubtitlesPanel({ project, setProject, time, seek, region
     if (!res) return;
     const list = parseSubtitles(res.text);
     if (!list.length) {
-      onMessage('El archivo no tiene subtítulos que se puedan leer (SRT o WebVTT).');
+      onMessage(tx('El archivo no tiene subtítulos que se puedan leer (SRT o WebVTT).'));
       return;
     }
-    const replace = subs.cues.length > 0 && window.confirm(`Ya hay ${subs.cues.length} subtítulos. ¿Sustituirlos por los del archivo? (Cancelar: añadirlos a los que hay)`);
+    const replace = subs.cues.length > 0 && window.confirm(tx('Ya hay {cues} subtítulos. ¿Sustituirlos por los del archivo? (Cancelar: añadirlos a los que hay)', { cues: subs.cues.length }));
     setProject((p) => importCues(p, list, replace));
-    onMessage(`${list.length} subtítulos importados de ${res.path}`);
+    onMessage(tx('{length} subtítulos importados de {path}', { length: list.length, path: res.path }));
   };
   const doExport = async () => {
     const saved = await window.api.exportSubtitles(toSrt(subs.cues), `${defaultName}.srt`);
-    if (saved) onMessage(`Subtítulos exportados a ${saved}`);
+    if (saved) onMessage(tx('Subtítulos exportados a {saved}', { saved }));
   };
   const setStyle = (changes, record = true) => setProject((p) => setSubtitleOptions(p, { style: { ...style, ...changes } }), record);
   const live = (id, toValue = (v) => v) => ({
@@ -81,7 +82,7 @@ export default function SubtitlesPanel({ project, setProject, time, seek, region
       key={`${cue.id}-${field}-${cue[field]}`}
       className="sub-time"
       defaultValue={formatTimecode(cue[field], fps)}
-      title={field === 'start' ? 'Entrada (hh:mm:ss:ff o segundos)' : 'Salida'}
+      title={field === 'start' ? tx('Entrada (hh:mm:ss:ff o segundos)') : tx('Salida')}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === 'Enter') e.currentTarget.blur();
@@ -102,37 +103,37 @@ export default function SubtitlesPanel({ project, setProject, time, seek, region
   return (
     <div className="subtitles-panel">
       <div className="dock-toolbar">
-        <button className="tool-text" onClick={add} title="Subtítulo nuevo en el cursor (2 s) o en la selección de tiempo">+ Añadir</button>
-        <button className="tool-text" onClick={onTranscribe} title="Escribir los subtítulos a partir de la voz, con Whisper (en este equipo)">Automáticos…</button>
-        <button className="tool-text" onClick={doImport}>Importar SRT…</button>
-        <button className="tool-text" onClick={doExport} disabled={!subs.cues.length}>Exportar SRT…</button>
-        <label className="sub-check" title="Ver los subtítulos en la vista previa">
+        <button className="tool-text" onClick={add} title={tx('Subtítulo nuevo en el cursor (2 s) o en la selección de tiempo')}>{tx('+ Añadir')}</button>
+        <button className="tool-text" onClick={onTranscribe} title={tx('Escribir los subtítulos a partir de la voz, con Whisper (en este equipo)')}>{tx('Automáticos…')}</button>
+        <button className="tool-text" onClick={doImport}>{tx('Importar SRT…')}</button>
+        <button className="tool-text" onClick={doExport} disabled={!subs.cues.length}>{tx('Exportar SRT…')}</button>
+        <label className="sub-check" title={tx('Ver los subtítulos en la vista previa')}>
           <input type="checkbox" checked={subs.preview !== false} onChange={(e) => setProject((p) => setSubtitleOptions(p, { preview: e.target.checked }))} />
-          Ver en la vista previa
+         {tx('Ver en la vista previa')}
         </label>
-        <span className="dock-toolbar-label">{subs.cues.length} subtítulos</span>
+        <span className="dock-toolbar-label">{tx('{cues} subtítulos', { cues: subs.cues.length })}</span>
       </div>
       <div className="sub-style">
         <FontPicker value={style.font} onChange={(font) => setStyle({ font })} />
-        <label title="Tamaño">Tamaño <input type="range" min={0.025} max={0.12} step={0.001} value={style.size} {...live('size', Number)} /></label>
-        <label title="Altura (0 = arriba, 1 = abajo)">Altura <input type="range" min={0.05} max={0.95} step={0.005} value={style.y} {...live('y', Number)} /></label>
-        <label title="Contorno">Contorno <input type="range" min={0} max={0.2} step={0.005} value={style.outline} {...live('outline', Number)} /></label>
-        <label title="Caja detrás del texto">Caja <input type="range" min={0} max={1} step={0.01} value={style.box} {...live('box', Number)} /></label>
-        <input type="color" title="Color del texto" value={style.color} {...live('color')} />
-        <input type="color" title="Color del contorno" value={style.outlineColor} {...live('outlineColor')} />
-        <input type="color" title="Color de la caja" value={style.boxColor} {...live('boxColor')} />
+        <label title={tx('Tamaño')}>{tx('Tamaño')} <input type="range" min={0.025} max={0.12} step={0.001} value={style.size} {...live('size', Number)} /></label>
+        <label title={tx('Altura (0 = arriba, 1 = abajo)')}>{tx('Altura')} <input type="range" min={0.05} max={0.95} step={0.005} value={style.y} {...live('y', Number)} /></label>
+        <label title={tx('Contorno')}>{tx('Contorno')} <input type="range" min={0} max={0.2} step={0.005} value={style.outline} {...live('outline', Number)} /></label>
+        <label title={tx('Caja detrás del texto')}>{tx('Caja')} <input type="range" min={0} max={1} step={0.01} value={style.box} {...live('box', Number)} /></label>
+        <input type="color" title={tx('Color del texto')} value={style.color} {...live('color')} />
+        <input type="color" title={tx('Color del contorno')} value={style.outlineColor} {...live('outlineColor')} />
+        <input type="color" title={tx('Color de la caja')} value={style.boxColor} {...live('boxColor')} />
       </div>
       {subs.cues.length === 0 ? (
         <div className="empty-hint">
-          Sin subtítulos. «+ Añadir» crea uno en el cursor (o en la selección de tiempo);
+         {tx('Sin subtítulos. «+ Añadir» crea uno en el cursor (o en la selección de tiempo);')}
           <br />
-          también se pueden importar de un archivo SRT.
+         {tx('también se pueden importar de un archivo SRT.')}
         </div>
       ) : (
         <div className="sub-list" ref={listRef}>
           {subs.cues.map((cue, i) => (
             <div key={cue.id} className={`sub-row${active?.id === cue.id ? ' active' : ''}`}>
-              <button className="sub-number" title="Llevar el cursor aquí" onClick={() => seek(cue.start)}>{i + 1}</button>
+              <button className="sub-number" title={tx('Llevar el cursor aquí')} onClick={() => seek(cue.start)}>{i + 1}</button>
               <div className="sub-times">
                 {timeField(cue, 'start')}
                 {timeField(cue, 'end')}
@@ -143,7 +144,7 @@ export default function SubtitlesPanel({ project, setProject, time, seek, region
                 rows={2}
                 value={cue.text}
                 spellCheck
-                placeholder="Texto del subtítulo"
+                placeholder={tx('Texto del subtítulo')}
                 onFocus={() => {
                   first.current = true;
                   if (time < cue.start || time >= cue.end) seek(cue.start);
@@ -154,7 +155,7 @@ export default function SubtitlesPanel({ project, setProject, time, seek, region
                 }}
                 onKeyDown={(e) => e.stopPropagation()}
               />
-              <button className="sub-delete" title="Eliminar el subtítulo" onClick={() => setProject((p) => removeCue(p, cue.id))}>×</button>
+              <button className="sub-delete" title={tx('Eliminar el subtítulo')} onClick={() => setProject((p) => removeCue(p, cue.id))}>×</button>
             </div>
           ))}
         </div>

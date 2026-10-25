@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { TRANSITION_GROUPS, TRANSITION_MIME, TRANSITIONS } from '../state/transitions.js';
 import { Compositor } from '../preview/compositor.js';
+import { tx } from '../i18n/index.js';
 
 const THUMB_W = 112;
 const THUMB_H = 63;
 const SAMPLE = { width: 160, height: 90 };
-const ALL = 'Todas';
+const ALL = tx('Todas');
 const STILL = { circlecrop: 0.85, rectcrop: 0.85 };
 
 // Imágenes de ejemplo A (sale) y B (entra) para las miniaturas.
@@ -88,7 +89,7 @@ function TransitionTile({ item }) {
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title={`${item.group}: ${item.name}\nArrastra sobre el solapamiento de dos eventos de video`}
+      title={tx('{group}: {name}\nArrastra sobre el solapamiento de dos eventos de video', { group: item.group, name: item.name })}
     >
       <canvas ref={ref} width={THUMB_W} height={THUMB_H} />
       <div className="transition-name">{item.name}</div>
@@ -104,7 +105,7 @@ export default function TransitionsPanel() {
     <div className="transitions-panel">
       <div className="dock-toolbar">
         <span className="dock-toolbar-label">
-          Arrastra una transición al solapamiento de dos eventos de video (doble clic en él: volver a disolución cruzada)
+         {tx('Arrastra una transición al solapamiento de dos eventos de video (doble clic en él: volver a disolución cruzada)')}
         </span>
       </div>
       <div className="transitions-body">

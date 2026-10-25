@@ -35,6 +35,7 @@ import { panActive, setPanValues } from './state/pan.js';
 import { hasRamp, shiftSpeed, sourceOffset } from './state/speed.js';
 import { transitionLabel } from './state/transitions.js';
 import { Recorder, loadRecordSettings, micError } from './preview/recorder.js';
+import { LANGUAGES, lang, locale, tx } from './i18n/index.js';
 
 const api = window.api;
 const FREEZE_S = 2; // duración del fotograma congelado
@@ -47,7 +48,7 @@ function panFill(project, e) {
   const fit = m && (isText(m) ? { w: W, h: H } : fitSize(m.width, m.height, W, H));
   return fit ? Math.max(W / fit.w, H / fit.h) : null;
 }
-const baseName = (p) => (p ? p.split(/[\\/]/).pop().replace(/\.cortex$/i, '') : 'Sin título');
+const baseName = (p) => (p ? p.split(/[\\/]/).pop().replace(/\.cortex$/i, '') : tx('Sin título'));
 
 export default function App() {
   const history = useHistory(emptyProject());
@@ -116,7 +117,7 @@ export default function App() {
   const playStart = useRef(0);
 
   useEffect(() => {
-    document.title = `${baseName(projectPath)}${dirty ? ' *' : ''} - Cortex Studio`;
+    document.title = tx('{baseName}{n} - Cortex Studio', { baseName: baseName(projectPath), n: dirty ? ' *' : '' });
   }, [projectPath, dirty]);
 
   // Reloj de reproducción: avanza desde playStart y se reinicia cuando el usuario busca otra posición.
@@ -223,7 +224,7 @@ export default function App() {
   const enqueueRenders = useCallback((jobs, startNow) => {
     setQueue((q) => [...q, ...jobs.map((j) => ({ ...j, id: uid('r'), status: 'waiting', progress: 0, error: null }))]);
     if (startNow) setQueueRunning(true);
-    setStatus(startNow ? `Renderizando ${jobs.length} archivo(s) con la cola de render.` : `Añadido a la cola de render (Archivo → Cola de render…).`);
+    setStatus(startNow ? tx('Renderizando {length} archivo(s) con la cola de render.', { length: jobs.length }) : tx('Añadido a la cola de render (Archivo → Cola de render…).'));
   }, []);
   // Con la cola en marcha, se renderiza el siguiente trabajo en espera; al acabarse, se para.
   useEffect(() => {
@@ -232,13 +233,13 @@ export default function App() {
     if (!next) {
       setQueueRunning(false);
       const failed = queue.filter((j) => j.status === 'error').length;
-      setStatus(failed ? `Cola de render terminada con ${failed} error(es).` : 'Cola de render terminada.');
+      setStatus(failed ? tx('Cola de render terminada con {failed} error(es).', { failed }) : tx('Cola de render terminada.'));
       return;
     }
     setJob(next.id, { status: 'rendering', progress: 0 });
     const off = api.onRenderProgress((p) => setJob(next.id, { progress: p }));
     api.startRender(next.payload, next.settings, next.outPath)
-      .then((res) => setJob(next.id, res.ok ? { status: 'done', progress: 1 } : res.canceled ? { status: 'canceled' } : { status: 'error', error: res.error || 'Error desconocido' }))
+      .then((res) => setJob(next.id, res.ok ? { status: 'done', progress: 1 } : res.canceled ? { status: 'canceled' } : { status: 'error', error: res.error || tx('Error desconocido') }))
       .catch((err) => setJob(next.id, { status: 'error', error: err.message }))
       .finally(off);
   }, [queue, queueRunning, setJob]);
@@ -267,9 +268,9 @@ export default function App() {
     api.makeProxy(filePath)
       .then((proxy) => {
         setProxy(filePath, proxy);
-        setStatus(`Proxy listo: «${baseName(filePath)}» ya se ve en la vista previa (el render usa el original).`);
+        setStatus(tx('Proxy listo: «{baseName}» ya se ve en la vista previa (el render usa el original).', { baseName: baseName(filePath) }));
       })
-      .catch((err) => setStatus(`No se pudo crear el proxy de «${baseName(filePath)}»: ${err.message}`))
+      .catch((err) => setStatus(tx('No se pudo crear el proxy de «{baseName}»: {message}', { baseName: baseName(filePath), message: err.message })))
       .finally(() => {
         busy.delete(filePath);
         setProxyJobs(({ [filePath]: _done, ...rest }) => rest);
@@ -288,14 +289,14 @@ export default function App() {
       api.filmstrip(info.path).then((strip) => setStrips((s) => ({ ...s, [info.path]: strip }))).catch(() => {});
     }
     if (proxy) setProxy(info.path, proxy);
-    else if (needsProxy) requestProxy(info.path, `La vista previa no puede reproducir «${info.name}»: creando una copia ligera (proxy)…`);
+    else if (needsProxy) requestProxy(info.path, tx('La vista previa no puede reproducir «{name}»: creando una copia ligera (proxy)…', { name: info.name }));
     return info;
   }, [requestProxy, setProxy]);
   // La vista previa no ha podido abrir un medio (códec que el equipo no admite, p. ej. algunos HEVC).
   const onMediaError = useCallback((mediaId) => {
     const m = live.current.project.media.find((x) => x.id === mediaId);
     if (!m || m.isImage || isText(m) || m.missing) return;
-    requestProxy(m.path, `La vista previa no puede reproducir «${m.name}»: creando una copia ligera (proxy)…`);
+    requestProxy(m.path, tx('La vista previa no puede reproducir «{name}»: creando una copia ligera (proxy)…', { name: m.name }));
   }, [requestProxy]);
   // Clic derecho en un medio de la ventana de medios.
   const mediaMenu = useCallback((e, m) => {
@@ -305,31 +306,31 @@ export default function App() {
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: 'Añadir en el cursor', action: () => setProject((p) => placeMedia(p, m, live.current.time, null)), disabled: m.missing },
+        { label: tx('Añadir en el cursor'), action: () => setProject((p) => placeMedia(p, m, live.current.time, null)), disabled: m.missing },
         'separator',
         ready[m.path]
-          ? { label: 'Quitar el proxy (la vista previa usará el original)', action: () => removeProxy(m.path) }
+          ? { label: tx('Quitar el proxy (la vista previa usará el original)'), action: () => removeProxy(m.path) }
           : {
-            label: busy.has(m.path) ? 'Creando el proxy…' : 'Crear un proxy para la vista previa',
-            action: () => requestProxy(m.path, `Creando una copia ligera (proxy) de «${m.name}» para la vista previa…`),
+            label: busy.has(m.path) ? tx('Creando el proxy…') : tx('Crear un proxy para la vista previa'),
+            action: () => requestProxy(m.path, tx('Creando una copia ligera (proxy) de «{name}» para la vista previa…', { name: m.name })),
             disabled: !video || busy.has(m.path),
           },
-        ...(video ? [{ label: 'Comprimir…', action: () => { addToCompress([m.path]); setCompressOpen(true); } }] : []),
-        ...(!isText(m) ? [{ label: 'Abrir la ubicación del archivo', action: () => api.revealFile(m.path), disabled: m.missing }] : []),
+        ...(video ? [{ label: tx('Comprimir…'), action: () => { addToCompress([m.path]); setCompressOpen(true); } }] : []),
+        ...(!isText(m) ? [{ label: tx('Abrir la ubicación del archivo'), action: () => api.revealFile(m.path), disabled: m.missing }] : []),
       ],
     });
   }, [removeProxy, requestProxy, setProject]);
   const clearProxies = useCallback(async () => {
     const { count, bytes } = await api.proxyUsage();
     if (!count) {
-      window.alert('No hay proxies guardados.');
+      window.alert(tx('No hay proxies guardados.'));
       return;
     }
-    const mb = (bytes / 1048576).toLocaleString('es-ES', { maximumFractionDigits: 0 });
-    if (!window.confirm(`Hay ${count} proxies (${mb} MB). ¿Borrarlos? Se volverán a crear cuando hagan falta.`)) return;
+    const mb = (bytes / 1048576).toLocaleString(locale, { maximumFractionDigits: 0 });
+    if (!window.confirm(tx('Hay {count} proxies ({mb} MB). ¿Borrarlos? Se volverán a crear cuando hagan falta.', { count, mb }))) return;
     proxyRef.current.ready = {};
     setProxies({});
-    setTimeout(() => api.clearProxies().then(() => setStatus('Proxies borrados.')), 1500);
+    setTimeout(() => api.clearProxies().then(() => setStatus(tx('Proxies borrados.'))), 1500);
   }, []);
 
   // ---- Medios ----
@@ -343,7 +344,7 @@ export default function App() {
         imported.push(existing);
         continue;
       }
-      setStatus(`Importando ${baseName(filePath)}…`);
+      setStatus(tx('Importando {baseName}…', { baseName: baseName(filePath) }));
       try {
         const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(filePath)) };
         setProject((p) => ({ ...p, media: [...p.media, media] }));
@@ -352,7 +353,7 @@ export default function App() {
         failed.push(filePath.split(/[\\/]/).pop());
       }
     }
-    setStatus(failed.length ? `No se pudieron importar: ${failed.join(', ')}` : '');
+    setStatus(failed.length ? tx('No se pudieron importar: {join}', { join: failed.join(', ') }) : '');
     return imported;
   }, [noteAnalyzed, setProject]);
 
@@ -400,7 +401,7 @@ export default function App() {
     setCompressRunning(false);
     const imported = settings.importAfter && outs.length ? await importPaths(outs) : [];
     if (outs.length || failed) {
-      setStatus(`Compresión terminada: ${outs.length} video${outs.length === 1 ? '' : 's'}${failed ? `, ${failed} con error` : ''}${imported.length ? ' (importados al proyecto)' : ''}`);
+      setStatus(tx('Compresión terminada: {length} video{n}{n2}{n3}', { length: outs.length, n: outs.length === 1 ? '' : 's', n2: failed ? tx(', {failed} con error', { failed }) : '', n3: imported.length ? tx(' (importados al proyecto)') : '' }));
     }
   }, [importPaths]);
   const stopCompress = useCallback(() => {
@@ -425,7 +426,7 @@ export default function App() {
       offMix();
     }
     if (res.canceled) return null;
-    if (!res.ok) throw new Error(res.error || 'No se pudo mezclar el sonido');
+    if (!res.ok) throw new Error(res.error || tx('No se pudo mezclar el sonido'));
     transcribeCancel.current = () => api.whisperCancel();
     const offW = api.onWhisperProgress(onStatus);
     let srt;
@@ -439,7 +440,7 @@ export default function App() {
     const offset = range ? Math.ceil(range.start * p.settings.fps - 1e-6) / p.settings.fps : 0; // el render empieza en un fotograma
     const list = tidyCues(parseSubtitles(srt)).map((c) => ({ ...c, start: c.start + offset, end: c.end + offset }));
     if (list.length) setProject((cur) => importCues(cur, list, opts.replace));
-    setStatus(list.length ? `${list.length} subtítulos automáticos añadidos.` : 'No se ha reconocido ninguna frase.');
+    setStatus(list.length ? tx('{length} subtítulos automáticos añadidos.', { length: list.length }) : tx('No se ha reconocido ninguna frase.'));
     if (list.length) setLeftTab('subtitles');
     return list.length;
   }, [setProject]);
@@ -452,16 +453,16 @@ export default function App() {
       const r = await api.youtubeDownload(opts);
       if (r.canceled) {
         setYoutubeJob((j) => ({ ...j, status: 'canceled' }));
-        setStatus('Descarga cancelada.');
+        setStatus(tx('Descarga cancelada.'));
         return;
       }
       setYoutubeJob((j) => ({ ...j, status: 'done', files: r.files, error: r.error }));
       const imported = importAfter ? await importPaths(r.files) : [];
       if (imported.length) setYoutubeJob((j) => ({ ...j, imported: true }));
-      setStatus(`Descargado: ${r.files.length === 1 ? baseName(r.files[0]) : `${r.files.length} archivos`}${imported.length ? ' (importado al proyecto)' : ''}`);
+      setStatus(tx('Descargado: {what}{n}', { what: r.files.length === 1 ? baseName(r.files[0]) : tx('{length} archivos', { length: r.files.length }), n: imported.length ? tx(' (importado al proyecto)') : '' }));
     } catch (err) {
       setYoutubeJob((j) => ({ ...j, status: 'error', error: cleanError(err) }));
-      setStatus(`No se pudo descargar: ${cleanError(err)}`);
+      setStatus(tx('No se pudo descargar: {cleanError}', { cleanError: cleanError(err) }));
     }
   }, [importPaths]);
 
@@ -489,7 +490,7 @@ export default function App() {
 
   const removeMediaItem = useCallback((mediaId) => {
     const used = live.current.project.events.some((e) => e.mediaId === mediaId);
-    if (used && !window.confirm('Este medio se usa en la línea de tiempo. ¿Quitarlo junto con sus eventos?')) return;
+    if (used && !window.confirm(tx('Este medio se usa en la línea de tiempo. ¿Quitarlo junto con sus eventos?'))) return;
     setProject((p) => removeMedia(p, mediaId));
   }, [setProject]);
 
@@ -506,7 +507,7 @@ export default function App() {
     const { selection: sel, time: t, project: p } = live.current;
     const ids = sel.length ? sel : p.events.filter((e) => e.start < t && t < e.start + e.duration).map((e) => e.id);
     const next = trimToCursor(p, ids, t, side);
-    if (next === p) setStatus('Para recortar hasta el cursor, el cursor tiene que estar dentro del evento seleccionado.');
+    if (next === p) setStatus(tx('Para recortar hasta el cursor, el cursor tiene que estar dentro del evento seleccionado.'));
     else setProject(next);
   }, [setProject]);
 
@@ -522,20 +523,20 @@ export default function App() {
     const candidates = p.events.filter(fits).sort((a, b) => order.get(a.trackId) - order.get(b.trackId));
     const ev = candidates.find((e) => sel.includes(e.id)) || candidates[0];
     if (!ev) {
-      setStatus('Para congelar un fotograma, pon el cursor sobre un evento de video.');
+      setStatus(tx('Para congelar un fotograma, pon el cursor sobre un evento de video.'));
       return;
     }
     setPlaying(false);
     const fps = p.settings.fps;
     const at = Math.floor(t * fps + 1e-6) / fps; // el fotograma que se ve
     try {
-      setStatus('Extrayendo el fotograma…');
+      setStatus(tx('Extrayendo el fotograma…'));
       const path = await api.extractFrame(mediaOf(ev).path, sourceTime(ev, at), file);
       const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(path)) };
       setProject((cur) => freezeFrameAt(cur, ev.id, at, media, FREEZE_S));
-      setStatus(`Fotograma congelado (${FREEZE_S} s), guardado en ${path}. Arrastra su borde para cambiar la duración.`);
+      setStatus(tx('Fotograma congelado ({FREEZE_S} s), guardado en {path}. Arrastra su borde para cambiar la duración.', { FREEZE_S, path }));
     } catch (err) {
-      setStatus(`No se pudo congelar el fotograma: ${err.message}`);
+      setStatus(tx('No se pudo congelar el fotograma: {message}', { message: err.message }));
     }
   }, [noteAnalyzed, setProject]);
 
@@ -544,7 +545,7 @@ export default function App() {
   const reverseEvent = useCallback(async (ev) => {
     if (ev.reversed) {
       setProject((cur) => setReversed(cur, ev.id, null));
-      setStatus('El evento vuelve a reproducirse hacia delante.');
+      setStatus(tx('El evento vuelve a reproducirse hacia delante.'));
       return;
     }
     const { project: p, projectPath: file } = live.current;
@@ -552,15 +553,15 @@ export default function App() {
     if (!m || m.isImage || m.missing || isText(m)) return;
     setPlaying(false);
     const span = sourceOffset(ev, ev.duration);
-    const off = api.onReverseProgress((f) => setStatus(`Invirtiendo «${m.name}»: ${Math.round(f * 100)} %…`));
+    const off = api.onReverseProgress((f) => setStatus(tx('Invirtiendo «{name}»: {round} %…', { name: m.name, round: Math.round(f * 100) })));
     try {
-      setStatus(`Invirtiendo «${m.name}»…`);
+      setStatus(tx('Invirtiendo «{name}»…', { name: m.name }));
       const out = await api.reverseClip(m.path, ev.inPoint, span, file, { hasVideo: !!m.hasVideo, hasAudio: !!m.hasAudio, fps: m.fps || null });
       const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(out)) };
       setProject((cur) => setReversed(cur, ev.id, media, ev.inPoint, span));
-      setStatus(`Evento invertido (guardado en ${out}).`);
+      setStatus(tx('Evento invertido (guardado en {out}).', { out }));
     } catch (err) {
-      setStatus(`No se pudo invertir: ${err.message}`);
+      setStatus(tx('No se pudo invertir: {message}', { message: err.message }));
     } finally {
       off();
     }
@@ -571,7 +572,7 @@ export default function App() {
   const stabilizeEvent = useCallback(async (ev, smoothing) => {
     if (smoothing === null) {
       setProject((cur) => setStabilized(cur, ev.id, null));
-      setStatus('Se ha quitado la estabilización.');
+      setStatus(tx('Se ha quitado la estabilización.'));
       return;
     }
     const { project: p, projectPath: file } = live.current;
@@ -582,15 +583,15 @@ export default function App() {
     const pad = 1;
     const start = Math.max(0, ev.inPoint - pad);
     const end = Math.min(m.duration || Infinity, ev.inPoint + sourceOffset(ev, ev.duration) + pad);
-    const off = api.onStabilizeProgress((f) => setStatus(`Estabilizando «${m.name}»: ${Math.round(f * 100)} %…`));
+    const off = api.onStabilizeProgress((f) => setStatus(tx('Estabilizando «{name}»: {round} %…', { name: m.name, round: Math.round(f * 100) })));
     try {
-      setStatus(`Estabilizando «${m.name}»…`);
+      setStatus(tx('Estabilizando «{name}»…', { name: m.name }));
       const out = await api.stabilizeClip(m.path, start, end - start, file, { hasAudio: !!m.hasAudio, smoothing });
       const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(out)) };
       setProject((cur) => setStabilized(cur, ev.id, media, start));
-      setStatus(`Evento estabilizado (guardado en ${out}).`);
+      setStatus(tx('Evento estabilizado (guardado en {out}).', { out }));
     } catch (err) {
-      setStatus(`No se pudo estabilizar: ${err.message}`);
+      setStatus(tx('No se pudo estabilizar: {message}', { message: err.message }));
     } finally {
       off();
     }
@@ -601,7 +602,7 @@ export default function App() {
   const denoiseEvent = useCallback(async (ev, strength) => {
     if (strength === null) {
       setProject((cur) => setDenoised(cur, ev.id, null));
-      setStatus('Se ha quitado la reducción de ruido.');
+      setStatus(tx('Se ha quitado la reducción de ruido.'));
       return;
     }
     const { project: p, projectPath: file } = live.current;
@@ -611,15 +612,15 @@ export default function App() {
     // Un poco de medio de más a cada lado: afftdn aprende el ruido sobre la marcha.
     const start = Math.max(0, ev.inPoint - 1);
     const end = Math.min(m.duration || Infinity, ev.inPoint + sourceOffset(ev, ev.duration) + 1);
-    const off = api.onDenoiseProgress((f) => setStatus(`Reduciendo el ruido de «${m.name}»: ${Math.round(f * 100)} %…`));
+    const off = api.onDenoiseProgress((f) => setStatus(tx('Reduciendo el ruido de «{name}»: {round} %…', { name: m.name, round: Math.round(f * 100) })));
     try {
-      setStatus(`Reduciendo el ruido de «${m.name}»…`);
+      setStatus(tx('Reduciendo el ruido de «{name}»…', { name: m.name }));
       const out = await api.denoiseClip(m.path, start, end - start, file, strength);
       const media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(out)) };
       setProject((cur) => setDenoised(cur, ev.id, media, start));
-      setStatus(`Ruido reducido (guardado en ${out}).`);
+      setStatus(tx('Ruido reducido (guardado en {out}).', { out }));
     } catch (err) {
-      setStatus(`No se pudo reducir el ruido: ${err.message}`);
+      setStatus(tx('No se pudo reducir el ruido: {message}', { message: err.message }));
     } finally {
       off();
     }
@@ -630,15 +631,15 @@ export default function App() {
     const m = live.current.project.media.find((x) => x.id === ev.mediaId);
     if (!m || m.isImage || m.missing) return;
     setPlaying(false);
-    const off = api.onScenesProgress((p) => setStatus(`Buscando cambios de plano en «${m.name}»: ${Math.round(p * 100)} %…`));
+    const off = api.onScenesProgress((p) => setStatus(tx('Buscando cambios de plano en «{name}»: {round} %…', { name: m.name, round: Math.round(p * 100) })));
     try {
-      setStatus(`Buscando cambios de plano en «${m.name}»…`);
+      setStatus(tx('Buscando cambios de plano en «{name}»…', { name: m.name }));
       const times = await api.detectScenes(m.path, ev.inPoint, sourceOffset(ev, ev.duration));
       const res = splitAtSourceTimes(live.current.project, ev.id, times);
       if (res.cuts) setProject(res.project);
-      setStatus(res.cuts ? `${res.cuts} cambio(s) de plano: el evento queda dividido en ${res.cuts + 1} partes.` : 'No se han encontrado cambios de plano en el evento.');
+      setStatus(res.cuts ? tx('{cuts} cambio(s) de plano: el evento queda dividido en {n} partes.', { cuts: res.cuts, n: res.cuts + 1 }) : tx('No se han encontrado cambios de plano en el evento.'));
     } catch (err) {
-      setStatus(`No se pudieron detectar las escenas: ${err.message}`);
+      setStatus(tx('No se pudieron detectar las escenas: {message}', { message: err.message }));
     } finally {
       off();
     }
@@ -652,13 +653,13 @@ export default function App() {
     const frame = Math.min(Math.floor(t * fps + 1e-6), Math.max(0, Math.ceil(projectDuration(p) * fps) - 1));
     if (projectDuration(p) <= 0) return;
     const name = `${baseName(file)} ${String(frame).padStart(5, '0')}.png`;
-    const target = await api.pickRenderPath(name, { name: 'Imagen PNG', ext: 'png' });
+    const target = await api.pickRenderPath(name, { name: tx('Imagen PNG'), ext: 'png' });
     if (!target) return;
-    setStatus('Exportando el fotograma…');
+    setStatus(tx('Exportando el fotograma…'));
     const size = { width: p.settings.width, height: p.settings.height };
     const range = { start: frame / fps, end: (frame + 1) / fps };
     const res = await api.startRender(renderPayload(p, size, range), { ...size, fps, format: 'png' }, target);
-    setStatus(res.ok ? `Fotograma ${frame} guardado en ${target}` : `No se pudo exportar el fotograma: ${res.error || ''}`);
+    setStatus(res.ok ? tx('Fotograma {frame} guardado en {target}', { frame, target }) : tx('No se pudo exportar el fotograma: {n}', { n: res.error || '' }));
   }, []);
 
   const deleteSelected = useCallback(() => {
@@ -678,17 +679,17 @@ export default function App() {
     const res = addMarker(live.current.project, quantize(live.current.time, live.current.project.settings.fps));
     if (!res.marker) return;
     setProject(res.project);
-    setStatus(`Marcador ${res.marker.number} añadido${res.marker.number <= 9 ? ` (tecla ${res.marker.number} para volver a él)` : ''}. Doble clic en él para ponerle nombre.`);
+    setStatus(tx('Marcador {number} añadido{n}. Doble clic en él para ponerle nombre.', { number: res.marker.number, n: res.marker.number <= 9 ? tx(' (tecla {number} para volver a él)', { number: res.marker.number }) : '' }));
   }, [setProject]);
   const insertRegion = useCallback(() => {
     const r = live.current.region;
     if (!r) {
-      setStatus('Para crear una región, primero marca una selección de tiempo en la barra de arriba de la regla.');
+      setStatus(tx('Para crear una región, primero marca una selección de tiempo en la barra de arriba de la regla.'));
       return;
     }
     const res = addRegion(live.current.project, r.start, r.end);
     setProject(res.project);
-    setStatus(`Región ${res.region.number} añadida. Doble clic en ella para ponerle nombre.`);
+    setStatus(tx('Región {number} añadida. Doble clic en ella para ponerle nombre.', { number: res.region.number }));
   }, [setProject]);
   const goToMarker = useCallback((number) => {
     const m = (live.current.project.markers || []).find((x) => x.number === number);
@@ -703,7 +704,7 @@ export default function App() {
     setSelection([]);
     setRegion(null);
     seek(r.start);
-    setStatus('Tramo eliminado: lo de detrás se ha adelantado para cerrar el hueco.');
+    setStatus(tx('Tramo eliminado: lo de detrás se ha adelantado para cerrar el hueco.'));
   }, [seek, setProject]);
 
   const selectAll = useCallback(() => setSelection(live.current.project.events.map((e) => e.id)), []);
@@ -742,7 +743,7 @@ export default function App() {
     setPlaying(false);
     const recorder = new Recorder();
     recorderRef.current = recorder;
-    setStatus('Abriendo el micrófono…');
+    setStatus(tx('Abriendo el micrófono…'));
     try {
       await recorder.prepare(loadRecordSettings(), live.current.projectPath);
     } catch (err) {
@@ -757,7 +758,7 @@ export default function App() {
     if (!trackId) {
       const res = addTrack(p, 'audio');
       trackId = res.track.id;
-      setProject({ ...res.project, tracks: res.project.tracks.map((tr) => (tr.id === trackId ? { ...tr, name: 'Voz en off' } : tr)) });
+      setProject({ ...res.project, tracks: res.project.tracks.map((tr) => (tr.id === trackId ? { ...tr, name: tx('Voz en off') } : tr)) });
       setArmedTrackId(trackId);
     }
     const from = r && (t < r.start || t >= r.end - 1e-6) ? r.start : t;
@@ -765,7 +766,7 @@ export default function App() {
     setTime(from);
     setRecording({ trackId, start: from });
     setPlaying(true);
-    setStatus(`● Grabando${recorder.label ? ` con «${recorder.label}»` : ''}… Espacio o Ctrl+R para terminar.`);
+    setStatus(tx('● Grabando{n}… Espacio o Ctrl+R para terminar.', { n: recorder.label ? tx(' con «{label}»', { label: recorder.label }) : '' }));
   }, [setProject]);
 
   // Al parar la reproducción (por cualquier vía) mientras se graba: se cierra el archivo, se importa y se
@@ -776,18 +777,18 @@ export default function App() {
     setRecording(null);
     recorderRef.current = null;
     if (!recorder || !rec) return;
-    setStatus('Guardando la grabación…');
+    setStatus(tx('Guardando la grabación…'));
     let result;
     let media;
     try {
       result = await recorder.stop();
       if (!result) {
-        setStatus('No se ha grabado nada.');
+        setStatus(tx('No se ha grabado nada.'));
         return;
       }
       media = { id: uid('m'), ...noteAnalyzed(await api.analyzeMedia(result.path)) };
     } catch (err) {
-      setStatus(`No se pudo guardar la grabación: ${err.message}`);
+      setStatus(tx('No se pudo guardar la grabación: {message}', { message: err.message }));
       return;
     }
     const skip = Math.min(result.latency, Math.max(0, media.duration - MIN_EVENT));
@@ -804,7 +805,7 @@ export default function App() {
     const ev = { id: uid('e'), trackId, mediaId: media.id, start: rec.start, inPoint: skip, duration: length, groupId: null, ...EVENT_DEFAULTS };
     setProject({ ...next, events: [...next.events, ev] });
     setSelection([ev.id]);
-    setStatus(`Grabación guardada en ${result.path}${busy ? ' (en una pista nueva: la pista armada ya tenía eventos en ese tramo)' : ''}`);
+    setStatus(tx('Grabación guardada en {path}{n}', { path: result.path, n: busy ? tx(' (en una pista nueva: la pista armada ya tenía eventos en ese tramo)') : '' }));
   }, [noteAnalyzed, setProject]);
   useEffect(() => {
     if (!playing && live.current.recording) finishRecording();
@@ -892,7 +893,7 @@ export default function App() {
     const clip = copyEvents(live.current.project, ids);
     if (!clip) return false;
     setClipboard(clip);
-    setStatus(`${clip.events.length} ${clip.events.length === 1 ? 'evento copiado' : 'eventos copiados'}`);
+    setStatus(`${clip.events.length} ${clip.events.length === 1 ? tx('evento copiado') : tx('eventos copiados')}`);
     return true;
   }, []);
 
@@ -913,7 +914,7 @@ export default function App() {
     if (!clip) return;
     const res = pasteEvents(live.current.project, clip, at, trackId);
     if (!res.ids.length) {
-      setStatus('No se puede pegar: los medios de lo copiado ya no están en el proyecto.');
+      setStatus(tx('No se puede pegar: los medios de lo copiado ya no están en el proyecto.'));
       return;
     }
     // En cascada, lo pegado se inserta: lo que había desde ese punto se aparta lo que dura lo pegado.
@@ -943,21 +944,21 @@ export default function App() {
       const { mark } = info;
       const isRegion = info.kind === 'region';
       items = [
-        { label: 'Cambiar el nombre…', action: info.rename },
+        { label: tx('Cambiar el nombre…'), action: info.rename },
         ...(isRegion
           ? [
-            { label: 'Seleccionar la región', action: () => setRegion({ start: mark.start, end: mark.end }) },
+            { label: tx('Seleccionar la región'), action: () => setRegion({ start: mark.start, end: mark.end }) },
             {
-              label: 'Renderizar la región…',
+              label: tx('Renderizar la región…'),
               action: () => {
                 setRegion({ start: mark.start, end: mark.end });
                 openRender();
               },
             },
           ]
-          : [{ label: 'Ir al marcador', shortcut: mark.number <= 9 ? String(mark.number) : undefined, action: () => seek(mark.time) }]),
+          : [{ label: tx('Ir al marcador'), shortcut: mark.number <= 9 ? String(mark.number) : undefined, action: () => seek(mark.time) }]),
         'separator',
-        { label: isRegion ? 'Eliminar la región' : 'Eliminar el marcador', action: () => setProject((cur) => deleteMark(cur, info.kind, mark.id)) },
+        { label: isRegion ? tx('Eliminar la región') : tx('Eliminar el marcador'), action: () => setProject((cur) => deleteMark(cur, info.kind, mark.id)) },
       ];
     } else if (info.kind === 'event') {
       const ids = info.selection;
@@ -973,7 +974,7 @@ export default function App() {
       const curveItems = zone
         ? [
           ...FADE_CURVES.map((c) => ({
-            label: `${zone === 'in' ? 'Fundido de entrada' : 'Fundido de salida'}: ${c.label.toLowerCase()}`,
+            label: `${zone === 'in' ? tx('Fundido de entrada') : tx('Fundido de salida')}: ${c.label.toLowerCase()}`,
             checked: (info.event[field] || 'linear') === c.id,
             action: () => setProject((cur) => {
               const ev = info.event;
@@ -992,7 +993,7 @@ export default function App() {
           // Transición del fundido hacia la pista de debajo (se pone soltando una transición sobre el fundido).
           ...(isVideo && info.event[zone === 'in' ? 'fadeInTransition' : 'fadeOutTransition']
             ? [{
-              label: `Quitar la transición (${transitionLabel(info.event[zone === 'in' ? 'fadeInTransition' : 'fadeOutTransition'])})`,
+              label: tx('Quitar la transición ({transitionLabel})', { transitionLabel: transitionLabel(info.event[zone === 'in' ? 'fadeInTransition' : 'fadeOutTransition']) }),
               action: () => setProject((cur) => ({
                 ...cur,
                 events: cur.events.map((x) => (x.id === info.event.id
@@ -1006,58 +1007,58 @@ export default function App() {
         : [];
       items = [
         ...curveItems,
-        { label: 'Cortar', shortcut: 'Ctrl+X', action: () => cutIds(ids) },
-        { label: 'Copiar', shortcut: 'Ctrl+C', action: () => copyIds(ids) },
-        { label: 'Pegar', shortcut: 'Ctrl+V', action: () => paste(), disabled: !clip },
-        { label: 'Eliminar', shortcut: 'Supr', action: () => deleteIds(ids) },
+        { label: tx('Cortar'), shortcut: tx('Ctrl+X'), action: () => cutIds(ids) },
+        { label: tx('Copiar'), shortcut: tx('Ctrl+C'), action: () => copyIds(ids) },
+        { label: tx('Pegar'), shortcut: tx('Ctrl+V'), action: () => paste(), disabled: !clip },
+        { label: tx('Eliminar'), shortcut: tx('Supr'), action: () => deleteIds(ids) },
         'separator',
         {
-          label: 'Dividir en el cursor',
+          label: tx('Dividir en el cursor'),
           shortcut: 'S',
           action: () => setProject((cur) => splitEvents(cur, live.current.time, ids)),
           disabled: !selected.some((e) => e.start < t && t < e.start + e.duration),
         },
         ...(media && !media.isImage && !isText(media) && !media.missing
           ? [{
-            label: info.event.reversed ? 'Quitar la inversión (reproducir hacia delante)' : 'Invertir (reproducir hacia atrás)',
+            label: info.event.reversed ? tx('Quitar la inversión (reproducir hacia delante)') : tx('Invertir (reproducir hacia atrás)'),
             action: () => reverseEvent(info.event),
             disabled: !!(info.event.reversed && info.event.stabilized),
           }]
           : []),
         ...(!isVideo && media && !media.missing && media.hasAudio
           ? info.event.denoised
-            ? [{ label: 'Quitar la reducción de ruido', action: () => denoiseEvent(info.event, null) }]
+            ? [{ label: tx('Quitar la reducción de ruido'), action: () => denoiseEvent(info.event, null) }]
             : [
-              { label: 'Reducir el ruido de fondo', action: () => denoiseEvent(info.event, 'light') },
-              { label: 'Reducir mucho el ruido de fondo', action: () => denoiseEvent(info.event, 'strong') },
+              { label: tx('Reducir el ruido de fondo'), action: () => denoiseEvent(info.event, 'light') },
+              { label: tx('Reducir mucho el ruido de fondo'), action: () => denoiseEvent(info.event, 'strong') },
             ]
           : []),
         ...(isVideo && media && !media.isImage && !isText(media) && !media.missing
           ? info.event.stabilized
-            ? [{ label: 'Quitar la estabilización', action: () => stabilizeEvent(info.event, null) }]
+            ? [{ label: tx('Quitar la estabilización'), action: () => stabilizeEvent(info.event, null) }]
             : [
-              { label: 'Estabilizar', action: () => stabilizeEvent(info.event, 15) },
-              { label: 'Estabilizar mucho (más zoom)', action: () => stabilizeEvent(info.event, 40) },
+              { label: tx('Estabilizar'), action: () => stabilizeEvent(info.event, 15) },
+              { label: tx('Estabilizar mucho (más zoom)'), action: () => stabilizeEvent(info.event, 40) },
             ]
           : []),
         ...(isVideo && media && !media.isImage
           ? [
-            { label: 'Congelar fotograma en el cursor', shortcut: 'Ctrl+Mayús+F', action: freezeFrame, disabled: !(info.event.start <= t && t < info.event.start + info.event.duration) },
-            { label: 'Detectar escenas y dividir', action: () => detectScenes(info.event) },
+            { label: tx('Congelar fotograma en el cursor'), shortcut: tx('Ctrl+Mayús+F'), action: freezeFrame, disabled: !(info.event.start <= t && t < info.event.start + info.event.duration) },
+            { label: tx('Detectar escenas y dividir'), action: () => detectScenes(info.event) },
           ]
           : []),
         'separator',
-        { label: 'Agrupar', shortcut: 'G', action: () => groupIds(ids), disabled: ids.length < 2 },
-        { label: 'Quitar del grupo', shortcut: 'U', action: () => ungroupIds(ids), disabled: !selected.some((e) => e.groupId) },
+        { label: tx('Agrupar'), shortcut: 'G', action: () => groupIds(ids), disabled: ids.length < 2 },
+        { label: tx('Quitar del grupo'), shortcut: 'U', action: () => ungroupIds(ids), disabled: !selected.some((e) => e.groupId) },
         'separator',
         {
-          label: 'Velocidad normal (100 %)',
+          label: tx('Velocidad normal (100 %)'),
           action: () => setProject((cur) => updateEvents(cur, ids, (e) => ({ duration: sourceOffset(e, e.duration), rate: 1, speed: null }))),
           disabled: !selected.some((e) => (e.rate || 1) !== 1 || hasRamp(e)),
         },
         {
           // Rampa: envolvente de velocidad en el evento y su grupo, que empieza plana (100 %) con un punto en cada extremo.
-          label: 'Rampa de velocidad (envolvente)',
+          label: tx('Rampa de velocidad (envolvente)'),
           checked: hasRamp(info.event),
           disabled: !media || media.isImage,
           action: () => setProject((cur) => {
@@ -1073,64 +1074,64 @@ export default function App() {
           }),
         },
         {
-          label: 'Quitar fundidos',
+          label: tx('Quitar fundidos'),
           action: () => setProject((cur) => updateEvents(cur, ids, { fadeIn: 0, fadeOut: 0 })),
           disabled: !selected.some((e) => e.fadeIn > 0 || e.fadeOut > 0),
         },
         ...(audio.length
           ? [{
-            label: 'Volumen del evento a 0 dB',
+            label: tx('Volumen del evento a 0 dB'),
             action: () => setProject((cur) => updateEvents(cur, audio.map((e) => e.id), { volume: 0 })),
             disabled: !audio.some((e) => (e.volume ?? 0) !== 0),
           }]
           : []),
         ...(isVideo && info.event.transition
           ? [{
-            label: 'Volver a disolución cruzada',
+            label: tx('Volver a disolución cruzada'),
             action: () => setProject((cur) => updateEvents(cur, [info.event.id], { transition: null })),
           }]
           : []),
         'separator',
-        ...(isText(media) ? [{ label: 'Editar texto…', action: () => openTextEditor(media.id) }] : []),
+        ...(isText(media) ? [{ label: tx('Editar texto…'), action: () => openTextEditor(media.id) }] : []),
         ...(isVideo
           ? [
-            { label: 'Panorámica/recorte del evento…', action: () => openPan(info.event.id) },
+            { label: tx('Panorámica/recorte del evento…'), action: () => openPan(info.event.id) },
             {
-              label: 'Quitar panorámica y recorte',
+              label: tx('Quitar panorámica y recorte'),
               action: () => setProject((cur) => updateEvents(cur, ids, { pan: null })),
               disabled: !selected.some((e) => e.pan),
             },
           ]
           : []),
-        { label: 'Efectos del evento…', action: () => { setPanEventId(null); setTextMediaId(null); setFxEventId(info.event.id); } },
+        { label: tx('Efectos del evento…'), action: () => { setPanEventId(null); setTextMediaId(null); setFxEventId(info.event.id); } },
         {
-          label: 'Quitar efectos',
+          label: tx('Quitar efectos'),
           action: () => setProject((cur) => updateEvents(cur, ids, { effects: [] })),
           disabled: !selected.some((e) => e.effects?.length),
         },
         'separator',
         {
-          label: 'Seleccionar el tramo del evento',
+          label: tx('Seleccionar el tramo del evento'),
           action: () => setRegion({ start: info.event.start, end: info.event.start + info.event.duration }),
         },
         {
-          label: 'Abrir la ubicación del archivo',
+          label: tx('Abrir la ubicación del archivo'),
           action: () => api.revealFile(media.path),
           disabled: !media || media.missing || isText(media),
         },
       ];
     } else {
       items = [
-        { label: 'Pegar aquí', action: () => paste(info.time, info.trackId), disabled: !clip },
-        { label: 'Pegar en el cursor', shortcut: 'Ctrl+V', action: () => paste(), disabled: !clip },
+        { label: tx('Pegar aquí'), action: () => paste(info.time, info.trackId), disabled: !clip },
+        { label: tx('Pegar en el cursor'), shortcut: tx('Ctrl+V'), action: () => paste(), disabled: !clip },
         'separator',
-        { label: 'Seleccionar todo', shortcut: 'Ctrl+A', action: selectAll },
-        { label: 'Quitar la selección de tiempo', shortcut: 'Esc', action: () => setRegion(null), disabled: !live.current.region },
-        { label: 'Eliminar el tramo seleccionado y cerrar el hueco', shortcut: 'Ctrl+Supr', action: deleteRegion, disabled: !live.current.region },
+        { label: tx('Seleccionar todo'), shortcut: tx('Ctrl+A'), action: selectAll },
+        { label: tx('Quitar la selección de tiempo'), shortcut: tx('Esc'), action: () => setRegion(null), disabled: !live.current.region },
+        { label: tx('Eliminar el tramo seleccionado y cerrar el hueco'), shortcut: tx('Ctrl+Supr'), action: deleteRegion, disabled: !live.current.region },
         'separator',
-        { label: 'Insertar medio de texto', action: insertText },
-        { label: 'Insertar pista de video', shortcut: 'Ctrl+Mayús+Q', action: () => insertTrack('video') },
-        { label: 'Insertar pista de audio', shortcut: 'Ctrl+Q', action: () => insertTrack('audio') },
+        { label: tx('Insertar medio de texto'), action: insertText },
+        { label: tx('Insertar pista de video'), shortcut: tx('Ctrl+Mayús+Q'), action: () => insertTrack('video') },
+        { label: tx('Insertar pista de audio'), shortcut: tx('Ctrl+Q'), action: () => insertTrack('audio') },
       ];
     }
     setContextMenu({ x: info.x, y: info.y, items });
@@ -1140,7 +1141,12 @@ export default function App() {
 
   // ---- Proyecto ----
 
-  const confirmDiscard = () => !live.current.dirty || window.confirm('Hay cambios sin guardar. ¿Descartarlos?');
+  // Cambiar el idioma reinicia la aplicación (el cierre pregunta si guardar los cambios, como siempre).
+  const changeLanguage = (id) => {
+    if (id === lang) return;
+    if (window.confirm(tx('Cortex Studio se reiniciará para cambiar el idioma. ¿Continuar?'))) api.setLanguage(id);
+  };
+  const confirmDiscard = () => !live.current.dirty || window.confirm(tx('Hay cambios sin guardar. ¿Descartarlos?'));
 
   const newProject = useCallback(() => {
     if (confirmDiscard()) setProjectDialog('new');
@@ -1188,11 +1194,11 @@ export default function App() {
       if (!saved) return false;
       setProjectPath(saved);
       setSavedProject(current);
-      setStatus(`Proyecto guardado en ${saved}`);
+      setStatus(tx('Proyecto guardado en {saved}', { saved }));
       api.clearAutosave(); // guardado de verdad: la copia de recuperación ya no hace falta
       return true;
     } catch (err) {
-      window.alert(`No se pudo guardar: ${err.message}`);
+      window.alert(tx('No se pudo guardar: {message}', { message: err.message }));
       return false;
     }
   }, [projectPath]);
@@ -1201,12 +1207,12 @@ export default function App() {
   // completo) y sigue trabajando con esa copia, como «Guardar como» con «Copiar medios» de VEGAS.
   const collect = useCallback(async () => {
     const { project: current, projectPath: file } = live.current;
-    const off = api.onCollectProgress(({ name, percent }) => setStatus(`Recopilando medios: ${percent} % (${name})…`));
+    const off = api.onCollectProgress(({ name, percent }) => setStatus(tx('Recopilando medios: {percent} % ({name})…', { percent, name })));
     let res;
     try {
       res = await api.collectProject(serializeProject(current, viewState()), file);
     } catch (err) {
-      window.alert(`No se pudieron recopilar los medios: ${err.message}`);
+      window.alert(tx('No se pudieron recopilar los medios: {message}', { message: err.message }));
       return;
     } finally {
       off();
@@ -1226,14 +1232,14 @@ export default function App() {
     setProxies(proxyRef.current.ready);
     setStrips(remap);
     api.clearAutosave();
-    setStatus(`Proyecto y medios copiados en ${res.path}${res.missing.length ? ` (faltan ${res.missing.length} archivo(s) que no se encontraron)` : ''}. Ahora trabajas con esa copia.`);
+    setStatus(tx('Proyecto y medios copiados en {path}{n}. Ahora trabajas con esa copia.', { path: res.path, n: res.missing.length ? tx(' (faltan {missing} archivo(s) que no se encontraron)', { missing: res.missing.length }) : '' }));
   }, [history]);
 
   // Carga un proyecto leído de disco (o una copia de recuperación: recovered = true, queda como modificado
   // y, al guardar, se guarda en su archivo de siempre).
   const loadData = useCallback(async (data, filePath, recovered = false) => {
     if (data?.format !== 'cortex-studio' || !Array.isArray(data.tracks) || !Array.isArray(data.events)) {
-      window.alert('El archivo no es un proyecto válido de Cortex Studio.');
+      window.alert(tx('El archivo no es un proyecto válido de Cortex Studio.'));
       return;
     }
     setPlaying(false);
@@ -1244,7 +1250,7 @@ export default function App() {
         media.push(withTextThumb({ ...newTextMedia(m.text), id: m.id }, aspect));
         continue;
       }
-      setStatus(`Cargando ${m.name}…`);
+      setStatus(tx('Cargando {name}…', { name: m.name }));
       try {
         media.push({ ...noteAnalyzed(await api.analyzeMedia(m.path)), id: m.id });
       } catch {
@@ -1263,8 +1269,8 @@ export default function App() {
     setPanEventId(null);
     setTime(Math.min(view.cursor, projectDuration(loaded)));
     const missing = media.filter((m) => m.missing).length;
-    const what = recovered ? 'Proyecto recuperado (aún sin guardar)' : 'Proyecto abierto';
-    setStatus(missing ? `${what}. Faltan ${missing} archivo(s) de medios.` : what);
+    const what = recovered ? tx('Proyecto recuperado (aún sin guardar)') : tx('Proyecto abierto');
+    setStatus(missing ? tx('{what}. Faltan {missing} archivo(s) de medios.', { what, missing }) : what);
   }, [history, noteAnalyzed]);
 
   const openRecent = useCallback(async (filePath) => {
@@ -1272,7 +1278,7 @@ export default function App() {
     try {
       result = await api.openProjectPath(filePath);
     } catch (err) {
-      window.alert(`No se pudo abrir el proyecto: ${String(err.message).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`);
+      window.alert(tx('No se pudo abrir el proyecto: {replace}', { replace: String(err.message).replace(/^Error invoking remote method '[^']+': (Error: )?/, '') }));
       setRecents(await api.recentProjects());
       return;
     }
@@ -1286,7 +1292,7 @@ export default function App() {
     try {
       result = await api.openProject();
     } catch (err) {
-      window.alert(`No se pudo abrir el proyecto: ${err.message}`);
+      window.alert(tx('No se pudo abrir el proyecto: {message}', { message: err.message }));
       return;
     }
     if (result) await loadData(result.data, result.path);
@@ -1307,14 +1313,10 @@ export default function App() {
   useEffect(() => {
     api.checkAutosave().then((rec) => {
       if (!rec?.data) return;
-      const when = new Date(rec.savedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+      const when = new Date(rec.savedAt).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
       const ok = window.confirm(
-        `Cortex Studio no se cerró correctamente la última vez.
-
-Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
-          `guardada automáticamente el ${when}.
-
-¿Quieres recuperarla?`,
+        tx('Cortex Studio no se cerró correctamente la última vez.\n\nHay una copia de recuperación de «{baseName}» ', { baseName: baseName(rec.projectPath) }) +
+          tx('guardada automáticamente el {when}.\n\n¿Quieres recuperarla?', { when }),
       );
       if (ok) {
         setProjectDialog(null);
@@ -1345,15 +1347,15 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
     return api.onUpdateState((state) => {
       setUpdate(state);
       if (state.status === 'ready') setUpdateHidden(false);
-      if (state.manual && state.status === 'latest') setStatus('Ya tienes la última versión de Cortex Studio.');
-      if (state.manual && state.status === 'error') setStatus(`No se pudo buscar actualizaciones: ${state.message}`);
+      if (state.manual && state.status === 'latest') setStatus(tx('Ya tienes la última versión de Cortex Studio.'));
+      if (state.manual && state.status === 'error') setStatus(tx('No se pudo buscar actualizaciones: {message}', { message: state.message }));
     });
   }, []);
   const checkForUpdates = useCallback(async () => {
-    setStatus('Buscando actualizaciones…');
+    setStatus(tx('Buscando actualizaciones…'));
     const state = await api.checkForUpdates();
-    if (state.status === 'unavailable') setStatus('Las actualizaciones automáticas solo funcionan en la aplicación instalada.');
-    else if (state.status === 'downloading') setStatus(`Descargando la versión ${state.version}…`);
+    if (state.status === 'unavailable') setStatus(tx('Las actualizaciones automáticas solo funcionan en la aplicación instalada.'));
+    else if (state.status === 'downloading') setStatus(tx('Descargando la versión {version}…', { version: state.version }));
     else if (state.status === 'ready') setUpdateHidden(false);
   }, []);
 
@@ -1364,87 +1366,87 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
 
   const menus = [
     {
-      label: 'Archivo',
+      label: tx('Archivo'),
       items: [
-        { label: 'Nuevo…', shortcut: 'Ctrl+N', action: newProject },
-        { label: 'Abrir…', shortcut: 'Ctrl+O', action: open },
-        { label: 'Proyectos recientes…', action: showRecent },
-        { label: 'Guardar', shortcut: 'Ctrl+S', action: () => save(false) },
-        { label: 'Guardar como…', shortcut: 'Ctrl+Mayús+S', action: () => save(true) },
-        { label: 'Recopilar medios y guardar en una carpeta…', action: collect },
+        { label: tx('Nuevo…'), shortcut: tx('Ctrl+N'), action: newProject },
+        { label: tx('Abrir…'), shortcut: tx('Ctrl+O'), action: open },
+        { label: tx('Proyectos recientes…'), action: showRecent },
+        { label: tx('Guardar'), shortcut: tx('Ctrl+S'), action: () => save(false) },
+        { label: tx('Guardar como…'), shortcut: tx('Ctrl+Mayús+S'), action: () => save(true) },
+        { label: tx('Recopilar medios y guardar en una carpeta…'), action: collect },
         'separator',
-        { label: 'Importar medios…', shortcut: 'Ctrl+I', action: importDialog },
-        { label: 'Descargar de YouTube…', shortcut: 'Ctrl+Mayús+D', action: () => setYoutubeOpen(true) },
-        { label: `Comprimir videos…${compressRunning ? ' (comprimiendo)' : ''}`, shortcut: 'Ctrl+Mayús+C', action: () => setCompressOpen(true) },
-        { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
-        { label: `Cola de render…${queue.length ? ` (${queue.filter((j) => j.status === 'waiting' || j.status === 'rendering').length})` : ''}`, action: () => setQueueOpen(true) },
-        { label: 'Exportar el fotograma como imagen…', shortcut: 'Ctrl+Mayús+E', action: exportFrame, disabled: duration <= 0 },
+        { label: tx('Importar medios…'), shortcut: tx('Ctrl+I'), action: importDialog },
+        { label: tx('Descargar de YouTube…'), shortcut: tx('Ctrl+Mayús+D'), action: () => setYoutubeOpen(true) },
+        { label: tx('Comprimir videos…{n}', { n: compressRunning ? tx(' (comprimiendo)') : '' }), shortcut: tx('Ctrl+Mayús+C'), action: () => setCompressOpen(true) },
+        { label: tx('Renderizar como…'), shortcut: tx('Ctrl+M'), action: openRender, disabled: duration <= 0 },
+        { label: tx('Cola de render…{n}', { n: queue.length ? ` (${queue.filter((j) => j.status === 'waiting' || j.status === 'rendering').length})` : '' }), action: () => setQueueOpen(true) },
+        { label: tx('Exportar el fotograma como imagen…'), shortcut: tx('Ctrl+Mayús+E'), action: exportFrame, disabled: duration <= 0 },
         'separator',
-        { label: 'Propiedades del proyecto…', shortcut: 'Alt+Intro', action: openProperties },
+        { label: tx('Propiedades del proyecto…'), shortcut: tx('Alt+Intro'), action: openProperties },
         'separator',
-        { label: 'Salir', action: () => window.close() },
+        { label: tx('Salir'), action: () => window.close() },
       ],
     },
     {
-      label: 'Edición',
+      label: tx('Edición'),
       items: [
-        { label: 'Deshacer', shortcut: 'Ctrl+Z', action: history.undo, disabled: !history.canUndo },
-        { label: 'Rehacer', shortcut: 'Ctrl+Y', action: history.redo, disabled: !history.canRedo },
+        { label: tx('Deshacer'), shortcut: tx('Ctrl+Z'), action: history.undo, disabled: !history.canUndo },
+        { label: tx('Rehacer'), shortcut: tx('Ctrl+Y'), action: history.redo, disabled: !history.canRedo },
         'separator',
-        { label: 'Cortar', shortcut: 'Ctrl+X', action: () => cutIds(selection), disabled: !selection.length },
-        { label: 'Copiar', shortcut: 'Ctrl+C', action: () => copyIds(selection), disabled: !selection.length },
-        { label: 'Pegar', shortcut: 'Ctrl+V', action: () => paste(), disabled: !clipboard },
+        { label: tx('Cortar'), shortcut: tx('Ctrl+X'), action: () => cutIds(selection), disabled: !selection.length },
+        { label: tx('Copiar'), shortcut: tx('Ctrl+C'), action: () => copyIds(selection), disabled: !selection.length },
+        { label: tx('Pegar'), shortcut: tx('Ctrl+V'), action: () => paste(), disabled: !clipboard },
         'separator',
-        { label: region ? 'Dividir en los extremos de la selección' : 'Dividir', shortcut: 'S', action: split },
-        { label: 'Recortar el principio hasta el cursor', shortcut: 'Alt+[', action: () => trimCursor('start') },
-        { label: 'Recortar el final hasta el cursor', shortcut: 'Alt+]', action: () => trimCursor('end') },
-        { label: 'Congelar fotograma en el cursor', shortcut: 'Ctrl+Mayús+F', action: freezeFrame, disabled: duration <= 0 },
-        { label: 'Eliminar', shortcut: 'Supr', action: deleteSelected, disabled: !selection.length },
-        { label: 'Seleccionar todo', shortcut: 'Ctrl+A', action: selectAll },
+        { label: region ? tx('Dividir en los extremos de la selección') : tx('Dividir'), shortcut: 'S', action: split },
+        { label: tx('Recortar el principio hasta el cursor'), shortcut: tx('Alt+['), action: () => trimCursor('start') },
+        { label: tx('Recortar el final hasta el cursor'), shortcut: tx('Alt+]'), action: () => trimCursor('end') },
+        { label: tx('Congelar fotograma en el cursor'), shortcut: tx('Ctrl+Mayús+F'), action: freezeFrame, disabled: duration <= 0 },
+        { label: tx('Eliminar'), shortcut: tx('Supr'), action: deleteSelected, disabled: !selection.length },
+        { label: tx('Seleccionar todo'), shortcut: tx('Ctrl+A'), action: selectAll },
         'separator',
-        { label: 'Agrupar', shortcut: 'G', action: () => groupIds(selection), disabled: selection.length < 2 },
-        { label: 'Quitar del grupo', shortcut: 'U', action: () => ungroupIds(selection), disabled: !selection.length },
+        { label: tx('Agrupar'), shortcut: 'G', action: () => groupIds(selection), disabled: selection.length < 2 },
+        { label: tx('Quitar del grupo'), shortcut: 'U', action: () => ungroupIds(selection), disabled: !selection.length },
         'separator',
-        { label: 'Ajuste activado', shortcut: 'F8', action: () => setSnap((v) => !v), checked: snap },
-        { label: 'Edición en cascada', shortcut: 'Ctrl+L', action: toggleRipple, checked: !!ripple },
-        { label: '    Solo en las pistas afectadas', action: () => chooseRippleMode('tracks'), checked: rippleMode === 'tracks' },
-        { label: '    En todas las pistas', action: () => chooseRippleMode('all'), checked: rippleMode === 'all' },
-        { label: 'Reproducción en bucle', shortcut: 'Q', action: () => setLoop((v) => !v), checked: loop },
-        { label: 'Quitar la selección de tiempo', shortcut: 'Esc', action: () => setRegion(null), disabled: !region },
-        { label: 'Eliminar el tramo seleccionado y cerrar el hueco', shortcut: 'Ctrl+Supr', action: deleteRegion, disabled: !region },
+        { label: tx('Ajuste activado'), shortcut: 'F8', action: () => setSnap((v) => !v), checked: snap },
+        { label: tx('Edición en cascada'), shortcut: tx('Ctrl+L'), action: toggleRipple, checked: !!ripple },
+        { label: tx('    Solo en las pistas afectadas'), action: () => chooseRippleMode('tracks'), checked: rippleMode === 'tracks' },
+        { label: tx('    En todas las pistas'), action: () => chooseRippleMode('all'), checked: rippleMode === 'all' },
+        { label: tx('Reproducción en bucle'), shortcut: 'Q', action: () => setLoop((v) => !v), checked: loop },
+        { label: tx('Quitar la selección de tiempo'), shortcut: tx('Esc'), action: () => setRegion(null), disabled: !region },
+        { label: tx('Eliminar el tramo seleccionado y cerrar el hueco'), shortcut: tx('Ctrl+Supr'), action: deleteRegion, disabled: !region },
       ],
     },
     {
-      label: 'Ver',
+      label: tx('Ver'),
       items: [
-        { label: 'Acercar', shortcut: '↑', action: () => zoom(1.25) },
-        { label: 'Alejar', shortcut: '↓', action: () => zoom(0.8) },
-        { label: 'Ajustar el proyecto a la ventana', action: () => timelineRef.current?.zoomToFit() },
+        { label: tx('Acercar'), shortcut: '↑', action: () => zoom(1.25) },
+        { label: tx('Alejar'), shortcut: '↓', action: () => zoom(0.8) },
+        { label: tx('Ajustar el proyecto a la ventana'), action: () => timelineRef.current?.zoomToFit() },
         'separator',
-        { label: 'Pantalla completa', shortcut: 'F11', action: api.toggleFullScreen, checked: fullScreen },
-        { label: 'Vista previa a pantalla completa', shortcut: 'Alt+Mayús+4', action: togglePreviewFull },
+        { label: tx('Pantalla completa'), shortcut: 'F11', action: api.toggleFullScreen, checked: fullScreen },
+        { label: tx('Vista previa a pantalla completa'), shortcut: tx('Alt+Mayús+4'), action: togglePreviewFull },
         'separator',
-        { label: 'Medios del proyecto', shortcut: 'Alt+4', action: () => setLeftTab('media'), checked: leftTab === 'media' },
-        { label: 'Transiciones', shortcut: 'Alt+7', action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
-        { label: 'Efectos de video', shortcut: 'Alt+8', action: () => setLeftTab('effects'), checked: leftTab === 'effects' },
-        { label: 'Efectos de audio', action: () => setLeftTab('audioEffects'), checked: leftTab === 'audioEffects' },
-        { label: 'Subtítulos', action: () => setLeftTab('subtitles'), checked: leftTab === 'subtitles' },
-        { label: 'Monitores de video', shortcut: 'Ctrl+Alt+2', action: () => setLeftTab('scopes'), checked: leftTab === 'scopes' },
+        { label: tx('Medios del proyecto'), shortcut: tx('Alt+4'), action: () => setLeftTab('media'), checked: leftTab === 'media' },
+        { label: tx('Transiciones'), shortcut: tx('Alt+7'), action: () => setLeftTab('transitions'), checked: leftTab === 'transitions' },
+        { label: tx('Efectos de video'), shortcut: tx('Alt+8'), action: () => setLeftTab('effects'), checked: leftTab === 'effects' },
+        { label: tx('Efectos de audio'), action: () => setLeftTab('audioEffects'), checked: leftTab === 'audioEffects' },
+        { label: tx('Subtítulos'), action: () => setLeftTab('subtitles'), checked: leftTab === 'subtitles' },
+        { label: tx('Monitores de video'), shortcut: tx('Ctrl+Alt+2'), action: () => setLeftTab('scopes'), checked: leftTab === 'scopes' },
         'separator',
-        { label: 'Ir al inicio', shortcut: 'Inicio', action: () => seek(0) },
-        { label: 'Ir al final', shortcut: 'Fin', action: () => seek(duration) },
-        { label: 'Punto de edición anterior', shortcut: 'Ctrl+←', action: () => jumpToEdit(-1) },
-        { label: 'Punto de edición siguiente', shortcut: 'Ctrl+→', action: () => jumpToEdit(1) },
-        { label: 'Fotograma anterior', shortcut: '←', action: () => stepFrame(-1) },
-        { label: 'Fotograma siguiente', shortcut: '→', action: () => stepFrame(1) },
+        { label: tx('Ir al inicio'), shortcut: tx('Inicio'), action: () => seek(0) },
+        { label: tx('Ir al final'), shortcut: tx('Fin'), action: () => seek(duration) },
+        { label: tx('Punto de edición anterior'), shortcut: tx('Ctrl+←'), action: () => jumpToEdit(-1) },
+        { label: tx('Punto de edición siguiente'), shortcut: tx('Ctrl+→'), action: () => jumpToEdit(1) },
+        { label: tx('Fotograma anterior'), shortcut: '←', action: () => stepFrame(-1) },
+        { label: tx('Fotograma siguiente'), shortcut: '→', action: () => stepFrame(1) },
       ],
     },
     {
-      label: 'Insertar',
+      label: tx('Insertar'),
       items: [
-        { label: 'Medio de texto', action: insertText },
+        { label: tx('Medio de texto'), action: insertText },
         {
-          label: 'Subtítulo',
+          label: tx('Subtítulo'),
           action: () => {
             const { region: r, time: t } = live.current;
             const res = addCue(live.current.project, r ? r.start : t, r ? r.end : t + 2, '');
@@ -1453,35 +1455,38 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           },
         },
         'separator',
-        { label: 'Marcador', shortcut: 'M', action: insertMarker },
-        { label: 'Región (de la selección de tiempo)', shortcut: 'R', action: insertRegion, disabled: !region },
+        { label: tx('Marcador'), shortcut: 'M', action: insertMarker },
+        { label: tx('Región (de la selección de tiempo)'), shortcut: 'R', action: insertRegion, disabled: !region },
         'separator',
-        { label: 'Pista de video', shortcut: 'Ctrl+Mayús+Q', action: () => insertTrack('video') },
-        { label: 'Pista de audio', shortcut: 'Ctrl+Q', action: () => insertTrack('audio') },
+        { label: tx('Pista de video'), shortcut: tx('Ctrl+Mayús+Q'), action: () => insertTrack('video') },
+        { label: tx('Pista de audio'), shortcut: tx('Ctrl+Q'), action: () => insertTrack('audio') },
       ],
     },
     {
-      label: 'Herramientas',
+      label: tx('Herramientas'),
       items: [
-        { label: recording ? 'Terminar la grabación' : 'Grabar voz en off', shortcut: 'Ctrl+R', action: toggleRecording },
-        { label: 'Opciones de grabación…', action: () => setRecordDialog(true), disabled: !!recording },
+        { label: recording ? tx('Terminar la grabación') : tx('Grabar voz en off'), shortcut: tx('Ctrl+R'), action: toggleRecording },
+        { label: tx('Opciones de grabación…'), action: () => setRecordDialog(true), disabled: !!recording },
         'separator',
-        { label: 'Subtítulos automáticos…', action: () => setTranscribeOpen(true), disabled: duration <= 0 },
+        { label: tx('Subtítulos automáticos…'), action: () => setTranscribeOpen(true), disabled: duration <= 0 },
         'separator',
-        { label: 'Borrar los proxies de la vista previa…', action: clearProxies },
+        { label: tx('Borrar los proxies de la vista previa…'), action: clearProxies },
         'separator',
-        { label: 'Renderizar como…', shortcut: 'Ctrl+M', action: openRender, disabled: duration <= 0 },
-        { label: 'Herramientas de desarrollo', shortcut: 'F12', action: api.toggleDevTools },
+        { label: tx('Renderizar como…'), shortcut: tx('Ctrl+M'), action: openRender, disabled: duration <= 0 },
+        { label: tx('Herramientas de desarrollo'), shortcut: 'F12', action: api.toggleDevTools },
       ],
     },
     {
-      label: 'Ayuda',
+      label: tx('Ayuda'),
       items: [
-        { label: 'Atajos de teclado', shortcut: 'F1', action: () => setShortcutsOpen(true) },
+        { label: tx('Atajos de teclado'), shortcut: 'F1', action: () => setShortcutsOpen(true) },
         'separator',
-        { label: 'Buscar actualizaciones…', action: checkForUpdates },
-        { label: 'Abrir la carpeta de registros', action: () => api.openLogs() },
-        { label: `Cortex Studio ${version}`, disabled: true },
+        { label: tx('Idioma'), disabled: true },
+        ...LANGUAGES.map((l) => ({ label: `    ${l.name}`, checked: l.id === lang, action: () => changeLanguage(l.id) })),
+        'separator',
+        { label: tx('Buscar actualizaciones…'), action: checkForUpdates },
+        { label: tx('Abrir la carpeta de registros'), action: () => api.openLogs() },
+        { label: tx('Cortex Studio {version}', { version }), disabled: true },
       ],
     },
   ];
@@ -1620,12 +1625,12 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
         <Dock
           className="media-dock"
           tabs={[
-            { id: 'media', title: 'Medios del proyecto' },
-            { id: 'transitions', title: 'Transiciones' },
-            { id: 'effects', title: 'Efectos de video' },
-            { id: 'audioEffects', title: 'Efectos de audio' },
-            { id: 'subtitles', title: 'Subtítulos' },
-            { id: 'scopes', title: 'Monitores de video' },
+            { id: 'media', title: tx('Medios del proyecto') },
+            { id: 'transitions', title: tx('Transiciones') },
+            { id: 'effects', title: tx('Efectos de video') },
+            { id: 'audioEffects', title: tx('Efectos de audio') },
+            { id: 'subtitles', title: tx('Subtítulos') },
+            { id: 'scopes', title: tx('Monitores de video') },
           ]}
           active={leftTab}
           onTab={setLeftTab}
@@ -1663,7 +1668,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             />
           )}
         </Dock>
-        <Dock title="Vista previa de video" className="preview-dock">
+        <Dock title={tx('Vista previa de video')} className="preview-dock">
           <Preview
             project={project}
             time={time}
@@ -1734,21 +1739,21 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
       {update.status === 'ready' && !updateHidden && (
         <div className="update-banner">
           <span>
-            La versión <strong>{update.version}</strong> de Cortex Studio está lista para instalar.
+           {tx('La versión')} <strong>{update.version}</strong> {tx('de Cortex Studio está lista para instalar.')}
           </span>
-          <button className="primary" onClick={() => api.installUpdate()}>Reiniciar y actualizar</button>
-          <button onClick={() => setUpdateHidden(true)} title="Se instalará sola al cerrar Cortex Studio">Al cerrar</button>
+          <button className="primary" onClick={() => api.installUpdate()}>{tx('Reiniciar y actualizar')}</button>
+          <button onClick={() => setUpdateHidden(true)} title={tx('Se instalará sola al cerrar Cortex Studio')}>{tx('Al cerrar')}</button>
         </div>
       )}
       <div className="statusbar">
         <span>
-          {status || 'Listo'}
-          {update.status === 'downloading' && ` · Descargando la versión ${update.version} (${Math.round(update.percent || 0)} %)`}
-          {update.status === 'ready' && updateHidden && ` · Versión ${update.version} lista: se instalará al cerrar`}
+          {status || tx('Listo')}
+          {update.status === 'downloading' && tx(' · Descargando la versión {version} ({round} %)', { version: update.version, round: Math.round(update.percent || 0) })}
+          {update.status === 'ready' && updateHidden && tx(' · Versión {version} lista: se instalará al cerrar', { version: update.version })}
           {queueRunning && (() => {
             const current = queue.find((j) => j.status === 'rendering');
             const done = queue.filter((j) => j.status === 'done').length;
-            return ` · Cola de render: ${done + 1}/${queue.length}${current ? ` (${Math.floor(current.progress * 100)} %)` : ''}`;
+            return tx(' · Cola de render: {n}/{length}{n2}', { n: done + 1, length: queue.length, n2: current ? ` (${Math.floor(current.progress * 100)} %)` : '' });
           })()}
           {youtubeJob?.status === 'running' && !youtubeOpen && ` · ${youtubeProgressText(youtubeJob.progress)}`}
           {compressRunning && !compressOpen && (() => {
@@ -1758,8 +1763,9 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
           })()}
         </span>
         <span>
-          {baseName(projectPath)}
-          {dirty ? ' (modificado)' : ''} · {project.events.length} eventos · {project.tracks.length} pistas
+          {baseName(projectPath)}{dirty ? tx(' (modificado)') : ''}
+          {' · '}{tx(project.events.length === 1 ? '{n} evento' : '{n} eventos', { n: project.events.length })}
+          {' · '}{tx(project.tracks.length === 1 ? '{n} pista' : '{n} pistas', { n: project.tracks.length })}
         </span>
       </div>
       {renderOpen && (
@@ -1833,7 +1839,7 @@ Hay una copia de recuperación de «${baseName(rec.projectPath)}» ` +
             try {
               result = await api.openProject();
             } catch (err) {
-              window.alert(`No se pudo abrir el proyecto: ${err.message}`);
+              window.alert(tx('No se pudo abrir el proyecto: {message}', { message: err.message }));
               return;
             }
             if (result) {

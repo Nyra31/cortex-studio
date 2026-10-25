@@ -8,14 +8,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { ffmpegPath, run } = require('./ffmpeg');
+const { tx } = require('./i18n');
 
 const BIN_URL = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip';
 const MODEL_URL = (file) => `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${file}`;
 // Medidos con 13 s de voz en un procesador de 20 hilos: base 1,3 s, small 2,7 s, turbo 9 s.
 const MODELS = [
-  { id: 'base', file: 'ggml-base.bin', mb: 142, name: 'Rápido (base, 142 MB)' },
-  { id: 'small', file: 'ggml-small.bin', mb: 466, name: 'Bueno (small, 466 MB)' },
-  { id: 'turbo', file: 'ggml-large-v3-turbo-q5_0.bin', mb: 547, name: 'El mejor (large-v3-turbo, 547 MB, más lento)' },
+  { id: 'base', file: 'ggml-base.bin', mb: 142, name: tx('Rápido (base, 142 MB)') },
+  { id: 'small', file: 'ggml-small.bin', mb: 466, name: tx('Bueno (small, 466 MB)') },
+  { id: 'turbo', file: 'ggml-large-v3-turbo-q5_0.bin', mb: 547, name: tx('El mejor (large-v3-turbo, 547 MB, más lento)') },
 ];
 
 const root = () => path.join(app.getPath('userData'), 'whisper');
@@ -27,7 +28,7 @@ const modelById = (id) => MODELS.find((m) => m.id === id) || MODELS[1];
 async function download(url, target, onProgress) {
   await fs.promises.mkdir(path.dirname(target), { recursive: true });
   const res = await net.fetch(url);
-  if (!res.ok) throw new Error(`No se pudo descargar ${path.basename(target)} (${res.status})`);
+  if (!res.ok) throw new Error(tx('No se pudo descargar {basename} ({status})', { basename: path.basename(target), status: res.status }));
   const total = Number(res.headers.get('content-length')) || 0;
   const part = `${target}.parcial`;
   const file = fs.createWriteStream(part);
@@ -49,7 +50,7 @@ async function download(url, target, onProgress) {
 
 let binReady = null;
 function ensureBin(onStatus) {
-  if (process.platform !== 'win32' || process.arch !== 'x64') return Promise.reject(new Error('Los subtítulos automáticos solo funcionan en Windows de 64 bits'));
+  if (process.platform !== 'win32' || process.arch !== 'x64') return Promise.reject(new Error(tx('Los subtítulos automáticos solo funcionan en Windows de 64 bits')));
   if (fs.existsSync(cliPath())) return Promise.resolve();
   if (!binReady) {
     binReady = (async () => {
@@ -60,7 +61,7 @@ function ensureBin(onStatus) {
       const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
       const r = await run(tar, ['-xf', zip, '-C', binDir()]);
       await fs.promises.unlink(zip).catch(() => {});
-      if (r.code !== 0 || !fs.existsSync(cliPath())) throw new Error('No se pudo descomprimir whisper.cpp');
+      if (r.code !== 0 || !fs.existsSync(cliPath())) throw new Error(tx('No se pudo descomprimir whisper.cpp'));
     })();
     binReady.catch(() => { binReady = null; });
   }
@@ -89,7 +90,7 @@ let current = null; // { proc, canceled }
 // Transcribe `file` (un WAV del sonido del proyecto). opts = { model, language ('auto' o código), translate }.
 // Devuelve el SRT (texto) o null si se cancela. onStatus({ stage: 'program' | 'model' | 'audio' | 'transcribe', percent }).
 async function transcribe(file, opts, onStatus = () => {}) {
-  if (current) throw new Error('Ya hay una transcripción en marcha');
+  if (current) throw new Error(tx('Ya hay una transcripción en marcha'));
   const job = { proc: null, canceled: false };
   current = job;
   const base = path.join(os.tmpdir(), `cortex-whisper-${process.pid}-${Date.now()}`);
@@ -103,7 +104,7 @@ async function transcribe(file, opts, onStatus = () => {}) {
       onSpawn: (p) => { job.proc = p; },
     });
     if (job.canceled) return null;
-    if (conv.code !== 0) throw new Error(conv.stderr.trim().split('\n').pop() || 'No se pudo preparar el sonido');
+    if (conv.code !== 0) throw new Error(conv.stderr.trim().split('\n').pop() || tx('No se pudo preparar el sonido'));
     onStatus({ stage: 'transcribe', percent: 0 });
     const threads = String(Math.max(1, Math.min(8, os.cpus().length)));
     const args = ['-m', modelPath(m), '-f', wav, '-l', opts.language || 'auto', '-osrt', '-of', base, '-pp', '-t', threads, ...(opts.translate ? ['-tr'] : [])];
@@ -124,7 +125,7 @@ async function transcribe(file, opts, onStatus = () => {}) {
       });
     });
     if (job.canceled) return null;
-    if (code !== 0) throw new Error(job.tail.trim().split('\n').filter((l) => /error|failed/i.test(l)).pop() || `whisper terminó con el código ${code}`);
+    if (code !== 0) throw new Error(job.tail.trim().split('\n').filter((l) => /error|failed/i.test(l)).pop() || tx('whisper terminó con el código {code}', { code }));
     return await fs.promises.readFile(`${base}.srt`, 'utf8');
   } finally {
     current = null;

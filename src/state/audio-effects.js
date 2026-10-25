@@ -2,10 +2,11 @@
 // cada efecto define sus parámetros y su filtro de FFmpeg; la vista previa los reproduce con Web Audio
 // (ver preview/audio-fx.js). ctx = { peak }: pico (0–1) del fragmento de audio del evento, para Normalizar.
 
+import { decimal, tx } from '../i18n/index.js';
 const n = (v) => Number(v).toFixed(4);
 const ms = (v) => `${Math.round(v)} ms`;
-const db = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1).replace('.', ',')} dB`;
-const hz = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1).replace('.', ',')} kHz` : `${Math.round(v)} Hz`);
+const db = (v) => `${v > 0 ? '+' : ''}${decimal(v, 1)} dB`;
+const hz = (v) => (v >= 1000 ? `${decimal(v / 1000, 1)} kHz` : `${Math.round(v)} Hz`);
 const pct = (v) => `${Math.round(v * 100)} %`;
 const dbToGain = (v) => 10 ** (v / 20);
 
@@ -37,11 +38,11 @@ export const reverbShape = (decay, sampleRate = 48000) => {
 
 export const AUDIO_EFFECT_GROUPS = [
   {
-    name: 'Ecualización',
+    name: tx('Ecualización'),
     items: [
       {
         id: 'graphiceq',
-        name: 'Ecualizador gráfico',
+        name: tx('Ecualizador gráfico'),
         params: EQ_BANDS.map((f) => ({
           id: bandId(f), label: hz(f), type: 'range', min: -12, max: 12, step: 0.5, default: 0, format: db,
         })),
@@ -52,30 +53,30 @@ export const AUDIO_EFFECT_GROUPS = [
       },
       {
         id: 'lowpass',
-        name: 'Filtro paso bajo',
-        params: [{ id: 'frequency', label: 'Frecuencia', type: 'range', min: 100, max: 20000, step: 10, default: 5000, format: hz }],
+        name: tx('Filtro paso bajo'),
+        params: [{ id: 'frequency', label: tx('Frecuencia'), type: 'range', min: 100, max: 20000, step: 10, default: 5000, format: hz }],
         ffmpeg: (p) => `lowpass=f=${n(p.frequency)}:p=2`,
       },
       {
         id: 'highpass',
-        name: 'Filtro paso alto',
-        params: [{ id: 'frequency', label: 'Frecuencia', type: 'range', min: 20, max: 5000, step: 5, default: 200, format: hz }],
+        name: tx('Filtro paso alto'),
+        params: [{ id: 'frequency', label: tx('Frecuencia'), type: 'range', min: 20, max: 5000, step: 5, default: 200, format: hz }],
         ffmpeg: (p) => `highpass=f=${n(p.frequency)}:p=2`,
       },
     ],
   },
   {
-    name: 'Dinámica',
+    name: tx('Dinámica'),
     items: [
       {
         id: 'compressor',
-        name: 'Compresor',
+        name: tx('Compresor'),
         params: [
-          { id: 'threshold', label: 'Umbral', type: 'range', min: -60, max: 0, step: 0.5, default: -20, format: db },
-          { id: 'ratio', label: 'Proporción', type: 'range', min: 1, max: 20, step: 0.1, default: 4, format: (v) => `${v.toFixed(1).replace('.', ',')}:1` },
-          { id: 'attack', label: 'Ataque', type: 'range', min: 1, max: 200, step: 1, default: 20, format: ms },
-          { id: 'release', label: 'Liberación', type: 'range', min: 10, max: 2000, step: 10, default: 250, format: ms },
-          { id: 'makeup', label: 'Ganancia', type: 'range', min: 0, max: 24, step: 0.5, default: 0, format: db },
+          { id: 'threshold', label: tx('Umbral'), type: 'range', min: -60, max: 0, step: 0.5, default: -20, format: db },
+          { id: 'ratio', label: tx('Proporción'), type: 'range', min: 1, max: 20, step: 0.1, default: 4, format: (v) => `${decimal(v, 1)}:1` },
+          { id: 'attack', label: tx('Ataque'), type: 'range', min: 1, max: 200, step: 1, default: 20, format: ms },
+          { id: 'release', label: tx('Liberación'), type: 'range', min: 10, max: 2000, step: 10, default: 250, format: ms },
+          { id: 'makeup', label: tx('Ganancia'), type: 'range', min: 0, max: 24, step: 0.5, default: 0, format: db },
         ],
         ffmpeg: (p) =>
           `acompressor=threshold=${n(Math.max(0.000977, dbToGain(p.threshold)))}:ratio=${n(p.ratio)}:attack=${n(p.attack)}` +
@@ -83,39 +84,39 @@ export const AUDIO_EFFECT_GROUPS = [
       },
       {
         id: 'gate',
-        name: 'Puerta de ruido',
+        name: tx('Puerta de ruido'),
         params: [
-          { id: 'threshold', label: 'Umbral', type: 'range', min: -80, max: 0, step: 0.5, default: -40, format: db },
-          { id: 'attack', label: 'Ataque', type: 'range', min: 1, max: 200, step: 1, default: 10, format: ms },
-          { id: 'release', label: 'Liberación', type: 'range', min: 10, max: 2000, step: 10, default: 250, format: ms },
+          { id: 'threshold', label: tx('Umbral'), type: 'range', min: -80, max: 0, step: 0.5, default: -40, format: db },
+          { id: 'attack', label: tx('Ataque'), type: 'range', min: 1, max: 200, step: 1, default: 10, format: ms },
+          { id: 'release', label: tx('Liberación'), type: 'range', min: 10, max: 2000, step: 10, default: 250, format: ms },
         ],
         ffmpeg: (p) =>
           `agate=threshold=${n(dbToGain(p.threshold))}:ratio=10:attack=${n(p.attack)}:release=${n(p.release)}:range=0.001:detection=peak`,
       },
       {
         id: 'normalize',
-        name: 'Normalizar',
-        params: [{ id: 'target', label: 'Pico objetivo', type: 'range', min: -12, max: 0, step: 0.5, default: -1, format: db }],
+        name: tx('Normalizar'),
+        params: [{ id: 'target', label: tx('Pico objetivo'), type: 'range', min: -12, max: 0, step: 0.5, default: -1, format: db }],
         ffmpeg: (p, ctx) => `volume=${n(normalizeGain(ctx.peak, p.target))}`,
       },
       {
         id: 'amplify',
-        name: 'Amplificar',
-        params: [{ id: 'gain', label: 'Ganancia', type: 'range', min: -24, max: 24, step: 0.5, default: 6, format: db }],
+        name: tx('Amplificar'),
+        params: [{ id: 'gain', label: tx('Ganancia'), type: 'range', min: -24, max: 24, step: 0.5, default: 6, format: db }],
         ffmpeg: (p) => (p.gain ? `volume=${n(dbToGain(p.gain))}` : ''),
       },
     ],
   },
   {
-    name: 'Retardo y modulación',
+    name: tx('Retardo y modulación'),
     items: [
       {
         id: 'echo',
-        name: 'Eco',
+        name: tx('Eco'),
         params: [
-          { id: 'delay', label: 'Retardo', type: 'range', min: 20, max: 2000, step: 10, default: 300, format: ms },
-          { id: 'feedback', label: 'Realimentación', type: 'range', min: 0, max: 0.9, step: 0.01, default: 0.4, format: pct },
-          { id: 'mix', label: 'Volumen del eco', type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct },
+          { id: 'delay', label: tx('Retardo'), type: 'range', min: 20, max: 2000, step: 10, default: 300, format: ms },
+          { id: 'feedback', label: tx('Realimentación'), type: 'range', min: 0, max: 0.9, step: 0.01, default: 0.4, format: pct },
+          { id: 'mix', label: tx('Volumen del eco'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct },
         ],
         ffmpeg: (p) => {
           const taps = echoTaps(p);
@@ -125,38 +126,38 @@ export const AUDIO_EFFECT_GROUPS = [
       },
       {
         id: 'chorus',
-        name: 'Chorus',
+        name: tx('Chorus'),
         params: [
-          { id: 'delay', label: 'Retardo', type: 'range', min: 10, max: 60, step: 1, default: 40, format: ms },
-          { id: 'depth', label: 'Profundidad', type: 'range', min: 0.5, max: 10, step: 0.1, default: 2, format: (v) => `${v.toFixed(1).replace('.', ',')} ms` },
-          { id: 'speed', label: 'Velocidad', type: 'range', min: 0.1, max: 5, step: 0.05, default: 0.5, format: (v) => `${v.toFixed(2).replace('.', ',')} Hz` },
-          { id: 'mix', label: 'Mezcla', type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct },
+          { id: 'delay', label: tx('Retardo'), type: 'range', min: 10, max: 60, step: 1, default: 40, format: ms },
+          { id: 'depth', label: tx('Profundidad'), type: 'range', min: 0.5, max: 10, step: 0.1, default: 2, format: (v) => `${decimal(v, 1)} ms` },
+          { id: 'speed', label: tx('Velocidad'), type: 'range', min: 0.1, max: 5, step: 0.05, default: 0.5, format: (v) => `${decimal(v, 2)} Hz` },
+          { id: 'mix', label: tx('Mezcla'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, format: pct },
         ],
         ffmpeg: (p) => `chorus=1:${n(1 / (1 + p.mix))}:${n(p.delay)}:${n(p.mix)}:${n(p.speed)}:${n(p.depth)}`,
       },
       {
         id: 'flanger',
-        name: 'Flanger',
+        name: tx('Flanger'),
         params: [
-          { id: 'depth', label: 'Profundidad', type: 'range', min: 0, max: 10, step: 0.1, default: 2, format: (v) => `${v.toFixed(1).replace('.', ',')} ms` },
-          { id: 'speed', label: 'Velocidad', type: 'range', min: 0.1, max: 10, step: 0.05, default: 0.5, format: (v) => `${v.toFixed(2).replace('.', ',')} Hz` },
-          { id: 'regen', label: 'Realimentación', type: 'range', min: -95, max: 95, step: 1, default: 50, format: (v) => `${Math.round(v)} %` },
-          { id: 'width', label: 'Mezcla', type: 'range', min: 0, max: 100, step: 1, default: 71, format: (v) => `${Math.round(v)} %` },
+          { id: 'depth', label: tx('Profundidad'), type: 'range', min: 0, max: 10, step: 0.1, default: 2, format: (v) => `${decimal(v, 1)} ms` },
+          { id: 'speed', label: tx('Velocidad'), type: 'range', min: 0.1, max: 10, step: 0.05, default: 0.5, format: (v) => `${decimal(v, 2)} Hz` },
+          { id: 'regen', label: tx('Realimentación'), type: 'range', min: -95, max: 95, step: 1, default: 50, format: (v) => `${Math.round(v)} %` },
+          { id: 'width', label: tx('Mezcla'), type: 'range', min: 0, max: 100, step: 1, default: 71, format: (v) => `${Math.round(v)} %` },
         ],
         ffmpeg: (p) => `flanger=delay=0:depth=${n(p.depth)}:regen=${n(p.regen)}:width=${n(p.width)}:speed=${n(p.speed)}:shape=sinusoidal`,
       },
       {
         id: 'pitch',
-        name: 'Cambio de tono',
-        params: [{ id: 'semitones', label: 'Semitonos', type: 'range', min: -12, max: 12, step: 0.5, default: 4, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1).replace('.', ',')}` }],
+        name: tx('Cambio de tono'),
+        params: [{ id: 'semitones', label: tx('Semitonos'), type: 'range', min: -12, max: 12, step: 0.5, default: 4, format: (v) => `${v > 0 ? '+' : ''}${decimal(v, 1)}` }],
         ffmpeg: (p) => (p.semitones ? `rubberband=pitch=${n(2 ** (p.semitones / 12))}` : ''),
       },
       {
         id: 'distortion',
-        name: 'Distorsión',
+        name: tx('Distorsión'),
         params: [
-          { id: 'drive', label: 'Saturación', type: 'range', min: 1, max: 30, step: 0.5, default: 5, format: (v) => `×${v.toFixed(1).replace('.', ',')}` },
-          { id: 'output', label: 'Salida', type: 'range', min: -24, max: 0, step: 0.5, default: -6, format: db },
+          { id: 'drive', label: tx('Saturación|distorsión'), type: 'range', min: 1, max: 30, step: 0.5, default: 5, format: (v) => `×${decimal(v, 1)}` },
+          { id: 'output', label: tx('Salida'), type: 'range', min: -24, max: 0, step: 0.5, default: -6, format: db },
         ],
         ffmpeg: (p) => {
           const curve = (ch) => `tanh(val(${ch})*${n(p.drive)})/${n(Math.tanh(p.drive))}`;
@@ -166,14 +167,14 @@ export const AUDIO_EFFECT_GROUPS = [
     ],
   },
   {
-    name: 'Ambiente',
+    name: tx('Ambiente'),
     items: [
       {
         id: 'reverb',
-        name: 'Reverberación',
+        name: tx('Reverberación'),
         params: [
-          { id: 'decay', label: 'Tamaño (caída)', type: 'range', min: 0.3, max: 6, step: 0.1, default: 1.8, format: (v) => `${v.toFixed(1).replace('.', ',')} s` },
-          { id: 'mix', label: 'Mezcla', type: 'range', min: 0, max: 1, step: 0.01, default: 0.3, format: pct },
+          { id: 'decay', label: tx('Tamaño (caída)'), type: 'range', min: 0.3, max: 6, step: 0.1, default: 1.8, format: (v) => `${decimal(v, 1)} s` },
+          { id: 'mix', label: tx('Mezcla'), type: 'range', min: 0, max: 1, step: 0.01, default: 0.3, format: pct },
         ],
         // Convolución con una respuesta al impulso de ruido que decae (generada aquí mismo con aevalsrc).
         graph: (p, ctx, inL, outL, tag) => {
