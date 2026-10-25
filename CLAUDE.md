@@ -1,4 +1,4 @@
-﻿# Cortex Studio
+# Cortex Studio
 
 Editor de video de escritorio (Electron 44 + React 18 + Vite 5 + FFmpeg). Los comentarios, los mensajes de commit y la documentación están en **español**; la interfaz, en español e inglés (ver «Idiomas»).
 
