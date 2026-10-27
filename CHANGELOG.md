@@ -2,7 +2,7 @@
 
 Los instaladores de cada versión están en las [releases de GitHub](https://github.com/Nyra31/cortex-studio/releases). Los proyectos guardados con versiones anteriores se siguen abriendo.
 
-## Sin publicar
+## 1.1.1 (28/10/2026)
 
 - **macOS y Linux:** Cortex Studio también para Mac (Apple Silicon e Intel, `.dmg`) y Linux (`.AppImage`). En Mac los atajos van con Cmd y las versiones nuevas se avisan pero se descargan a mano (la aplicación no está firmada por Apple); los subtítulos automáticos usan whisper.cpp de Homebrew (`brew install whisper-cpp`).
 - Los instaladores de los tres sistemas se compilan y se prueban en GitHub Actions.
