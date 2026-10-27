@@ -25,9 +25,9 @@ const section = changelog.split(/^## /m).find((s) => s.startsWith(`${version} `)
 if (!section) throw new Error(`CHANGELOG.md no tiene sección «## ${version}»`);
 const body = `## Novedades\n\n${section.slice(section.indexOf('\n') + 1).trim()}\n\nLos proyectos de versiones anteriores se siguen abriendo.`;
 
-const cred = execSync('git credential fill', { input: 'protocol=https\nhost=github.com\n\n' }).toString();
-const token = cred.match(/^password=(.*)$/m)?.[1];
-if (!token) throw new Error('No hay token de GitHub en Git Credential Manager');
+const token = process.env.GITHUB_TOKEN
+  || execSync('git credential fill', { input: 'protocol=https\nhost=github.com\n\n' }).toString().match(/^password=(.*)$/m)?.[1];
+if (!token) throw new Error('No hay token de GitHub (GITHUB_TOKEN o git credential fill)');
 const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'cortex-release' };
 
 const api = async (url, opts = {}) => {
