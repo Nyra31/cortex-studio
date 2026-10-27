@@ -180,12 +180,16 @@ const gainFx = (ctx, value) => {
   return { input: g, output: g, update: () => {}, nodes: [g] };
 };
 
+// Un filtro no puede pasar de la mitad de la frecuencia de muestreo (las miniaturas de los efectos se calculan con un
+// contexto de baja frecuencia y la banda de 16 kHz del ecualizador daba un aviso).
+const belowNyquist = (ctx, f) => Math.min(f, ctx.sampleRate * 0.49);
+
 const BUILDERS = {
   graphiceq: (ctx, p) => {
     const filters = EQ_BANDS.map((f) => {
       const b = ctx.createBiquadFilter();
       b.type = 'peaking';
-      b.frequency.value = f;
+      b.frequency.value = belowNyquist(ctx, f);
       b.Q.value = Math.SQRT2; // una octava de ancho, como equalizer=t=o:w=1
       return b;
     });
@@ -344,7 +348,7 @@ function biquad(ctx, type, p) {
   const b = ctx.createBiquadFilter();
   b.type = type;
   b.Q.value = 20 * Math.log10(Math.SQRT1_2);
-  const update = (q) => (b.frequency.value = q.frequency);
+  const update = (q) => (b.frequency.value = belowNyquist(ctx, q.frequency));
   update(p);
   return { input: b, output: b, update, nodes: [b] };
 }

@@ -132,6 +132,7 @@ contextBridge.exposeInMainWorld('api', {
   toggleDevTools: () => ipcRenderer.invoke('devtools:toggle'),
   setDirty: (dirty) => ipcRenderer.send('project:dirty', dirty),
   closeWindow: () => ipcRenderer.send('window:close'),
+  closeCanceled: () => ipcRenderer.send('window:closeCanceled'),
   toggleFullScreen: () => ipcRenderer.invoke('window:toggleFullScreen'),
   autosave: (data, projectPath) => ipcRenderer.invoke('autosave:write', data, projectPath),
   clearAutosave: () => ipcRenderer.invoke('autosave:clear'),

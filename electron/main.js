@@ -481,7 +481,10 @@ async function writeProject(target, data) {
   } catch {
     // archivo nuevo: no hay versión anterior
   }
-  await fs.promises.writeFile(target, JSON.stringify({ ...data, media }, null, 2), 'utf8');
+  // En un temporal y luego se renombra: un cierre a medias no deja el proyecto roto.
+  const tmp = `${target}.guardando`;
+  await fs.promises.writeFile(tmp, JSON.stringify({ ...data, media }, null, 2), 'utf8');
+  await fs.promises.rename(tmp, target);
 }
 // Recopilar medios: copia todos los archivos del proyecto a «Medios» dentro de la carpeta elegida y guarda allí el
 // proyecto apuntando a las copias (que conservan la fecha del original). Los que ya están dentro de la carpeta no se
@@ -598,9 +601,11 @@ async function writeRecent(list) {
   await fs.promises.mkdir(path.dirname(recentPath()), { recursive: true }).catch(() => {});
   await fs.promises.writeFile(recentPath(), JSON.stringify(list.slice(0, RECENT_MAX)), 'utf8').catch(() => {});
 }
+// Clave para comparar rutas: en Windows no distingue mayúsculas (en macOS y Linux sí puede).
+const pathKey = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
 async function noteRecent(filePath) {
-  const key = path.resolve(filePath).toLowerCase();
-  const list = (await readRecent()).filter((r) => path.resolve(r.path).toLowerCase() !== key);
+  const key = pathKey(filePath);
+  const list = (await readRecent()).filter((r) => pathKey(r.path) !== key);
   await writeRecent([{ path: path.resolve(filePath), openedAt: Date.now() }, ...list]);
 }
 ipcMain.handle('recent:list', async () => {
@@ -615,13 +620,13 @@ ipcMain.handle('recent:list', async () => {
   }));
 });
 ipcMain.handle('recent:remove', async (_e, filePath) => {
-  const key = path.resolve(filePath).toLowerCase();
-  await writeRecent((await readRecent()).filter((r) => path.resolve(r.path).toLowerCase() !== key));
+  const key = pathKey(filePath);
+  await writeRecent((await readRecent()).filter((r) => pathKey(r.path) !== key));
 });
 // Abrir un proyecto de la lista de recientes (solo archivos .cortex que estén en ella).
 ipcMain.handle('project:openPath', async (_e, filePath) => {
-  const key = path.resolve(filePath).toLowerCase();
-  if (!/\.cortex$/i.test(key) || !(await readRecent()).some((r) => path.resolve(r.path).toLowerCase() === key)) {
+  const key = pathKey(filePath);
+  if (!/\.cortex$/i.test(key) || !(await readRecent()).some((r) => pathKey(r.path) === key)) {
     throw new Error(tx('El proyecto no está en la lista de recientes'));
   }
   const data = await readProject(filePath);
@@ -655,14 +660,21 @@ ipcMain.handle('render:pickPath', async (_e, defaultName, type) => {
 ipcMain.handle('render:start', async (event, project, settings, outPath) => {
   if (renderProcess) return { ok: false, error: tx('Ya hay un renderizado en curso.') };
   let canceled = false;
+  // Ocupado desde ya, no desde que arranca FFmpeg: si no, otro render (la cola y los subtítulos automáticos usan
+  // este mismo canal) podría colarse mientras se preparan los archivos. Un render puede lanzar varios procesos
+  // (medir la sonoridad, repetir con el procesador): cancelar para el que esté en marcha y los siguientes.
+  let proc = null;
+  renderProcess = {
+    cancel: () => {
+      canceled = true;
+      proc?.kill();
+    },
+  };
   try {
     const result = await ff.render(project, settings, outPath, {
-      onSpawn: (proc) => {
-        renderProcess = proc;
-        proc.cancel = () => {
-          canceled = true;
-          proc.kill();
-        };
+      onSpawn: (p) => {
+        proc = p;
+        if (canceled) p.kill();
       },
       onProgress: (p) => event.sender.send('render:progress', p),
     });
@@ -697,6 +709,11 @@ ipcMain.handle('window:toggleFullScreen', () => {
 ipcMain.on('window:close', () => {
   closeConfirmed = true;
   if (mainWindow) mainWindow.close();
+});
+// Se eligió Guardar al cerrar pero no se guardó (se canceló el diálogo o falló): la ventana sigue abierta y el
+// reinicio pendiente (cambio de idioma) se olvida; si no, se haría la próxima vez que se cerrara.
+ipcMain.on('window:closeCanceled', () => {
+  relaunchOnClose = false;
 });
 
 // Grabación de voz en off: la interfaz manda las muestras (PCM de 16 bits, mono) a trozos y aquí se escriben

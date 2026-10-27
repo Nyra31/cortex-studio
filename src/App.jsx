@@ -1316,7 +1316,7 @@ export default function App() {
     setPlaying(false);
     const media = [];
     const aspect = (data.settings?.width || 16) / (data.settings?.height || 9);
-    for (const m of data.media) {
+    for (const m of Array.isArray(data.media) ? data.media : []) {
       if (m.kind === 'text') {
         media.push(withTextThumb({ ...newTextMedia(m.text), id: m.id }, aspect));
         continue;
@@ -1407,6 +1407,7 @@ export default function App() {
   saveRef.current = save;
   useEffect(() => api.onSaveBeforeClose(async () => {
     if (await saveRef.current(false)) api.closeWindow();
+    else api.closeCanceled();
   }), []);
 
   useEffect(() => api.onFullScreenChange(setFullScreen), []);

@@ -7,6 +7,9 @@ const { tx } = require('./i18n');
 
 // En la app empaquetada los binarios viven fuera del archivo asar.
 const unpacked = (p) => p.replace('app.asar', 'app.asar.unpacked');
+// Línea `file` de una lista del demuxer concat: entre comillas simples, con las de la ruta escapadas (una carpeta de
+// usuario como C:\Users\O'Brien rompía la lista).
+const concatFile = (p) => `file '${p.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`;
 const ffmpegPath = unpacked(require('ffmpeg-static'));
 const ffprobePath = unpacked(require('@ffprobe-installer/ffprobe').path);
 
@@ -752,7 +755,7 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
         const file = path.join(os.tmpdir(), `cortex-texto-${stamp}-${safeId}-${k}.png`);
         await fs.promises.writeFile(file, Buffer.from(item.png.slice(item.png.indexOf(',') + 1), 'base64'));
         temp.push(file);
-        entries.push([`file '${file.replace(/\\/g, '/')}'`, `duration ${item.dur.toFixed(6)}`]);
+        entries.push([concatFile(file), `duration ${item.dur.toFixed(6)}`]);
       }
       const lines = [...entries.flat(), entries[entries.length - 1][0]];
       const list = path.join(os.tmpdir(), `cortex-texto-${stamp}-${safeId}.txt`);
@@ -815,7 +818,7 @@ async function render(project, settings, outPath, { onProgress, onSpawn } = {}) 
         b.splice(b.length - 1, 0, '-f', 'null');
         return b;
       });
-      if (measure.code !== 0) return measure;
+      if (measure.code !== 0 || killed) return measure.code !== 0 ? measure : { ...measure, code: 1 };
       const json = /\{[^{}]*"input_i"[^{}]*\}/.exec(measure.stderr);
       const m = json && JSON.parse(json[0]);
       // Sin sonido (−inf) no hay nada que normalizar.
@@ -862,7 +865,7 @@ async function reverseClip(file, start, length, out, { hasVideo = true, hasAudio
     }
     const list = path.join(os.tmpdir(), `cortex-invertir-${stamp}.txt`);
     temp.push(list);
-    await fs.promises.writeFile(list, `ffconcat version 1.0\n${temp.slice(0, -1).map((f) => `file '${f.replace(/\\/g, '/')}'`).join('\n')}\n`, 'utf8');
+    await fs.promises.writeFile(list, `ffconcat version 1.0\n${temp.slice(0, -1).map(concatFile).join('\n')}\n`, 'utf8');
     const r = await run(ffmpegPath, [
       '-hide_banner', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list,
       ...(hasVideo ? ['-map', '0:v:0', '-c:v', 'copy'] : []),

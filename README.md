@@ -4,9 +4,11 @@ Editor de video de escritorio con línea de tiempo multipista, al estilo de los 
 
 ## Descarga
 
-Descarga `Cortex-Studio-Setup-<versión>.exe` de la [última release](https://github.com/Nyra31/cortex-studio/releases/latest) (Windows). Se instala sin permisos de administrador y después se actualiza sola.
+En la [última release](https://github.com/Nyra31/cortex-studio/releases/latest):
 
-El instalador no está firmado, así que la primera vez Windows SmartScreen puede mostrar «Windows protegió su PC»: pulsa *Más información → Ejecutar de todas formas*. A partir de la versión 1.1 se firmará con SignPath ([Code signing policy](#code-signing-policy)).
+- **Windows:** `Cortex-Studio-Setup-<versión>.exe`. Se instala sin permisos de administrador y después se actualiza sola. No está firmado, así que la primera vez Windows SmartScreen puede mostrar «Windows protegió su PC»: pulsa *Más información → Ejecutar de todas formas*. Se firmará más adelante con SignPath ([Code signing policy](#code-signing-policy)).
+- **macOS:** `Cortex-Studio-<versión>-mac-arm64.dmg` (Apple Silicon: M1 y posteriores) o `-mac-x64.dmg` (Intel). Arrastra Cortex Studio a *Aplicaciones*. No está firmada por Apple: la primera vez, clic derecho en la aplicación → *Abrir* (o, si macOS dice que está dañada, `xattr -cr "/Applications/Cortex Studio.app"` en la Terminal). Avisa de las versiones nuevas, pero se instalan descargándolas a mano.
+- **Linux:** `Cortex-Studio-<versión>-linux-x86_64.AppImage`. Dale permiso de ejecución (`chmod +x`) y ábrelo. Se actualiza solo.
 
 ## Funciones
 
@@ -29,10 +31,10 @@ Requiere Node.js 22 o superior. FFmpeg se instala con las dependencias.
 npm install      # solo la primera vez
 npm start        # compila la interfaz y abre la aplicación
 npm run dev      # modo desarrollo: recarga la interfaz al guardar cambios
-npm run dist     # instalador de Windows en release/
+npm run dist     # instalador del sistema en el que se ejecuta, en release/
 ```
 
-Para publicar una versión, la release de GitHub debe llevar el instalador, su `.blockmap` y `latest.yml` (los tres en `release/`); sin `latest.yml` las actualizaciones automáticas no ven la versión.
+Los instaladores de los tres sistemas los compila GitHub Actions ([`instalador.yml`](.github/workflows/instalador.yml)), con una prueba de humo en cada uno (`scripts/pruebas/humo.js`). Al subir una etiqueta `vX.Y.Z` publica la release con todos ellos y sus `latest*.yml`, que necesitan las actualizaciones automáticas.
 
 Si la aplicación no se abre al lanzar `electron .` a mano, quita la variable `ELECTRON_RUN_AS_NODE` (la definen, por ejemplo, las terminales de VS Code). `npm start` y `npm run dev` ya la quitan.
 

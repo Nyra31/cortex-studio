@@ -2,6 +2,19 @@
 
 Los instaladores de cada versión están en las [releases de GitHub](https://github.com/Nyra31/cortex-studio/releases). Los proyectos guardados con versiones anteriores se siguen abriendo.
 
+## Sin publicar
+
+- **macOS y Linux:** Cortex Studio también para Mac (Apple Silicon e Intel, `.dmg`) y Linux (`.AppImage`). En Mac los atajos van con Cmd y las versiones nuevas se avisan pero se descargan a mano (la aplicación no está firmada por Apple); los subtítulos automáticos usan whisper.cpp de Homebrew (`brew install whisper-cpp`).
+- Los instaladores de los tres sistemas se compilan y se prueban en GitHub Actions.
+- **Fallos corregidos:**
+  - Invertir o estabilizar un evento agrupado con otro trozo distinto del mismo archivo estropeaba ese otro evento (pasaba a usar un archivo que no tenía su parte).
+  - Quitar de *Medios del proyecto* el original de un evento invertido, estabilizado, sin ruido o sin voces dejaba su «deshacer» apuntando a un medio que ya no existe.
+  - Con un apóstrofo en la carpeta temporal (un usuario de Windows como «O'Brien»), fallaban el render de textos animados e invertir.
+  - Dos renders a la vez (la cola y los subtítulos automáticos) podían colarse juntos, y cancelar justo después de medir la sonoridad no paraba el render.
+  - Guardar escribe primero en un archivo temporal: un cierre a medias ya no puede dejar el proyecto roto.
+  - Si al cambiar de idioma con cambios sin guardar se cancelaba el diálogo de guardar, la aplicación se reiniciaba la siguiente vez que se cerraba.
+  - Aviso del ecualizador de 10 bandas en las miniaturas de los efectos de audio.
+
 ## 1.1.0 (26/10/2026)
 
 - **Quitar las voces** de un evento de audio para doblar encima (menú del evento → *Quitar las voces (para doblar)…*): separación con IA en el propio equipo, con dos modelos a elegir (*Rápido*: htdemucs; *El mejor*: Mel-Band RoFormer), con la tarjeta gráfica si es compatible; el evento usa la música y los efectos sin voces y las voces solas quedan en los medios del proyecto. Se puede cancelar y deshacer.

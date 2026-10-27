@@ -128,6 +128,9 @@ Descripción detallada de las funciones, atajos de teclado y limitaciones conoci
 
 ## Limitaciones conocidas
 
+- macOS: la aplicación no está firmada por Apple, así que la primera vez hay que abrirla con clic derecho → *Abrir* y las versiones nuevas se avisan pero se descargan a mano. Los atajos que en Windows van con Ctrl van con Cmd (Cmd+Q inserta una pista de audio, como Ctrl+Q; para salir, *Cortex Studio → Salir*). Los subtítulos automáticos necesitan whisper.cpp de Homebrew (`brew install whisper-cpp`). La tarjeta gráfica para renderizar (NVENC, Quick Sync, AMF) solo se usa en Windows.
+- Linux: en muchas distribuciones el navegador de Electron no activa WebGPU, así que *Quitar las voces* va con el procesador (lento).
+
 - Quitar las voces: los modelos están entrenados con música; con diálogos de cine funciona bien en general, pero puede dejar algo de eco o reverberación de la voz, o llevarse coros y algún sonido parecido a la voz. Sin tarjeta gráfica compatible con WebGPU es lento (con *Rápido*, unas 3 veces lo que dura el trozo; con *El mejor*, mucho más). *El mejor* necesita bastante memoria de vídeo (funciona con 3 GB); si no cabe, se usa el procesador. Al quitarlo, los archivos de «Sin voces» no se borran.
 
 - Subtítulos automáticos: solo en Windows de 64 bits; usan el procesador (no la tarjeta gráfica). Si el sonido tiene música fuerte o mucho ruido, Whisper puede saltarse frases o inventar alguna.

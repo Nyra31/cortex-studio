@@ -643,12 +643,20 @@ const mirrorSpeed = (speed, duration) => (speed?.length ? speed.map((p) => ({ ..
 // Invertir el evento eventId y su grupo (los del mismo medio): con `media` (el trozo [start, start + span) del medio
 // al revés, ver reverseClip), pasan a usarlo desde el punto equivalente; con media = null, vuelven al original. El
 // punto se calcula a partir de lo que usa el evento ahora, así que vale aunque se haya recortado o dividido después.
+// Los del grupo de `ev` que usan su mismo medio. Al procesar (`to` = final del trozo procesado, en el medio), solo
+// los que usan un trozo dentro de [from, to]: dos eventos agrupados pueden usar partes distintas del mismo archivo, y
+// el procesado solo tiene la del evento elegido.
+function sameMediaGroup(project, ev, from = -Infinity, to = Infinity) {
+  return new Set(project.events
+    .filter((e) => e.id === ev.id || (ev.groupId && e.groupId === ev.groupId && e.mediaId === ev.mediaId
+      && e.inPoint >= from - 1e-6 && e.inPoint + sourceOffset(e, e.duration) <= to + 1e-6))
+    .map((e) => e.id));
+}
+
 export function setReversed(project, eventId, media, start, span) {
   const ev = project.events.find((e) => e.id === eventId);
   if (!ev) return project;
-  const group = new Set(project.events
-    .filter((e) => e.id === ev.id || (ev.groupId && e.groupId === ev.groupId && e.mediaId === ev.mediaId))
-    .map((e) => e.id));
+  const group = media ? sameMediaGroup(project, ev, start, start + span) : sameMediaGroup(project, ev);
   const events = project.events.map((e) => {
     if (!group.has(e.id)) return e;
     const used = sourceOffset(e, e.duration);
@@ -668,9 +676,7 @@ export function setReversed(project, eventId, media, start, span) {
 export function setStabilized(project, eventId, media, start) {
   const ev = project.events.find((e) => e.id === eventId);
   if (!ev) return project;
-  const group = new Set(project.events
-    .filter((e) => e.id === ev.id || (ev.groupId && e.groupId === ev.groupId && e.mediaId === ev.mediaId))
-    .map((e) => e.id));
+  const group = media ? sameMediaGroup(project, ev, start, start + (media.duration || Infinity)) : sameMediaGroup(project, ev);
   const events = project.events.map((e) => {
     if (!group.has(e.id)) return e;
     if (media) return { ...e, mediaId: media.id, inPoint: Math.max(0, e.inPoint - start), stabilized: { mediaId: e.mediaId, start } };
@@ -772,11 +778,19 @@ export function deleteEvents(project, ids) {
   return { ...project, events: project.events.filter((e) => !remove.has(e.id)) };
 }
 
+// Quita un medio y sus eventos. Los eventos que lo recuerdan para deshacer un proceso (invertir, estabilizar,
+// reducir el ruido, quitar las voces) se quedan con el medio procesado y olvidan ese «deshacer»: si no, al
+// deshacerlo apuntarían a un medio que ya no existe.
+const UNDO_FIELDS = ['reversed', 'stabilized', 'denoised', 'devoiced'];
 export function removeMedia(project, mediaId) {
   return {
     ...project,
     media: project.media.filter((m) => m.id !== mediaId),
-    events: project.events.filter((e) => e.mediaId !== mediaId),
+    events: project.events
+      .filter((e) => e.mediaId !== mediaId)
+      .map((e) => (UNDO_FIELDS.some((f) => e[f]?.mediaId === mediaId)
+        ? { ...e, ...Object.fromEntries(UNDO_FIELDS.filter((f) => e[f]?.mediaId === mediaId).map((f) => [f, null])) }
+        : e)),
   };
 }
 
