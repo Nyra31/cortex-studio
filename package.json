@@ -10,7 +10,7 @@
     "start": "vite build && node scripts/electron.js .",
     "icon": "node scripts/make-icon.js",
     "i18n": "node scripts/i18n-check.js",
-    "dist": "vite build && electron-builder --win --publish never"
+    "dist": "vite build && electron-builder --publish never"
   },
   "dependencies": {
     "@ffprobe-installer/ffprobe": "^2.1.2",
@@ -82,6 +82,30 @@
       "es",
       "es-419",
       "en-US"
-    ]
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.video",
+      "icon": "build/icon.png",
+      "artifactName": "Cortex-Studio-${version}-mac-${arch}.${ext}",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Cortex Studio usa el micrófono para grabar voz en off. / Cortex Studio uses the microphone to record voice-overs."
+      }
+    },
+    "dmg": {
+      "artifactName": "Cortex-Studio-${version}-mac-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo",
+      "icon": "build/icon.png",
+      "artifactName": "Cortex-Studio-${version}-linux-${arch}.${ext}",
+      "synopsis": "Editor de video con línea de tiempo multipista"
+    }
   }
 }

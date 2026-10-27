@@ -1,6 +1,8 @@
-# Compila el instalador de Windows en GitHub y lo deja como artefacto (para la firma de SignPath y para comprobar
-# que el proyecto compila en un equipo limpio). Se lanza al subir una etiqueta vX.Y.Z o a mano (Actions → Run workflow).
-name: Instalador de Windows
+# Compila los instaladores de Windows, macOS (Apple Silicon e Intel) y Linux, pasa en cada uno la prueba de humo
+# (scripts/pruebas/humo.js: arranca la app empaquetada, abre un proyecto y renderiza) y los deja como artefactos.
+# Al subir una etiqueta vX.Y.Z, además publica la release con todos (scripts/publicar-release.mjs).
+# A mano (Actions → Run workflow) solo compila y prueba.
+name: Instaladores
 
 on:
   push:
@@ -11,8 +13,21 @@ permissions:
   contents: read
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: mac-arm64
+            os: macos-latest
+          - name: mac-x64
+            os: macos-15-intel
+          - name: linux
+            os: ubuntu-22.04
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,18 +36,65 @@ jobs:
           node-version: 24
           cache: npm
 
+      # FFmpeg y ffprobe se descargan para el sistema y la arquitectura del equipo que compila: por eso cada
+      # arquitectura de macOS se compila en su propio equipo.
       - name: Dependencias
         run: npm ci
 
       - name: Instalador
         run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false # sin certificado: macOS se firma solo ad hoc
 
-      - name: Subir el instalador
+      - name: Prueba de humo
+        shell: bash
+        run: |
+          ASAR=$(find release -name app.asar -not -path '*/node_modules/*' | head -1)
+          echo "Probando $ASAR"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a npx electron --no-sandbox scripts/pruebas/humo.js "$ASAR"
+          else
+            npx electron scripts/pruebas/humo.js "$ASAR"
+          fi
+
+      # Las dos compilaciones de macOS hacen su latest-mac.yml: vale el de Apple Silicon (en macOS las actualizaciones
+      # solo avisan de la versión nueva, ver setupUpdates en main.js).
+      - name: Quitar el latest-mac.yml repetido
+        if: matrix.name == 'mac-x64'
+        run: rm -f release/latest-mac.yml
+
+      - name: Subir los instaladores
         uses: actions/upload-artifact@v4
         with:
-          name: instalador-windows
+          name: instalador-${{ matrix.name }}
           path: |
             release/*.exe
             release/*.blockmap
-            release/latest.yml
+            release/latest*.yml
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
           if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Publicar la release
+        run: node scripts/publicar-release.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

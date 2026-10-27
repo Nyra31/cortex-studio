@@ -768,11 +768,14 @@ function setupUpdates() {
   if (!app.isPackaged && !process.env.CORTEX_UPDATE_URL) return;
   ({ autoUpdater } = require('electron-updater'));
   if (process.env.CORTEX_UPDATE_URL) autoUpdater.setFeedURL({ provider: 'generic', url: process.env.CORTEX_UPDATE_URL });
-  autoUpdater.autoDownload = true;
+  // En macOS, instalar una actualización exige que la aplicación esté firmada por Apple: solo se avisa de que hay
+  // versión nueva (`available`) y la interfaz abre la página de descarga.
+  const notifyOnly = process.platform === 'darwin';
+  autoUpdater.autoDownload = !notifyOnly;
   autoUpdater.autoInstallOnAppQuit = true; // «Al cerrar»: se instala al salir
   autoUpdater.logger = null;
   autoUpdater.on('checking-for-update', () => sendUpdate({ status: 'checking' }));
-  autoUpdater.on('update-available', (info) => sendUpdate({ status: 'downloading', version: info.version, percent: 0 }));
+  autoUpdater.on('update-available', (info) => sendUpdate(notifyOnly ? { status: 'available', version: info.version } : { status: 'downloading', version: info.version, percent: 0 }));
   autoUpdater.on('download-progress', (p) => sendUpdate({ ...updateState, status: 'downloading', percent: p.percent }));
   autoUpdater.on('update-not-available', () => sendUpdate({ status: 'latest' }));
   autoUpdater.on('update-downloaded', (info) => sendUpdate({ status: 'ready', version: info.version }));
@@ -782,7 +785,7 @@ function setupUpdates() {
 }
 ipcMain.handle('update:check', async () => {
   if (!autoUpdater) return { status: 'unavailable' };
-  if (updateState.status === 'downloading' || updateState.status === 'ready') return updateState;
+  if (updateState.status === 'downloading' || updateState.status === 'ready' || updateState.status === 'available') return updateState;
   manualCheck = true;
   try {
     await autoUpdater.checkForUpdates();
@@ -792,6 +795,7 @@ ipcMain.handle('update:check', async () => {
   return updateState;
 });
 ipcMain.handle('update:state', () => updateState);
+ipcMain.handle('update:openPage', () => shell.openExternal('https://github.com/Nyra31/cortex-studio/releases/latest'));
 ipcMain.handle('app:version', () => app.getVersion());
 
 // Idioma (ver i18n/index.js): la interfaz lo lee al cargar el preload; al cambiarlo se guarda y la aplicación
@@ -889,7 +893,10 @@ ipcMain.handle('shell:reveal', (_e, filePath) => shell.showItemInFolder(filePath
 ipcMain.handle('devtools:toggle', () => mainWindow && mainWindow.webContents.toggleDevTools());
 
 app.whenReady().then(() => {
-  Menu.setApplicationMenu(null);
+  // La barra de menús es la de la interfaz. En macOS hace falta el menú de la aplicación (Salir, Ocultar) y el de
+  // Edición: sin él no funcionan copiar y pegar en los campos de texto. La interfaz recibe antes las teclas y, si
+  // las usa (preventDefault), el menú no las ve: Cmd+Z, Cmd+C… siguen siendo los de Cortex fuera de los campos.
+  Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]) : null);
   protocol.handle('media', serveMedia);
   createWindow();
   setupUpdates();
@@ -911,6 +918,7 @@ app.on('window-all-closed', () => {
     autoUpdater.quitAndInstall(true, true);
   } else {
     if (relaunchOnClose) app.relaunch();
-    if (process.platform !== 'darwin' || relaunchOnClose) app.quit();
+    // También en macOS: es una aplicación de una sola ventana, y al volver a crearla se perdería el estado de cierre.
+    app.quit();
   }
 });

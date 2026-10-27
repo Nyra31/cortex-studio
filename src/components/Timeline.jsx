@@ -21,7 +21,7 @@ import { TRANSITION_MIME, transitionLabel } from '../state/transitions.js';
 import { isText } from '../state/text.js';
 import { removeCue, updateCue } from '../state/subtitles.js';
 import { EFFECTS, EFFECT_MIME, newEffect } from '../state/effects.js';
-import { tx } from '../i18n/index.js';
+import { mod, tx } from '../i18n/index.js';
 
 export const MEDIA_MIME = 'application/x-cortex-media';
 const EMPTY = [];
@@ -1002,7 +1002,7 @@ const Timeline = forwardRef(function Timeline({
       return { x: Math.max(HEADER_W, ev.clientX - r.left), y: ev.clientY - r.top };
     };
     const start = at(e);
-    const base = e.ctrlKey ? live.current.selection : [];
+    const base = mod(e) ? live.current.selection : [];
     let dragging = false;
 
     const move = (me) => {
@@ -1038,7 +1038,7 @@ const Timeline = forwardRef(function Timeline({
       window.removeEventListener('pointerup', up);
       setMarquee(null);
       if (dragging) return;
-      if (!e.ctrlKey) setSelection([]);
+      if (!mod(e)) setSelection([]);
       seek(cursorTime(e.clientX, ue.shiftKey));
     };
     window.addEventListener('pointermove', move);
@@ -1051,11 +1051,11 @@ const Timeline = forwardRef(function Timeline({
     const { project: p, selection: sel, pps: scale } = live.current;
     const group = ev.groupId ? p.events.filter((x) => x.groupId === ev.groupId).map((x) => x.id) : [ev.id];
 
-    const stretch = e.ctrlKey && (mode === 'trimL' || mode === 'trimR');
+    const stretch = mod(e) && (mode === 'trimL' || mode === 'trimR');
     // Alt + arrastrar el cuerpo: deslizar el contenido (slip, como en VEGAS). El evento no se mueve ni cambia de
     // duración; cambia el trozo del medio que usa (arrastrar a la derecha muestra lo de antes).
     const slip = e.altKey && mode === 'move';
-    if (e.ctrlKey && !stretch) {
+    if (mod(e) && !stretch) {
       setSelection(sel.includes(ev.id) ? sel.filter((id) => !group.includes(id)) : [...new Set([...sel, ...group])]);
       return;
     }
@@ -1321,7 +1321,7 @@ const Timeline = forwardRef(function Timeline({
     const near = points.find((p) => Math.abs(p - t) < threshold);
     if (near !== undefined) t = near;
     const mediaId = e.dataTransfer.getData(MEDIA_MIME);
-    if (mediaId && e.ctrlKey && target !== 'new') {
+    if (mediaId && mod(e) && target !== 'new') {
       // Ctrl + soltar sobre un evento: sustituir su medio (como en VEGAS).
       const { project: p } = live.current;
       const at = timeAt(e.clientX);
@@ -1590,7 +1590,7 @@ const Timeline = forwardRef(function Timeline({
   useEffect(() => {
     const el = scrollRef.current;
     const onWheel = (e) => {
-      if (!e.ctrlKey) return;
+      if (!mod(e)) return;
       e.preventDefault();
       const rect = el.getBoundingClientRect();
       const offsetX = e.clientX - rect.left;

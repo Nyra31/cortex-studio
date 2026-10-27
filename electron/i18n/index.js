@@ -39,7 +39,7 @@ const dict = lang === 'en' ? en : null;
 function tx(text, vars) {
   let s = (dict && dict[text]) || text.replace(/\|.*$/s, '');
   if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
-  return s;
+  return process.platform === 'darwin' ? s.replace(/\bCtrl\b/g, 'Cmd') : s; // atajos de macOS (ver src/i18n)
 }
 
 function saveLanguage(value) {

@@ -1,7 +1,8 @@
 // Subtítulos automáticos con whisper.cpp, en el propio equipo (no se envía nada). El programa y los modelos no van
 // en el instalador: se descargan la primera vez que se usan en userData/whisper. Programa: versión fija (los
-// nombres de los archivos de las releases cambian; no hace falta ir al día como con yt-dlp). Solo Windows x64 (las
-// releases solo traen ese ejecutable; el instalador de Cortex también es solo para Windows).
+// nombres de los archivos de las releases cambian; no hace falta ir al día como con yt-dlp): Windows x64 y Linux
+// x64/arm64. Para macOS las releases no traen el programa (solo la biblioteca): se usa el de Homebrew
+// (`brew install whisper-cpp`) si está instalado.
 const { app, net } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -10,7 +11,15 @@ const path = require('path');
 const { ffmpegPath, run } = require('./ffmpeg');
 const { tx } = require('./i18n');
 
-const BIN_URL = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip';
+const RELEASE = 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/';
+// Programa de cada sistema: archivo de la release y ruta de whisper-cli dentro de él.
+const BIN = {
+  'win32-x64': { file: 'whisper-bin-x64.zip', cli: ['Release', 'whisper-cli.exe'] },
+  'linux-x64': { file: 'whisper-bin-ubuntu-x64.tar.gz', cli: ['whisper-bin-ubuntu-x64', 'whisper-cli'] },
+  'linux-arm64': { file: 'whisper-bin-ubuntu-arm64.tar.gz', cli: ['whisper-bin-ubuntu-arm64', 'whisper-cli'] },
+}[`${process.platform}-${process.arch}`];
+// Homebrew en Mac con Apple Silicon y con Intel (las aplicaciones no heredan el PATH de la terminal).
+const BREW_CLI = ['/opt/homebrew/bin/whisper-cli', '/usr/local/bin/whisper-cli'];
 const MODEL_URL = (file) => `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${file}`;
 // Medidos con 13 s de voz en un procesador de 20 hilos: base 1,3 s, small 2,7 s, turbo 9 s.
 const MODELS = [
@@ -21,7 +30,9 @@ const MODELS = [
 
 const root = () => path.join(app.getPath('userData'), 'whisper');
 const binDir = () => path.join(root(), 'programa');
-const cliPath = () => path.join(binDir(), 'Release', 'whisper-cli.exe');
+const cliPath = () => (process.platform === 'darwin'
+  ? BREW_CLI.find((p) => fs.existsSync(p)) || BREW_CLI[0]
+  : path.join(binDir(), ...(BIN?.cli || ['whisper-cli'])));
 const modelPath = (m) => path.join(root(), 'modelos', m.file);
 const modelById = (id) => MODELS.find((m) => m.id === id) || MODELS[1];
 
@@ -50,15 +61,18 @@ async function download(url, target, onProgress) {
 
 let binReady = null;
 function ensureBin(onStatus) {
-  if (process.platform !== 'win32' || process.arch !== 'x64') return Promise.reject(new Error(tx('Los subtítulos automáticos solo funcionan en Windows de 64 bits')));
   if (fs.existsSync(cliPath())) return Promise.resolve();
+  if (process.platform === 'darwin') {
+    return Promise.reject(new Error(tx('En macOS, los subtítulos automáticos usan whisper.cpp de Homebrew: instálalo con «brew install whisper-cpp» en la Terminal y vuelve a intentarlo.')));
+  }
+  if (!BIN) return Promise.reject(new Error(tx('Los subtítulos automáticos no funcionan en este sistema')));
   if (!binReady) {
     binReady = (async () => {
-      const zip = path.join(root(), 'whisper.zip');
-      await download(BIN_URL, zip, (f) => onStatus({ stage: 'program', percent: f == null ? null : f * 100 }));
+      const zip = path.join(root(), BIN.file);
+      await download(RELEASE + BIN.file, zip, (f) => onStatus({ stage: 'program', percent: f == null ? null : f * 100 }));
       await fs.promises.mkdir(binDir(), { recursive: true });
-      // tar.exe de Windows (bsdtar) descomprime zip.
-      const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+      // tar descomprime los dos formatos (el de Windows, bsdtar, también zip).
+      const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
       const r = await run(tar, ['-xf', zip, '-C', binDir()]);
       await fs.promises.unlink(zip).catch(() => {});
       if (r.code !== 0 || !fs.existsSync(cliPath())) throw new Error(tx('No se pudo descomprimir whisper.cpp'));
@@ -109,7 +123,9 @@ async function transcribe(file, opts, onStatus = () => {}) {
     const threads = String(Math.max(1, Math.min(8, os.cpus().length)));
     const args = ['-m', modelPath(m), '-f', wav, '-l', opts.language || 'auto', '-osrt', '-of', base, '-pp', '-t', threads, ...(opts.translate ? ['-tr'] : [])];
     const code = await new Promise((resolve, reject) => {
-      const proc = spawn(cliPath(), args, { windowsHide: true, cwd: path.dirname(cliPath()) });
+      // En Linux las bibliotecas (.so) van junto al programa.
+      const env = process.platform === 'linux' ? { ...process.env, LD_LIBRARY_PATH: [path.dirname(cliPath()), process.env.LD_LIBRARY_PATH].filter(Boolean).join(':') } : process.env;
+      const proc = spawn(cliPath(), args, { windowsHide: true, cwd: path.dirname(cliPath()), env });
       job.proc = proc;
       let tail = '';
       proc.stderr.on('data', (d) => {

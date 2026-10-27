@@ -12,10 +12,14 @@ const dict = lang === 'en' ? en : null;
 // Para Intl y toLocaleString (separador decimal, fechas).
 export const locale = lang === 'en' ? 'en-US' : 'es-ES';
 
+// En macOS los atajos van con Cmd (la interfaz acepta las dos teclas, ver `mod`): se cambia en todos los textos.
+export const isMac = window.api?.platform === 'darwin';
+export const mod = (e) => e.ctrlKey || e.metaKey;
+
 export function tx(text, vars) {
   let s = (dict && dict[text]) || text.replace(/\|.*$/s, '');
   if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
-  return s;
+  return isMac ? s.replace(/\bCtrl\b/g, 'Cmd') : s;
 }
 
 // Número con el separador decimal del idioma (coma en español, punto en inglés).

@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('api', {
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   getUpdateState: () => ipcRenderer.invoke('update:state'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
+  openUpdatePage: () => ipcRenderer.invoke('update:openPage'),
+  platform: process.platform,
   getVersion: () => ipcRenderer.invoke('app:version'),
   onUpdateState: (callback) => {
     const handler = (_e, state) => callback(state);

@@ -166,7 +166,14 @@ export default function App() {
   }, []);
   // Para las pruebas automáticas (llevar el cursor a un instante exacto).
   useEffect(() => {
-    if (window.cortexPruebas) window.cortexPruebas.seek = seek;
+    if (!window.cortexPruebas) return;
+    window.cortexPruebas.seek = seek;
+    // Render del proyecto entero a MP4 H.264 (prueba de humo de scripts/pruebas/humo.js).
+    window.cortexPruebas.render = (outPath) => {
+      const p = live.current.project;
+      const size = { width: p.settings.width, height: p.settings.height };
+      return api.startRender(renderPayload(p, size), { ...size, outWidth: size.width, outHeight: size.height, fps: p.settings.fps, format: 'mp4-h264', quality: { mode: 'crf', level: 'normal' }, audioKbps: 128 }, outPath);
+    };
   }, [seek]);
 
   // Con selección de tiempo, si el cursor está fuera de ella, se reproduce desde su principio (como en VEGAS).
@@ -1410,7 +1417,7 @@ export default function App() {
     api.getUpdateState().then(setUpdate);
     return api.onUpdateState((state) => {
       setUpdate(state);
-      if (state.status === 'ready') setUpdateHidden(false);
+      if (state.status === 'ready' || state.status === 'available') setUpdateHidden(false);
       if (state.manual && state.status === 'latest') setStatus(tx('Ya tienes la última versión de Cortex Studio.'));
       if (state.manual && state.status === 'error') setStatus(tx('No se pudo buscar actualizaciones: {message}', { message: state.message }));
     });
@@ -1420,7 +1427,7 @@ export default function App() {
     const state = await api.checkForUpdates();
     if (state.status === 'unavailable') setStatus(tx('Las actualizaciones automáticas solo funcionan en la aplicación instalada.'));
     else if (state.status === 'downloading') setStatus(tx('Descargando la versión {version}…', { version: state.version }));
-    else if (state.status === 'ready') setUpdateHidden(false);
+    else if (state.status === 'ready' || state.status === 'available') setUpdateHidden(false);
   }, []);
 
 
@@ -1800,6 +1807,15 @@ export default function App() {
           />
         }
       />
+      {update.status === 'available' && !updateHidden && (
+        <div className="update-banner">
+          <span>
+            {tx('La versión {version} de Cortex Studio está disponible.', { version: update.version })}
+          </span>
+          <button className="primary" onClick={() => api.openUpdatePage()}>{tx('Ir a la descarga')}</button>
+          <button onClick={() => setUpdateHidden(true)}>{tx('Más tarde')}</button>
+        </div>
+      )}
       {update.status === 'ready' && !updateHidden && (
         <div className="update-banner">
           <span>

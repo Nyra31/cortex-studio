@@ -30,7 +30,8 @@ const BASE = () => ['--ignore-config', '--no-colors', '--encoding', 'utf-8', '--
 
 function exec(args, { onLine, onSpawn } = {}) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(binPath(), args, { env: env(), windowsHide: true });
+    // En macOS y Linux, en su propio grupo de procesos, para poder cancelarlo con sus hijos (ver cancel).
+    const proc = spawn(binPath(), args, { env: env(), windowsHide: true, detached: process.platform !== 'win32' });
     const out = [];
     let err = '';
     let pending = '';
@@ -264,9 +265,17 @@ function cancel() {
   if (!current?.proc) return;
   current.canceled = true;
   const { pid } = current.proc;
-  // En Windows yt-dlp.exe arranca otro proceso (el empaquetado de PyInstaller) y FFmpeg: hay que matar el árbol.
-  if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true });
-  else current.proc.kill('SIGTERM');
+  // yt-dlp arranca otro proceso (el empaquetado de PyInstaller) y FFmpeg: hay que matar el árbol (en macOS y Linux,
+  // el grupo de procesos que se creó al lanzarlo).
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true });
+  } else {
+    try {
+      process.kill(-pid, 'SIGTERM');
+    } catch {
+      current.proc.kill('SIGTERM');
+    }
+  }
 }
 
 module.exports = { ensure, info, download, cancel, version };
