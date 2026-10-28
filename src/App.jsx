@@ -23,6 +23,8 @@ import TranscribeDialog from './components/TranscribeDialog.jsx';
 import VoicesDialog from './components/VoicesDialog.jsx';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
+import NewsDialog from './components/NewsDialog.jsx';
+import { NEWS, newsSince } from './state/news.js';
 import RecordDialog from './components/RecordDialog.jsx';
 import { useHistory } from './state/useHistory.js';
 import ContextMenu from './components/ContextMenu.jsx';
@@ -83,6 +85,7 @@ export default function App() {
   compressRef.current.queue = compressQueue;
   const [projectDialog, setProjectDialog] = useState('startup'); // null | 'startup' | 'new' | 'edit'
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [news, setNews] = useState(null); // { list, updated } de NewsDialog
   const [status, setStatus] = useState('');
   const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects' | 'subtitles' | 'scopes'
   const [focusCue, setFocusCue] = useState(null); // subtítulo cuyo texto se va a editar en su pestaña
@@ -1208,6 +1211,8 @@ export default function App() {
     setContextMenu({ x: info.x, y: info.y, items });
   }, [cancelSeparation, copyIds, cutIds, deleteIds, deleteRegion, detectScenes, devoiceEvent, freezeFrame, groupIds, insertText, insertTrack, openPan, openRender, openTextEditor, paste, seek, selectAll, setProject, ungroupIds]);
 
+  const closeNews = useCallback(() => setNews(null), []);
+
   const zoom = useCallback((factor) => setPps((v) => Math.min(MAX_PPS, Math.max(MIN_PPS, v * factor))), []);
 
   // ---- Proyecto ----
@@ -1414,7 +1419,13 @@ export default function App() {
 
   // Actualizaciones automáticas: el proceso principal busca, descarga y avisa; aquí se enseña el aviso.
   useEffect(() => {
-    api.getVersion().then(setVersion);
+    api.getVersion().then(async (v) => {
+      setVersion(v);
+      // Recién actualizada: lo nuevo desde la versión de antes.
+      const from = await api.previousVersion();
+      const list = from ? newsSince(from, v) : [];
+      if (list.length) setNews({ list, updated: true });
+    });
     api.getUpdateState().then(setUpdate);
     return api.onUpdateState((state) => {
       setUpdate(state);
@@ -1552,6 +1563,7 @@ export default function App() {
       label: tx('Ayuda'),
       items: [
         { label: tx('Atajos de teclado'), shortcut: 'F1', action: () => setShortcutsOpen(true) },
+        { label: tx('Novedades…'), action: () => setNews({ list: NEWS, updated: false }) },
         'separator',
         { label: tx('Idioma'), disabled: true },
         ...LANGUAGES.map((l) => ({ label: `    ${l.name}`, checked: l.id === lang, action: () => changeLanguage(l.id) })),
@@ -1565,7 +1577,7 @@ export default function App() {
 
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
-  const modalOpen = renderOpen || queueOpen || youtubeOpen || compressOpen || transcribeOpen || !!voicesEventId || projectDialog !== null || shortcutsOpen || recordDialog;
+  const modalOpen = renderOpen || queueOpen || youtubeOpen || compressOpen || transcribeOpen || !!voicesEventId || projectDialog !== null || shortcutsOpen || recordDialog || !!news;
   const floatingOpen = !!fxEventId || !!textMediaId || !!panEventId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
@@ -1949,6 +1961,7 @@ export default function App() {
         />
       )}
       {shortcutsOpen && <ShortcutsDialog onClose={() => setShortcutsOpen(false)} />}
+      {news && <NewsDialog news={news.list} updated={news.updated} onClose={closeNews} />}
       {recordDialog && <RecordDialog projectPath={projectPath} onClose={() => setRecordDialog(false)} />}
       {contextMenu && <ContextMenu {...contextMenu} onClose={closeContextMenu} />}
       {fxEvent && (

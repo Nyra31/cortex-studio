@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('api', {
   openUpdatePage: () => ipcRenderer.invoke('update:openPage'),
   platform: process.platform,
   getVersion: () => ipcRenderer.invoke('app:version'),
+  previousVersion: () => ipcRenderer.invoke('app:previousVersion'), // versión de antes de actualizar (novedades)
   onUpdateState: (callback) => {
     const handler = (_e, state) => callback(state);
     ipcRenderer.on('update:state', handler);

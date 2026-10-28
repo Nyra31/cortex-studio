@@ -815,6 +815,37 @@ ipcMain.handle('update:state', () => updateState);
 ipcMain.handle('update:openPage', () => shell.openExternal('https://github.com/Nyra31/cortex-studio/releases/latest'));
 ipcMain.handle('app:version', () => app.getVersion());
 
+// Novedades: la versión con la que se abrió la aplicación la última vez (userData/version.json). Si es otra, la
+// interfaz enseña lo nuevo desde esa versión (src/state/news.js). Antes de la 1.1.2 no se guardaba: sin el archivo
+// pero con datos de Cortex (proyectos recientes, miniaturas, recuperación), es una actualización desde una versión
+// anterior; sin nada, una instalación nueva. Lo que crea Chromium (Local Storage, cachés) no sirve: ya está al arrancar.
+let previousVersion = null;
+function noteVersion() {
+  const dir = app.getPath('userData');
+  const file = path.join(dir, 'version.json');
+  const current = app.getVersion();
+  let last = null;
+  try {
+    last = JSON.parse(fs.readFileSync(file, 'utf8')).version || null;
+  } catch {
+    if (['recientes.json', 'miniaturas', 'autosave'].some((f) => fs.existsSync(path.join(dir, f)))) last = '0.0.0';
+  }
+  if (last === current) return;
+  previousVersion = last;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ version: current }));
+  } catch {
+    // sin poder escribir, se volverá a enseñar la próxima vez
+  }
+}
+// Solo la primera vez que la pide la interfaz (al recargarla no se repite).
+ipcMain.handle('app:previousVersion', () => {
+  const v = previousVersion;
+  previousVersion = null;
+  return v;
+});
+
 // Idioma (ver i18n/index.js): la interfaz lo lee al cargar el preload; al cambiarlo se guarda y la aplicación
 // se cierra como siempre (preguntando si hay cambios sin guardar) y se vuelve a abrir.
 ipcMain.on('i18n:lang', (event) => {
@@ -915,6 +946,7 @@ app.whenReady().then(() => {
   // las usa (preventDefault), el menú no las ve: Cmd+Z, Cmd+C… siguen siendo los de Cortex fuera de los campos.
   Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]) : null);
   protocol.handle('media', serveMedia);
+  noteVersion();
   createWindow();
   setupUpdates();
   separate.cleanStale();

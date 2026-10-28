@@ -1334,6 +1334,29 @@ input[type='number'] {
 .shortcuts-dialog {
   width: 520px;
 }
+.news-dialog {
+  width: 540px;
+}
+.news-dialog h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.news-dialog h3 span {
+  color: var(--text-dim);
+  font-weight: normal;
+  font-size: 11px;
+}
+.news-dialog ul {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  line-height: 1.45;
+}
+.news-dialog li {
+  margin-bottom: 6px;
+}
 .shortcuts-dialog table {
   width: 100%;
   border-collapse: collapse;

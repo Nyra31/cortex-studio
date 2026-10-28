@@ -1,7 +1,7 @@
-// Comprueba la traducción inglesa (electron/i18n/en.json) contra los textos del código: los tx('…') sin
+// Comprueba las traducciones (electron/i18n/<idioma>.json) contra los textos del código: los tx('…') sin
 // traducir, las traducciones que ya no se usan y las que no tienen las mismas variables {así} que el español.
-// Uso: npm run i18n              (informe; termina con error si falta algo)
-//      npm run i18n -- --missing (solo las claves que faltan, en JSON, para traducirlas)
+// Uso: npm run i18n                  (informe de todos los idiomas; termina con error si falta algo)
+//      npm run i18n -- --missing fr  (solo las claves que le faltan a ese idioma, en JSON, para traducirlas)
 // Usa @babel/parser, que viene con @vitejs/plugin-react.
 const fs = require('fs');
 const path = require('path');
@@ -9,8 +9,9 @@ const { execSync } = require('child_process');
 const parser = require('@babel/parser');
 
 const root = path.join(__dirname, '..');
-const dictPath = path.join(root, 'electron/i18n/en.json');
-const dict = JSON.parse(fs.readFileSync(dictPath, 'utf8'));
+const dictDir = path.join(root, 'electron/i18n');
+const dicts = Object.fromEntries(fs.readdirSync(dictDir).filter((f) => f.endsWith('.json'))
+  .map((f) => [f.slice(0, -5), JSON.parse(fs.readFileSync(path.join(dictDir, f), 'utf8'))]));
 
 // Textos del primer argumento de cada tx(): una cadena o las dos ramas de un ?: con cadenas.
 function keysOf(node, out) {
@@ -56,17 +57,27 @@ for (const f of files) {
 }
 
 const vars = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
-const missing = [...used.keys()].filter((k) => typeof dict[k] !== 'string' || !dict[k]);
-const unused = Object.keys(dict).filter((k) => !used.has(k));
-const mismatched = [...used.keys()].filter((k) => dict[k] && vars(k) !== vars(dict[k]));
+const check = (dict) => ({
+  missing: [...used.keys()].filter((k) => typeof dict[k] !== 'string' || !dict[k]),
+  unused: Object.keys(dict).filter((k) => !used.has(k)),
+  mismatched: [...used.keys()].filter((k) => dict[k] && vars(k) !== vars(dict[k])),
+});
 
-if (process.argv.includes('--missing')) {
+const only = process.argv.indexOf('--missing');
+if (only >= 0) {
+  const { missing } = check(dicts[process.argv[only + 1] || 'en']);
   console.log(JSON.stringify(Object.fromEntries(missing.map((k) => [k, ''])), null, 2));
   process.exit(0);
 }
-console.log(`${used.size} textos, ${Object.keys(dict).length} traducciones.`);
-for (const k of missing) console.log(`Falta:        ${JSON.stringify(k)}  (${used.get(k)})`);
-for (const k of mismatched) console.log(`Variables:    ${JSON.stringify(k)} → ${JSON.stringify(dict[k])}`);
-for (const k of unused) console.log(`Sin usar:     ${JSON.stringify(k)}`);
+console.log(`${used.size} textos.`);
+let failed = false;
+for (const [id, dict] of Object.entries(dicts)) {
+  const { missing, unused, mismatched } = check(dict);
+  console.log(`${id}: ${Object.keys(dict).length} traducciones.`);
+  for (const k of missing) console.log(`  Falta:        ${JSON.stringify(k)}  (${used.get(k)})`);
+  for (const k of mismatched) console.log(`  Variables:    ${JSON.stringify(k)} → ${JSON.stringify(dict[k])}`);
+  for (const k of unused) console.log(`  Sin usar:     ${JSON.stringify(k)}`);
+  if (missing.length || mismatched.length) failed = true;
+}
 for (const w of dynamic) console.log(`Calculado:    tx() con un texto que no es una cadena en ${w}`);
-if (missing.length || mismatched.length) process.exit(1);
+if (failed) process.exit(1);
