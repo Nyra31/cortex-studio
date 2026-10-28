@@ -42,9 +42,9 @@ Si la aplicación no se abre al lanzar `electron .` a mano, quita la variable `E
 
 *Política de firma de código* (en español más abajo).
 
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+**The installers are not signed yet.** We plan to apply for free code signing from [SignPath.io](https://about.signpath.io), with a certificate by [SignPath Foundation](https://signpath.org). Until then, Windows SmartScreen may warn about the installer the first time it runs.
 
-The Windows installer is built from this repository by GitHub Actions ([`instalador.yml`](.github/workflows/instalador.yml)) and signed with SignPath. Releases before 1.1 are not signed.
+The Windows installer is built from this repository by GitHub Actions ([`instalador.yml`](.github/workflows/instalador.yml)). Once signing is in place, it will be signed in that same build, and this section will say from which version on.
 
 Team roles:
 
@@ -62,7 +62,7 @@ Projects, media files and error logs stay on the user's computer.
 
 ### Política de firma de código
 
-Firma de código gratuita de [SignPath.io](https://about.signpath.io), certificado de [SignPath Foundation](https://signpath.org). El instalador de Windows se compila en GitHub Actions a partir de este repositorio y se firma con SignPath; las versiones anteriores a la 1.1 no están firmadas.
+**Los instaladores todavía no están firmados.** Está previsto solicitar la firma de código gratuita de [SignPath.io](https://about.signpath.io), con certificado de [SignPath Foundation](https://signpath.org); mientras tanto, Windows SmartScreen puede avisar la primera vez que se ejecuta el instalador. El instalador de Windows se compila en GitHub Actions a partir de este repositorio; cuando haya firma, se firmará en esa misma compilación y aquí se indicará desde qué versión.
 
 - Autores (committers) y revisores (reviewers): [Nyra31](https://github.com/Nyra31).
 - Aprobación de las firmas (approvers): [Nyra31](https://github.com/Nyra31).
