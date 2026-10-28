@@ -2,7 +2,7 @@
 
 Los instaladores de cada versión están en las [releases de GitHub](https://github.com/Nyra31/cortex-studio/releases). Los proyectos guardados con versiones anteriores se siguen abriendo.
 
-## Sin publicar
+## 1.2.0 (29/10/2026)
 
 - **Editar con el texto:** transcribe la voz palabra a palabra (*Herramientas → Transcribir para editar con el texto…*) y edita el video en la nueva pestaña *Texto*: selecciona una frase, pulsa Supr y se corta de todas las pistas, con la pausa que la seguía. Clic en una palabra para llevar el cursor ahí; las pausas largas también se pueden borrar. La transcripción se guarda en el proyecto (formato `.cortex` versión 11) y sigue valiendo al cortar, mover o cambiar la velocidad de los eventos.
 - **Quitar muletillas:** los «eh», «em», «mmm» que escribe Whisper, de una vez.
