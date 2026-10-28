@@ -6,6 +6,14 @@ import { tx } from '../i18n/index.js';
 
 export const NEWS = [
   {
+    version: '1.2.0',
+    date: [2026, 10, 29],
+    items: [
+      [tx('Editar con el texto'), tx('Transcribe la voz (Herramientas → Transcribir para editar con el texto…) y edita el video en la pestaña «Texto»: borra una frase y se corta de todas las pistas.')],
+      [tx('Quitar silencios y muletillas'), tx('Quita de una vez las pausas largas (Herramientas → Quitar silencios…) y los «eh», «em», «mmm» que haya escrito Whisper.')],
+    ],
+  },
+  {
     version: '1.1.2',
     date: [2026, 10, 28],
     items: [

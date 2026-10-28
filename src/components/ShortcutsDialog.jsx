@@ -17,6 +17,7 @@ const SHORTCUTS = [
   [tx('Ctrl+Mayús+D'), tx('Descargar de YouTube')],
   [tx('Ctrl+Mayús+C'), tx('Comprimir videos')],
   [tx('Supr'), tx('Eliminar eventos seleccionados')],
+  [tx('Supr en la pestaña «Texto»'), tx('Quitar del video lo que se dice en el texto seleccionado')],
   [tx('Ctrl+L'), tx('Edición en cascada (cerrar huecos, desplazar lo de detrás)')],
   [tx('Ctrl+Supr'), tx('Eliminar el tramo de la selección de tiempo y cerrar el hueco')],
   [tx('Ctrl+A'), tx('Seleccionar todos los eventos')],

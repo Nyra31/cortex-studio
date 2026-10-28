@@ -20,6 +20,9 @@ import Scopes from './components/Scopes.jsx';
 import SubtitlesPanel from './components/SubtitlesPanel.jsx';
 import { addCue, importCues, parseSubtitles, tidyCues } from './state/subtitles.js';
 import TranscribeDialog from './components/TranscribeDialog.jsx';
+import TranscriptPanel from './components/TranscriptPanel.jsx';
+import SilenceDialog from './components/SilenceDialog.jsx';
+import { cutRanges, setTranscript, transcriptOf } from './state/transcript.js';
 import VoicesDialog from './components/VoicesDialog.jsx';
 import ProjectDialog from './components/ProjectDialog.jsx';
 import ShortcutsDialog from './components/ShortcutsDialog.jsx';
@@ -39,7 +42,7 @@ import { hasRamp, shiftSpeed, sourceOffset } from './state/speed.js';
 import { transitionLabel } from './state/transitions.js';
 import { Recorder, loadRecordSettings, micError } from './preview/recorder.js';
 import { separateVoices } from './preview/separator.js';
-import { LANGUAGES, lang, locale, tx } from './i18n/index.js';
+import { LANGUAGES, decimal, lang, locale, tx } from './i18n/index.js';
 
 const api = window.api;
 const FREEZE_S = 2; // duración del fotograma congelado
@@ -78,7 +81,8 @@ export default function App() {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const [youtubeJob, setYoutubeJob] = useState(null); // { status, title, progress, files, imported, error }
   const [compressOpen, setCompressOpen] = useState(false);
-  const [transcribeOpen, setTranscribeOpen] = useState(false);
+  const [transcribeOpen, setTranscribeOpen] = useState(false); // false | 'subtitles' | 'text' (editar con el texto)
+  const [silenceOpen, setSilenceOpen] = useState(false);
   const [compressQueue, setCompressQueue] = useState([]); // { id, path, status, progress, result, error }
   const [compressRunning, setCompressRunning] = useState(false);
   const compressRef = useRef({ queue: [], stop: false });
@@ -87,7 +91,7 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [news, setNews] = useState(null); // { list, updated } de NewsDialog
   const [status, setStatus] = useState('');
-  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects' | 'subtitles' | 'scopes'
+  const [leftTab, setLeftTab] = useState('media'); // 'media' | 'transitions' | 'effects' | 'audioEffects' | 'subtitles' | 'text' | 'scopes'
   const [focusCue, setFocusCue] = useState(null); // subtítulo cuyo texto se va a editar en su pestaña
   const clearFocusCue = useCallback(() => setFocusCue(null), []);
   const editSubtitle = useCallback((id) => {
@@ -171,6 +175,7 @@ export default function App() {
   useEffect(() => {
     if (!window.cortexPruebas) return;
     window.cortexPruebas.seek = seek;
+    window.cortexPruebas.project = () => live.current.project;
     // Render del proyecto entero a MP4 H.264 (prueba de humo de scripts/pruebas/humo.js).
     window.cortexPruebas.render = (outPath) => {
       const p = live.current.project;
@@ -455,6 +460,52 @@ export default function App() {
     setStatus(list.length ? tx('{length} subtítulos automáticos añadidos.', { length: list.length }) : tx('No se ha reconocido ninguna frase.'));
     if (list.length) setLeftTab('subtitles');
     return list.length;
+  }, [setProject]);
+
+  // Editar con el texto (TranscriptPanel): transcribe palabra a palabra, uno detrás de otro, los medios de los eventos
+  // de las pistas de audio opts.tracks (opts.what: 'missing' = solo los que no lo están; 'all' = todos otra vez).
+  // Devuelve el número de palabras.
+  const transcribeWords = useCallback(async (opts, onStatus) => {
+    const p = live.current.project;
+    const audio = new Set(p.tracks.filter((t) => t.type === 'audio' && opts.tracks.includes(t.id)).map((t) => t.id));
+    const ids = [...new Set(p.events.filter((e) => audio.has(e.trackId)).map((e) => e.mediaId))];
+    const list = ids
+      .map((id) => p.media.find((m) => m.id === id))
+      .filter((m) => m?.path && !isText(m) && m.hasAudio && !m.missing && (opts.what === 'all' || !transcriptOf(p, m.id)));
+    let item = '';
+    let total = 0;
+    let canceled = false;
+    transcribeCancel.current = () => {
+      canceled = true;
+      api.whisperCancel();
+    };
+    const off = api.onWhisperProgress((s) => onStatus({ ...s, item }));
+    try {
+      for (const [k, m] of list.entries()) {
+        item = list.length > 1 ? tx('Audio {i} de {n}: {name}', { i: k + 1, n: list.length, name: m.name }) : m.name;
+        onStatus({ stage: 'audio', percent: null, item });
+        const words = await api.whisperWords(m.path, { model: opts.model, language: opts.language });
+        if (words === null || canceled) return null;
+        setProject((cur) => setTranscript(cur, m.id, { language: opts.language, model: opts.model, words }));
+        total += words.length;
+      }
+    } finally {
+      off();
+      transcribeCancel.current = null;
+    }
+    if (total) {
+      setLeftTab('text');
+      setStatus(tx('{total} palabras transcritas: edita el video en la pestaña «Texto».', { total }));
+    }
+    return total;
+  }, [setProject]);
+
+  // Quitar silencios (SilenceDialog): los tramos se quitan de todas las pistas, como al borrar texto.
+  const closeSilences = useCallback(() => setSilenceOpen(false), []);
+  const removeSilences = useCallback((ranges, total) => {
+    setProject((p) => cutRanges(p, ranges));
+    setSilenceOpen(false);
+    setStatus(tx('Quitadas {n} pausas ({s} s).', { n: ranges.length, s: decimal(total, 1) }));
   }, [setProject]);
 
   // Descargas de YouTube (YoutubeDialog). Siguen aunque se cierre la ventana; al terminar se importan si se pidió.
@@ -1514,6 +1565,7 @@ export default function App() {
         { label: tx('Efectos de video'), shortcut: tx('Alt+8'), action: () => setLeftTab('effects'), checked: leftTab === 'effects' },
         { label: tx('Efectos de audio'), action: () => setLeftTab('audioEffects'), checked: leftTab === 'audioEffects' },
         { label: tx('Subtítulos'), action: () => setLeftTab('subtitles'), checked: leftTab === 'subtitles' },
+        { label: tx('Texto|editar con el texto'), action: () => setLeftTab('text'), checked: leftTab === 'text' },
         { label: tx('Monitores de video'), shortcut: tx('Ctrl+Alt+2'), action: () => setLeftTab('scopes'), checked: leftTab === 'scopes' },
         'separator',
         { label: tx('Ir al inicio'), shortcut: tx('Inicio'), action: () => seek(0) },
@@ -1551,7 +1603,9 @@ export default function App() {
         { label: recording ? tx('Terminar la grabación') : tx('Grabar voz en off'), shortcut: tx('Ctrl+R'), action: toggleRecording },
         { label: tx('Opciones de grabación…'), action: () => setRecordDialog(true), disabled: !!recording },
         'separator',
-        { label: tx('Subtítulos automáticos…'), action: () => setTranscribeOpen(true), disabled: duration <= 0 },
+        { label: tx('Subtítulos automáticos…'), action: () => setTranscribeOpen('subtitles'), disabled: duration <= 0 },
+        { label: tx('Transcribir para editar con el texto…'), action: () => setTranscribeOpen('text'), disabled: duration <= 0 },
+        { label: tx('Quitar silencios…'), action: () => setSilenceOpen(true), disabled: duration <= 0 },
         'separator',
         { label: tx('Borrar los proxies de la vista previa…'), action: clearProxies },
         'separator',
@@ -1577,7 +1631,7 @@ export default function App() {
 
   // ---- Atajos de teclado (los de Vegas cuando existen) ----
 
-  const modalOpen = renderOpen || queueOpen || youtubeOpen || compressOpen || transcribeOpen || !!voicesEventId || projectDialog !== null || shortcutsOpen || recordDialog || !!news;
+  const modalOpen = renderOpen || queueOpen || youtubeOpen || compressOpen || !!transcribeOpen || silenceOpen || !!voicesEventId || projectDialog !== null || shortcutsOpen || recordDialog || !!news;
   const floatingOpen = !!fxEventId || !!textMediaId || !!panEventId; // sus ventanas usan Esc para cerrarse
   const keyHandler = useRef(null);
   keyHandler.current = (e) => {
@@ -1714,6 +1768,7 @@ export default function App() {
             { id: 'effects', title: tx('Efectos de video') },
             { id: 'audioEffects', title: tx('Efectos de audio') },
             { id: 'subtitles', title: tx('Subtítulos') },
+            { id: 'text', title: tx('Texto|editar con el texto') },
             { id: 'scopes', title: tx('Monitores de video') },
           ]}
           active={leftTab}
@@ -1737,6 +1792,18 @@ export default function App() {
           {leftTab === 'effects' && <EffectsPanel key="video" kind="video" />}
           {leftTab === 'audioEffects' && <EffectsPanel key="audio" kind="audio" />}
           {leftTab === 'scopes' && <Scopes />}
+          {leftTab === 'text' && (
+            <TranscriptPanel
+              project={project}
+              setProject={setProject}
+              time={time}
+              playing={playing}
+              seek={seek}
+              onTranscribe={() => setTranscribeOpen('text')}
+              onSilences={() => setSilenceOpen(true)}
+              onMessage={setStatus}
+            />
+          )}
           {leftTab === 'subtitles' && (
             <SubtitlesPanel
               project={project}
@@ -1748,7 +1815,7 @@ export default function App() {
               onFocused={clearFocusCue}
               onMessage={setStatus}
               defaultName={baseName(projectPath)}
-              onTranscribe={() => setTranscribeOpen(true)}
+              onTranscribe={() => setTranscribeOpen('subtitles')}
             />
           )}
         </Dock>
@@ -1888,11 +1955,21 @@ export default function App() {
           />
         ) : null;
       })()}
+      {silenceOpen && (
+        <SilenceDialog
+          project={project}
+          initialTrackId={project.events.find((e) => selection.includes(e.id))?.trackId}
+          onApply={removeSilences}
+          onClose={closeSilences}
+        />
+      )}
       {transcribeOpen && (
         <TranscribeDialog
+          mode={transcribeOpen}
+          tracks={project.tracks.filter((t) => t.type === 'audio' && project.events.some((e) => e.trackId === t.id))}
           hasRegion={!!region}
           cueCount={project.subtitles?.cues?.length || 0}
-          onTranscribe={transcribe}
+          onTranscribe={transcribeOpen === 'text' ? transcribeWords : transcribe}
           onCancel={() => transcribeCancel.current?.()}
           onClose={() => setTranscribeOpen(false)}
         />

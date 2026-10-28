@@ -97,6 +97,7 @@ contextBridge.exposeInMainWorld('api', {
   whisperTempPath: () => ipcRenderer.invoke('whisper:tempPath'),
   whisperTranscribe: (wavPath, opts) => ipcRenderer.invoke('whisper:transcribe', wavPath, opts),
   whisperCancel: () => ipcRenderer.invoke('whisper:cancel'),
+  whisperWords: (filePath, opts) => ipcRenderer.invoke('whisper:words', filePath, opts),
   onWhisperProgress: (callback) => {
     const handler = (_e, s) => callback(s);
     ipcRenderer.on('whisper:progress', handler);

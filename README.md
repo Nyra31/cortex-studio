@@ -12,7 +12,7 @@ En la [última release](https://github.com/Nyra31/cortex-studio/releases/latest)
 
 ## Funciones
 
-- **Edición:** multipista con eventos de video, audio, imagen y texto; recortar, dividir, deslizar y sustituir; ajuste magnético; edición en cascada; marcadores y regiones; velocidad y rampas de velocidad.
+- **Edición:** multipista con eventos de video, audio, imagen y texto; recortar, dividir, deslizar y sustituir; ajuste magnético; edición en cascada; marcadores y regiones; velocidad y rampas de velocidad; **editar con el texto** (borrar frases de la transcripción), quitar silencios y muletillas.
 - **Descargas:** videos de YouTube (y de muchos otros sitios) a MP4, MKV, WebM, MOV o solo audio, con metadatos, portada, capítulos y subtítulos.
 - **Compresor:** por lotes, al estilo de HandBrake: H.264, H.265, VP9 y AV1 (también con la tarjeta gráfica), calidad constante o tamaño objetivo, recorte de bandas negras, filtros y preajustes.
 - **Video:** transiciones, efectos con fotogramas clave, panorámica/recorte animado, modos de fusión, envolventes de opacidad y corrección de color (ruedas, curvas, LUT `.cube`).

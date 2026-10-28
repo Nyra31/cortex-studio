@@ -7,6 +7,7 @@ import { hasRamp, localForSource, shiftSpeed, sourceOffset, speedPayload } from 
 import { panActive, panAt, panExpr, scalePanTime, shiftPan } from './pan.js';
 import { trackMixExpr, trackOpacityExpr } from './envelopes.js';
 import { SUB_STYLE, emptySubtitles, subtitleParams, toSrt } from './subtitles.js';
+import { cleanTranscripts, copyTranscript } from './transcript.js';
 import { decimal, point, tx } from '../i18n/index.js';
 
 //
@@ -21,6 +22,7 @@ import { decimal, point, tx } from '../i18n/index.js';
 //           opacidad, con curvas (envelopes.js); blend: modo de fusión de una pista de video (BLEND_MODES)
 //   events: [{ id, trackId, mediaId, start, inPoint, duration, groupId, volume, fadeIn, fadeOut, fadeInCurve, fadeOutCurve,
 //              transition, effects, rate, speed, pan }],
+//   transcripts: { [mediaId]: { language, model, words } },  // editar con el texto (ver transcript.js)
 // }
 // pan: panorámica/recorte con fotogramas clave (ver pan.js), solo en eventos de video; null o ausente = ninguna.
 // effects: cadena [{ id, type, enabled, params }] aplicada en orden; efectos de video en los eventos de video
@@ -699,15 +701,18 @@ export function setDevoiced(project, eventId, media, start, extra = []) {
 }
 
 // El evento pasa a usar `media` (un archivo hecho a partir del trozo que usaba, desde `start` del medio de antes) y
-// apunta en `field` de dónde venía; con media = null vuelve al medio de antes.
+// apunta en `field` de dónde venía; con media = null vuelve al medio de antes. La transcripción del medio de antes
+// (editar con el texto) vale también para el nuevo: es el mismo sonido.
 function swapAudio(project, eventId, media, start, field) {
+  const before = project.events.find((e) => e.id === eventId);
   const events = project.events.map((e) => {
     if (e.id !== eventId) return e;
     if (media) return { ...e, mediaId: media.id, inPoint: Math.max(0, e.inPoint - start), [field]: { mediaId: e.mediaId, start } };
     if (!e[field]) return e;
     return { ...e, mediaId: e[field].mediaId, inPoint: e[field].start + e.inPoint, [field]: null };
   });
-  return { ...project, media: media && !project.media.some((m) => m.id === media.id) ? [...project.media, media] : project.media, events };
+  const next = { ...project, media: media && !project.media.some((m) => m.id === media.id) ? [...project.media, media] : project.media, events };
+  return media && before ? copyTranscript(next, before.mediaId, media, start) : next;
 }
 
 // Cuánto de los huecos G queda antes de t.
@@ -783,8 +788,10 @@ export function deleteEvents(project, ids) {
 // deshacerlo apuntarían a un medio que ya no existe.
 const UNDO_FIELDS = ['reversed', 'stabilized', 'denoised', 'devoiced'];
 export function removeMedia(project, mediaId) {
+  const { [mediaId]: _gone, ...transcripts } = project.transcripts || {};
   return {
     ...project,
+    transcripts,
     media: project.media.filter((m) => m.id !== mediaId),
     events: project.events
       .filter((e) => e.mediaId !== mediaId)
@@ -808,7 +815,7 @@ export function deleteTrack(project, trackId) {
 export function serializeProject(project, view = null) {
   return {
     format: 'cortex-studio',
-    version: 10,
+    version: 11,
     settings: project.settings,
     media: project.media.map(({ id, path, name, kind, text }) => (kind === 'text' ? { id, kind, name, text } : { id, path, name })),
     tracks: project.tracks,
@@ -816,6 +823,7 @@ export function serializeProject(project, view = null) {
     markers: project.markers || [],
     regions: project.regions || [],
     subtitles: project.subtitles || emptySubtitles(),
+    transcripts: project.transcripts || {},
     ...(view && { view }),
   };
 }
@@ -841,6 +849,7 @@ export function loadProject(data, media) {
     markers: data.markers || [],
     regions: data.regions || [],
     subtitles: data.subtitles ? { ...emptySubtitles(), ...data.subtitles, style: { ...SUB_STYLE, ...data.subtitles.style } } : emptySubtitles(),
+    transcripts: cleanTranscripts(data.transcripts),
   };
 }
 

@@ -900,6 +900,11 @@ ipcMain.handle('whisper:transcribe', async (event, wavPath, opts) => {
   }
 });
 ipcMain.handle('whisper:cancel', () => whisper.cancel());
+// Editar con el texto: transcribe palabra a palabra un medio importado (su propio tiempo, no el de la línea de tiempo).
+ipcMain.handle('whisper:words', (event, filePath, opts) => {
+  if (!allowedFiles.has(path.resolve(filePath))) throw new Error(tx('El archivo no está importado'));
+  return whisper.transcribe(filePath, { ...opts, words: true, translate: false }, (s) => event.sender.send('whisper:progress', s));
+});
 
 // ---- Compresor de video (ver compressor.js) ----
 // Progreso por `compress:progress`. Las muestras de 10 s se pueden abrir en el reproductor del sistema
